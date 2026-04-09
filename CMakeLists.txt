@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(device-agent CXX)
 
+# Option to build examples
+option(BUILD_EXAMPLES "Build example business apps" ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -180,3 +183,8 @@ add_custom_target(generate_protos ALL
 )
 
 add_dependencies(device-agent generate_protos)
+
+# Build examples
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
