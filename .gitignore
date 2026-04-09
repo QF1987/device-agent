@@ -1,0 +1,18 @@
+# Build output
+build/
+bin/
+lib/
+gen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

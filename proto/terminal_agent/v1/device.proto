@@ -1,0 +1,394 @@
+syntax = "proto3";
+package terminal_agent.v1;
+
+option go_package = "github.com/QF1987/terminal-agent-go/gen/terminal_agent/v1";
+
+// ============================================================
+// terminal-agent 设备通信协议
+//
+// 版本：v1
+// 通信方式：gRPC（统一协议，状态上送和远程控制均走 gRPC）
+// 认证方式：第一阶段 Token，后续升级为 HMAC 签名
+//
+// 字段编号规则：
+//   - 每个 message 内的字段编号从 1 开始递增
+//   - 已废弃的字段编号用 reserved 标记，不复用
+//   - 新增字段必须用新的编号，保证向后兼容
+// ============================================================
+
+// ─── 认证相关 ─────────────────────────────────────────
+
+// 设备身份认证信息
+// 使用方式：放在 gRPC 请求的 metadata 中，key 为 "x-device-auth"
+// 服务端 interceptor 收到后解析并验证，验证通过才执行业务逻辑
+//
+// 第一阶段（当前）：使用 device_id + token 简单认证
+// 第二阶段（业务成熟后）：取消 token，改用 HMAC-SHA256 签名认证
+//   - 设备注册时服务端签发 device_id + device_secret
+//   - 每次请求用私钥对 device_id + timestamp + nonce 做签名
+//   - 服务端用存储的 secret 验证签名，同时检查 timestamp 防重放
+message AuthContext {
+  // 设备唯一标识，由服务端在设备注册时分配
+  // 格式建议："区域缩写-城市缩写-序号"，如 "SH-PD-001"（上海浦东 001 号）
+  // 该字段在所有请求中必填
+  string device_id = 1;
+
+  // 设备令牌，设备注册时由服务端生成并下发
+  // 长度：64 字符随机字符串
+  // 存储位置：设备端存 app 私有目录，服务端存 devices 表 token 字段
+  // 注意：token 可被反编译获取，第一阶段接受此风险，后续用签名替代
+  string token = 2;
+
+  // 以下字段为第二阶段签名认证预留，当前不使用
+  // int64  timestamp = 3;     // 请求发起时的毫秒时间戳，用于防重放攻击
+  // string nonce = 4;         // 随机字符串，同一 timestamp 下防止重复请求
+  // string signature = 5;     // HMAC-SHA256(device_secret, device_id + timestamp + nonce) 的 hex 编码
+}
+
+// 设备能力声明
+// 设备在注册时、每次心跳时、固件升级后上报
+// 服务端据此判断该设备支持哪些功能，按能力差异化处理
+//
+// 使用场景举例：
+//   - 设备支持 "heartbeat_metrics" → KAIROS 检测规则 cpu_spike/memory_leak 对其生效
+//   - 设备不支持 "config_push" → 前端不展示远程配置按钮，提示"固件版本过低"
+//   - 设备升级固件后新增 capability → 服务端自动解锁对应功能
+message DeviceCapability {
+  // 固件版本号，语义化版本格式
+  // 示例："v2.3.1"、"v1.0.0-rc1"
+  // 用于服务端判断是否需要推送固件升级
+  string firmware_version = 1;
+
+  // 协议版本号，整数
+  // 与 proto 文件的 package 版本对应（当前为 1）
+  // 设备端和服务端协议版本不一致时，服务端应降级处理或拒绝连接
+  int32  proto_version = 2;
+
+  // 设备支持的功能列表
+  // 服务端根据此列表决定对设备可用的操作
+  // 新增功能值时必须更新本文档的可选值列表
+  repeated string supported_features = 3;
+  // 可选值说明：
+  //   "heartbeat_basic"      - 基础心跳（只报 alive + 延迟，不含性能指标）
+  //   "heartbeat_metrics"    - 增强心跳（含 CPU/内存/磁盘等性能指标）
+  //   "event_report"         - 支持事件上报（故障/交易失败/配置变更等）
+  //   "status_report"        - 支持完整状态快照上报
+  //   "config_push"          - 支持接收服务端远程配置下发
+  //   "command_reboot"       - 支持远程重启指令
+  //   "command_firmware"     - 支持 OTA 固件升级指令
+}
+
+// ─── 设备 → 服务端：心跳 ────────────────────────────────
+
+// 心跳请求
+// 设备定期（建议 30-60 秒）向服务端发送，告知"我还活着"
+// 设计为轻量级：只携带基础性能指标，不做完整状态上报
+//
+// 服务端收到后应：
+//   1. 更新 devices 表的 last_heartbeat 字段
+//   2. 如果带了 capability，更新设备能力信息
+//   3. 检查是否有待下发的指令，通过 has_pending_command 字段提示设备
+message HeartbeatRequest {
+  // 设备唯一标识，必须与注册时分配的一致
+  string device_id = 1;
+
+  // 设备本地时间的毫秒时间戳
+  // 用于服务端计算时钟偏差（drift），偏差过大时可告警
+  // 示例：1712505600000 表示 2024-04-07 23:00:00 UTC
+  int64  timestamp = 2;
+
+  // CPU 使用率，百分比（0.0 - 100.0）
+  // 设备端采集最近一个周期的平均值
+  // 如果设备不支持此指标（capability 不含 heartbeat_metrics），填 0
+  float  cpu_percent = 3;
+
+  // 内存使用率，百分比（0.0 - 100.0）
+  float  memory_percent = 4;
+
+  // 磁盘使用率，百分比（0.0 - 100.0）
+  // 注意：这里指系统盘/主存储，药品图片等大文件存储另计
+  float  disk_percent = 5;
+
+  // 设备本次启动后的累计运行时长，单位秒
+  // 服务端可用于计算设备稳定性（频繁重启 = 运行时长短）
+  int32  uptime_seconds = 6;
+
+  // 设备能力声明（可选）
+  // 以下情况必须携带：
+  //   1. 设备首次注册后的第一次心跳
+  //   2. 固件升级后的第一次心跳
+  //   3. capability 发生变更时
+  // 其余心跳可以不传此字段，服务端沿用上次的值
+  DeviceCapability capability = 7;
+}
+
+// 心跳响应
+// 服务端返回给设备，携带少量控制信息
+message HeartbeatResponse {
+  // 是否有待执行的指令
+  // true：设备应尽快调用 FetchPendingCommands（如果支持）或等待 CommandStream 推送
+  // false：无需额外操作
+  // 这是一个优化：避免设备无指令时频繁轮询
+  bool   has_pending_command = 1;
+
+  // 服务端当前时间的毫秒时间戳
+  // 设备端据此校准本地时钟，减少时钟偏差
+  int64  server_time = 2;
+}
+
+// ─── 设备 → 服务端：状态上报 ──────────────────────────────
+
+// 设备性能指标
+// 用于 StatusReport 和未来的 KAIROS 感知层
+message DeviceMetrics {
+  // CPU 使用率，百分比（0.0 - 100.0）
+  float  cpu_percent = 1;
+
+  // 内存使用率，百分比（0.0 - 100.0）
+  float  memory_percent = 2;
+
+  // 磁盘使用率，百分比（0.0 - 100.0）
+  float  disk_percent = 3;
+
+  // 累计网络接收字节数（本次启动以来）
+  // 用于判断网络流量是否异常（突增/突降）
+  int64  network_rx_bytes = 4;
+
+  // 累计网络发送字节数（本次启动以来）
+  int64  network_tx_bytes = 5;
+
+  // 设备运行时长，单位秒（本次启动以来）
+  int32  uptime_seconds = 6;
+}
+
+// 设备配置
+// 设备当前的运行配置，与 devices 表的 config JSON 字段对应
+// 只保留所有终端类型通用的配置项，业务相关配置放 custom_config_json
+message DeviceConfig {
+  // 屏幕亮度，0-100
+  // 0 = 最暗（关屏），100 = 最亮
+  // 适用于有屏幕的终端（售药机、售货机、信息屏等）
+  // 无屏幕终端（网关、摄像头）可传 0 或忽略
+  int32  screen_brightness = 1;
+
+  // 音量，0-100
+  // 0 = 静音，100 = 最大
+  // 适用于有喇叭的终端
+  // 无声音终端可传 0 或忽略
+  int32  volume_level = 2;
+
+  // 是否开启自动重启
+  // true：设备在 auto_reboot_time 指定的时间自动重启
+  // false：不自动重启（需要手动 reboot 指令）
+  // 所有终端类型通用
+  bool   auto_reboot_enabled = 3;
+
+  // 自动重启时间，格式 "HH:MM"（24 小时制）
+  // 示例："03:00" 表示每天凌晨 3 点自动重启
+  // 仅在 auto_reboot_enabled = true 时有效
+  // 所有终端类型通用
+  string auto_reboot_time = 4;
+
+  // 业务自定义配置，JSON 格式字符串
+  // 通用终端管理不关心具体业务，由上层业务系统自行定义和解析
+  //
+  // 示例（自助购药机）：
+  //   {"transaction_timeout": 30, "medicine_category": ["处方药", "OTC"], "max_stock_per_slot": 50}
+  //
+  // 示例（充电桩）：
+  //   {"session_timeout": 3600, "max_power_kw": 60, "support_modes": ["fast", "slow"]}
+  //
+  // 示例（自助售货机）：
+  //   {"payment_timeout": 60, "product_slots": 40, "accept_coins": true}
+  //
+  // 示例（监控摄像头）：
+  //   {"recording_duration": 300, "motion_sensitivity": 70}
+  //
+  // 如果当前设备没有业务自定义配置，传空字符串 ""
+  string custom_config_json = 5;
+}
+
+// 状态上报（完整快照）
+// 与心跳的区别：心跳是轻量存活信号，状态上报是完整运行状态
+// 建议频率：每 5 分钟一次，或在状态发生重大变化时立即上报
+//
+// 重大变化包括：
+//   - 设备状态变更（online → offline → error）
+//   - 配置被修改
+//   - 固件升级完成
+//   - 重启完成
+message StatusReport {
+  // 设备唯一标识
+  string device_id = 1;
+
+  // 上报时间的毫秒时间戳
+  int64  timestamp = 2;
+
+  // 设备当前状态
+  // 可选值：
+  //   "online"       - 在线正常运行
+  //   "offline"      - 离线（心跳超时或主动断开）
+  //   "error"        - 故障（硬件/软件/网络异常）
+  //   "maintenance"  - 维护中（人工介入，如现场检修）
+  string status = 3;
+
+  // 当前固件版本号
+  // 与 DeviceCapability.firmware_version 语义相同，这里冗余传输方便服务端直接使用
+  string firmware_version = 4;
+
+  // 性能指标快照
+  DeviceMetrics metrics = 5;
+
+  // 当前生效的配置
+  DeviceConfig config = 6;
+}
+
+// 状态上报响应
+message StatusReportResponse {
+  // 服务端是否接受此次上报
+  // true：数据已写入数据库
+  // false：数据异常或设备未注册，message 中说明原因
+  bool   accepted = 1;
+
+  // 结果描述
+  // 成功时可为空或返回 "ok"
+  // 失败时返回具体原因，如 "设备未注册"、"status 字段无效"
+  string message = 2;
+}
+
+// ─── 设备 → 服务端：事件上报 ──────────────────────────────
+
+// 事件上报
+// 设备端发生特定事件时实时上报，不需要等定时上报周期
+//
+// 典型事件：
+//   - 硬件故障（打印机卡纸、扫码器异常）
+//   - 软件故障（应用崩溃、内存溢出）
+//   - 网络故障（断网、延迟过高）
+//   - 交易失败（用户支付后出药失败）
+//   - 配置变更（设备本地修改了配置）
+//   - 重启（自动/手动重启完成）
+message EventReport {
+  // 设备唯一标识
+  string device_id = 1;
+
+  // 事件发生时间的毫秒时间戳
+  int64  timestamp = 2;
+
+  // 事件类型
+  // 可选值：
+  //   "fault"             - 设备故障（通用）
+  //   "transaction_fail"  - 交易失败
+  //   "config_change"     - 配置变更（设备本地修改）
+  //   "reboot"            - 设备重启（已完成）
+  //   "stock_alert"       - 药品库存告警
+  //   "custom"            - 自定义事件（具体内容在 detail_json 中）
+  string event_type = 3;
+
+  // 事件严重程度
+  // 可选值：
+  //   "low"      - 低：不影响正常使用，可延后处理
+  //   "medium"   - 中：部分功能受限，建议尽快处理
+  //   "high"     - 高：主要功能不可用，需要立即处理
+  //   "critical" - 严重：设备完全不可用，需要紧急处理
+  string severity = 4;
+
+  // 事件描述（人类可读）
+  // 示例："打印机卡纸，已自动恢复"、"4G信号弱，切换至备用网络"
+  // 长度建议不超过 500 字符
+  string message = 5;
+
+  // 扩展详情，JSON 格式字符串
+  // 用于携带结构化的额外信息，不同 event_type 的 detail_json 格式不同
+  //
+  // 示例（fault 事件）：
+  //   {"component": "printer", "error_code": "PAPER_JAM", "auto_recovered": true}
+  //
+  // 示例（transaction_fail 事件）：
+  //   {"order_id": "ORD-20240407-001", "medicine": "布洛芬", "reason": "out_of_stock"}
+  //
+  // 如果没有额外信息，可以传空字符串 ""
+  string detail_json = 6;
+}
+
+// 事件上报响应
+message EventReportResponse {
+  bool   accepted = 1;
+  string message = 2;
+}
+
+// ─── 服务端 → 设备：指令 ────────────────────────────────
+
+// 指令
+// 服务端通过 CommandStream 推送给设备，设备收到后执行
+message Command {
+  // 指令唯一标识（UUID）
+  // 设备执行完回报时需要带回此 ID，服务端据此匹配指令和执行结果
+  string command_id = 1;
+
+  // 指令类型
+  // 可选值：
+  //   "reboot"          - 重启设备
+  //   "update_config"   - 修改设备配置（payload_json 中携带新配置）
+  //   "upgrade_firmware" - OTA 固件升级（payload_json 中携带下载地址和版本号）
+  //   "custom"          - 自定义指令（payload_json 中携带具体命令）
+  string command_type = 2;
+
+  // 指令参数，JSON 格式字符串
+  // 不同 command_type 的 payload 格式不同：
+  //
+  // reboot：
+  //   {"delay_seconds": 5}  - 延迟 5 秒后重启
+  //
+  // update_config：
+  //   {"screen_brightness": 80, "volume_level": 60}  - 只传需要修改的字段
+  //
+  // upgrade_firmware：
+  //   {"version": "v2.4.0", "url": "https://...", "checksum": "sha256:..."}
+  //
+  // custom：
+  //   由业务定义
+  string payload_json = 3;
+
+  // 指令下发时间的毫秒时间戳（服务端生成指令时的时间）
+  int64  issued_at = 4;
+
+  // 指令执行超时时间，单位秒
+  // 设备收到指令后，如果超过此时间未完成执行，服务端标记为 timeout
+  // 建议值：reboot = 30，update_config = 10，upgrade_firmware = 300
+  int64  timeout_seconds = 5;
+}
+
+// 指令流请求
+// 设备调用 CommandStream RPC 时发送此消息，建立长连接等待指令推送
+message CommandStreamRequest {
+  // 设备唯一标识
+  string device_id = 1;
+}
+
+// 指令执行结果
+// 设备执行完指令后，通过此消息回报结果给服务端
+// 可以走专门的 ReportCommandResult RPC，也可以在下次 EventReport 中携带
+message CommandResult {
+  // 指令 ID，必须与收到的 Command.command_id 一致
+  string command_id = 1;
+
+  // 设备 ID
+  string device_id = 2;
+
+  // 执行状态
+  // 可选值：
+  //   "success"   - 执行成功
+  //   "failed"    - 执行失败（message 中说明原因）
+  //   "timeout"   - 执行超时（设备可能在执行中崩溃）
+  //   "rejected"  - 设备拒绝执行（如固件版本不支持、资源不足）
+  string status = 3;
+
+  // 执行结果描述
+  // 成功时：可为空或简要说明，如 "设备已重启"
+  // 失败时：具体失败原因，如 "固件校验失败：checksum 不匹配"
+  string message = 4;
+
+  // 执行完成时间的毫秒时间戳
+  int64  executed_at = 5;
+}
