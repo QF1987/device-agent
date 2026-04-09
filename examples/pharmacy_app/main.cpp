@@ -32,6 +32,8 @@ int main(int argc, char* argv[]) {
 
     business::PharmacyBusinessApp app(socket_path);
 
+    std::cerr << "[PharmacyApp] Starting..." << std::endl;
+
     if (!app.start()) {
         std::cerr << "Failed to start app\n";
         return 1;

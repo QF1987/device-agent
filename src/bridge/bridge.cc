@@ -15,6 +15,7 @@
 #endif
 
 #include <cstring>
+#include <cerrno>
 #include <sstream>
 #include <iostream>
 #include <chrono>
@@ -179,6 +180,12 @@ void SocketBridge::server_loop() {
         sockaddr_un client_addr;
         socklen_t client_len = sizeof(client_addr);
         client_fd_ = accept(server_fd_, (sockaddr*)&client_addr, &client_len);
+
+        // Ensure client socket is blocking (don't inherit NONBLOCK from server)
+        if (client_fd_ >= 0) {
+            int cflags = fcntl(client_fd_, F_GETFL, 0);
+            fcntl(client_fd_, F_SETFL, cflags & ~O_NONBLOCK);
+        }
 #endif
 
         if (client_fd_ < 0) {
@@ -202,7 +209,7 @@ void SocketBridge::server_loop() {
             int n = recv(client_fd_, buf, sizeof(buf) - 1, 0);
             if (n <= 0) {
                 if (n < 0) {
-                    LOG_WARN("recv() failed");
+                    LOG_WARN("recv() failed: " + std::to_string(errno) + " (" + std::string(strerror(errno)) + ")");
                 }
                 break;
             }
@@ -337,6 +344,8 @@ void SocketBridge::handle_message(const std::string& json) {
     };
 
     std::string type = get_str("type");
+
+    LOG_DEBUG("Socket received: " + json);
 
     if (type == "metrics") {
         // Extract data field
