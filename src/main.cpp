@@ -78,12 +78,12 @@ int main(int argc, char* argv[]) {
         device_agent::Logger::instance().set_output(config.log_file);
     }
 
-    device_agent::LOG_INFO("=== device-agent starting ===");
-    device_agent::LOG_INFO("Device ID: " + config.auth.device_id);
-    device_agent::LOG_INFO("Server: " + config.server.server_address());
+    LOG_INFO("=== device-agent starting ===");
+    LOG_INFO("Device ID: " + config.auth.device_id);
+    LOG_INFO("Server: " + config.server.server_address());
 
     if (config.auth.device_id.empty() || config.auth.token.empty()) {
-        device_agent::LOG_ERROR("device_id and token are required");
+        LOG_ERROR("device_id and token are required");
         return 1;
     }
 
@@ -110,9 +110,9 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    device_agent::LOG_INFO("Shutting down...");
+    LOG_INFO("Shutting down...");
     client->stop();
 
-    device_agent::LOG_INFO("=== device-agent stopped ===");
+    LOG_INFO("=== device-agent stopped ===");
     return 0;
 }
