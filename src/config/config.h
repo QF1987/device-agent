@@ -40,6 +40,13 @@ struct StatusReportConfig {
     int timeout_seconds = 10;
 };
 
+// Business bridge config
+struct BusinessBridgeConfig {
+    std::string type = "null";  // "null", "socket", "http", "plugin"
+    std::string path;           // socket path or "host:port" for TCP
+    int reconnect_interval = 5; // seconds
+};
+
 // Main config structure
 struct Config {
     DeviceAuth auth;
@@ -47,6 +54,7 @@ struct Config {
     HeartbeatConfig heartbeat;
     CommandStreamConfig command_stream;
     StatusReportConfig status_report;
+    BusinessBridgeConfig business_bridge;
 
     std::string log_level = "info";  // debug, info, warn, error
     std::string log_file;             // empty = stdout only

@@ -10,6 +10,7 @@
 #include "client/command_handler.h"
 #include "config/config.h"
 #include "logger/logger.h"
+#include "bridge/bridge.h"
 
 namespace {
 
@@ -87,6 +88,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Create business bridge
+    std::shared_ptr<device_agent::IBusinessBridge> bridge;
+    if (config.business_bridge.type == "socket") {
+        bridge = std::make_shared<device_agent::SocketBridge>(config.business_bridge.path);
+        LOG_INFO("Business bridge: socket (" + config.business_bridge.path + ")");
+    } else {
+        bridge = std::make_shared<device_agent::NullBridge>();
+        LOG_INFO("Business bridge: null (no business data)");
+    }
+
     // Command result reporter
     std::shared_ptr<device_agent::DeviceClient> client(
         new device_agent::DeviceClient(config));
@@ -102,8 +113,21 @@ int main(int argc, char* argv[]) {
             handler.handle(cmd);
         });
 
+    // Start bridge and register handler
+    bridge->set_handler(nullptr);  // No business handler yet
+    bridge->start();
+
     // Start
     client->start();
+
+    // Metrics polling thread (injects business data into heartbeats)
+    std::thread metrics_thread([&]() {
+        while (g_running.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            // TODO: poll business metrics and inject into status report
+            (void)bridge;
+        }
+    });
 
     // Wait for signal
     while (g_running.load()) {
@@ -112,6 +136,8 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("Shutting down...");
     client->stop();
+    bridge->stop();
+    metrics_thread.join();
 
     LOG_INFO("=== device-agent stopped ===");
     return 0;

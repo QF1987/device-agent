@@ -16,6 +16,7 @@ set(SOURCES
     src/client/command_handler.cc
     src/config/config.cc
     src/logger/logger.cc
+    src/bridge/bridge.cc
     ${GEN_DIR}/terminal_agent/v1/device.pb.cc
     ${GEN_DIR}/terminal_agent/v1/device.grpc.pb.cc
     ${GEN_DIR}/terminal_agent/v1/service.pb.cc
