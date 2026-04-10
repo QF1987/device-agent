@@ -1,3 +1,26 @@
+// ============================================================
+// config/config.h - 配置结构定义
+// ============================================================
+// device-agent 的所有配置项都定义在这里。
+//
+// 配置来源有两种：
+//   1. JSON 配置文件（Config::load）
+//   2. 环境变量（Config::load_from_env）
+//
+// 设计思路：
+//   - 所有字段都有默认值，降低配置复杂度
+//   - 结构体而非类：都是 public 字段，不需要封装
+//   - JSON 序列化/反序列化由实现完成（见 config.cpp）
+//
+// 典型配置示例（JSON）：
+//   {
+//     "auth": {"device_id": "DEV-001", "token": "xxx"},
+//     "server": {"host": "192.168.1.100", "port": 9090, "use_tls": false},
+//     "heartbeat": {"interval_seconds": 30},
+//     "business_bridge": {"type": "socket", "path": "/var/run/business.sock"}
+//   }
+// ============================================================
+
 #pragma once
 
 #include <string>
@@ -5,49 +28,52 @@
 
 namespace device_agent {
 
-// Device identity and auth
+// ─── 设备认证 ─────────────────────────────────────────────
 struct DeviceAuth {
-    std::string device_id;
-    std::string token;
+    std::string device_id;  // 设备唯一 ID（如 DEV-001）
+    std::string token;     // 认证 Token（服务端颁发）
 };
 
-// Server connection
+// ─── 服务端连接配置 ───────────────────────────────────────
 struct ServerConfig {
-    std::string host;   // e.g. "192.168.1.100" or "device-ops.example.com"
-    int port;           // e.g. 9090
-    bool use_tls;       // whether to use TLS
+    std::string host;   // 服务端地址（IP 或域名）
+    int port;           // gRPC 端口
+    bool use_tls;       // 是否使用 TLS 加密
 
+    // 方便拼接地址的辅助方法
+    // 返回 "host:port" 格式（gRPC 地址格式）
     std::string server_address() const;
 };
 
-// Heartbeat settings
+// ─── 心跳配置 ─────────────────────────────────────────────
 struct HeartbeatConfig {
-    int interval_seconds = 30;       // heartbeat interval
-    int timeout_seconds = 5;         // single heartbeat timeout
-    int max_retries = 3;             // max consecutive failures before reconnect
+    int interval_seconds = 30;    // 心跳间隔（秒）
+    int timeout_seconds = 5;      // 单次心跳超时
+    int max_retries = 3;          // 超过此次数认为连接断开
 };
 
-// Command stream settings
+// ─── 指令流配置 ───────────────────────────────────────────
 struct CommandStreamConfig {
-    int reconnect_base_seconds = 1;  // initial reconnect delay
-    int reconnect_max_seconds = 60;  // max reconnect delay (exponential backoff)
-    int command_timeout_seconds = 30; // timeout for receiving a command
+    int reconnect_base_seconds = 1;   // 重连初始延迟（秒）
+    int reconnect_max_seconds = 60;     // 重连最大延迟（秒）
+    int command_timeout_seconds = 30;   // 接收指令超时
 };
 
-// Status report settings
+// ─── 状态上报配置 ─────────────────────────────────────────
 struct StatusReportConfig {
-    int interval_seconds = 300;     // 5 minutes
-    int timeout_seconds = 10;
+    int interval_seconds = 300;   // 上报间隔（5分钟）
+    int timeout_seconds = 10;     // 单次上报超时
 };
 
-// Business bridge config
+// ─── 业务 Bridge 配置 ──────────────────────────────────────
 struct BusinessBridgeConfig {
-    std::string type = "null";  // "null", "socket", "http", "plugin"
-    std::string path;           // socket path or "host:port" for TCP
-    int reconnect_interval = 5; // seconds
+    std::string type = "null";  // 桥接类型：null/socket/http/plugin
+    std::string path;           // socket 路径或 HTTP 地址
+    int reconnect_interval = 5; // 重连间隔（秒）
 };
 
-// Main config structure
+// ─── 主配置结构 ───────────────────────────────────────────
+// 聚合所有子配置，是 Config::load() 的返回值类型
 struct Config {
     DeviceAuth auth;
     ServerConfig server;
@@ -56,13 +82,15 @@ struct Config {
     StatusReportConfig status_report;
     BusinessBridgeConfig business_bridge;
 
-    std::string log_level = "info";  // debug, info, warn, error
-    std::string log_file;             // empty = stdout only
+    std::string log_level = "info";  // 日志级别：debug/info/warn/error
+    std::string log_file;             // 日志文件路径（空=stdout）
 
-    // Load config from JSON file
+    // 从 JSON 文件加载配置
+    // 文件不存在或格式错误会抛异常（std::runtime_error）
     static Config load(const std::string& filepath);
 
-    // Load config from environment variables (for embedded / container use)
+    // 从环境变量加载配置（用于容器/嵌入式环境）
+    // 环境变量命名惯例：DEVICE_AGENT_XXX（如 DEVICE_AGENT_DEVICE_ID）
     static Config load_from_env();
 };
 
