@@ -4,29 +4,40 @@
 // Bridge 是 device-agent 与本地业务应用之间的数据通道。
 //
 // 背景：
-//   device-agent 运行在自助购药机上，但它本身不做购药业务。
+//   device-agent 作为后台守护进程运行在自助购药机上，负责设备管理。
 //   购药业务由另一个进程（业务应用）处理。
 //   两者通过 Unix Domain Socket（或 TCP）通信。
 //
-// 通信方式：
-//   device-agent（客户端） ←→  Unix Domain Socket  ←→  业务应用（服务端）
+// 通信模式（两种）：
+//   ── Listen 模式（device-agent 监听）───────────────
+//      device-agent 作为 socket 服务端，监听一个地址。
+//      业务应用主动连接上来，推送业务数据。
+//      这是【默认/推荐】模式，适合后台守护进程。
+//      场景：device-agent 先启动，业务应用后连接。
 //
-//   device-agent 通过 Socket 发送请求，业务应用返回业务数据：
-//     - get_business_metrics：获取业务指标（今日交易笔数、库存告警等）
-//     - get_business_status：获取业务状态（打印机状态、药槽数量等）
+//      通信架构：
+//        device-agent（监听） ←── 连接 ──→  业务应用（客户端）
 //
-// 这样做的好处：
-//   1. 业务应用可以独立开发、升级
-//   2. device-agent 只关注设备管理，不耦合业务逻辑
-//   3. 同一套 device-agent 可以搭配不同业务应用
+//   ── Connect 模式（device-agent 主动连接）───────────
+//      device-agent 作为 socket 客户端，主动连接业务应用。
+//      适合业务应用作为服务端接收连接的架构（较少见）。
+//
+// 协议格式（JSON 行协议）：
+//   业务应用 → device-agent：
+//     {"type":"metrics","data":{...}}
+//     {"type":"status","data":{...}}
+//     {"type":"execute_command","id":"xxx","command_type":"xxx","payload":{}}
+//   device-agent → 业务应用：
+//     {"type":"command_result","id":"xxx","success":true}
+//     {"type":"ping"}
 //
 // 接口设计：
 //   IBusinessBridge：桥接接口，定义启动/停止/轮询等操作
 //   IBusinessHandler：业务处理器接口，业务应用实现它来提供数据和接收指令
 //
-// 当前支持：
-//   SocketBridge：Unix Domain Socket（Linux/Mac）或 TCP localhost（Windows）
-//   NullBridge：不连接业务应用，只有系统指标（测试用）
+// 平台差异：
+//   Linux/Mac：优先使用 Unix Domain Socket（更安全，不暴露到网络）
+//   Windows：不支持 Unix socket，降级到 TCP localhost
 // ============================================================
 
 #pragma once
@@ -44,6 +55,13 @@ namespace device_agent {
 
 // Forward declaration：前向声明，避免循环引用
 class IBusinessHandler;
+
+// ─── Bridge 模式 ──────────────────────────────────────────
+// 决定 device-agent 是监听还是主动连接
+enum class BridgeMode {
+    LISTEN,   // device-agent 监听 socket，业务应用连接上来（推荐）
+    CONNECT   // device-agent 主动连接业务应用（少数场景）
+};
 
 // ─── IBusinessHandler ───────────────────────────────────────
 // 业务处理器接口
@@ -85,7 +103,7 @@ public:
 };
 
 // ─── IBusinessBridge ───────────────────────────────────────
-// 业务 Bridge 接口（抽象了 Socket/HTTP/Plugin 等通信方式）
+// 业务 Bridge 接口
 //
 // device-agent 通过此接口操作 Bridge：
 //   - start/stop：启动和停止桥接
@@ -95,10 +113,10 @@ class IBusinessBridge {
 public:
     virtual ~IBusinessBridge() = default;
 
-    // 启动 Bridge（建立 socket 连接等）
+    // 启动 Bridge
     virtual bool start() = 0;
 
-    // 停止 Bridge（断开连接）
+    // 停止 Bridge
     virtual void stop() = 0;
 
     // 注册业务处理器
@@ -116,30 +134,43 @@ public:
 
     // 是否已连接（业务应用已连接）
     virtual bool is_connected() const = 0;
+
+    // 获取 Bridge 模式
+    virtual BridgeMode mode() const = 0;
 };
 
 // ─── SocketBridge ─────────────────────────────────────────
 // Unix Domain Socket / TCP Bridge 实现
 //
-// 架构：
-//   device-agent 作为 socket 客户端，
-//   业务应用作为 socket 服务端（监听 Unix socket 或 TCP 端口）。
+// 支持两种模式（由 BridgeMode 决定）：
+//   LISTEN 模式（默认）：
+//     device-agent 作为服务端监听 socket。
+//     业务应用主动连接上来，推送业务数据。
+//     这是推荐的运行模式，适合 device-agent 作为后台守护进程。
 //
-// 平台差异：
-//   Linux/Mac：优先使用 Unix Domain Socket（更安全，不暴露到网络）
-//   Windows：不支持 Unix socket，自动降级到 TCP localhost
+//     Linux/Mac：监听 Unix Domain Socket（路径如 /var/run/device-agent/business.sock）
+//     Windows：监听 TCP localhost（地址如 127.0.0.1:7890）
 //
-// 工作线程：
-//   - server_thread：监听 socket，等待业务应用连接
-//   - client_thread：主动连接业务应用的 socket
+//   CONNECT 模式：
+//     device-agent 作为客户端，主动连接业务应用。
+//     业务应用需要在指定地址监听。
+//     适合业务应用作为 socket 服务端接收连接的架构。
 //
-// 注意：这是"主动连接"模式，即 device-agent 主动连接业务应用。
-//   也有"被动接受"模式（device-agent 监听，业务应用连接进来）。
-//   当前实现是主动连接模式。
+// 工作线程（LISTEN 模式下）：
+//   - accept_thread：只负责 accept() 等待连接
+//   - session_thread：读写已连接的 socket
+//
+// 断线重连（CONNECT 模式下）：
+//   如果连接断开，自动重试（指数退避）
+//   LISTEN 模式下由业务应用负责重连
 class SocketBridge : public IBusinessBridge {
 public:
-    // config：Unix socket 路径（Linux/Mac）或 "host:port"（Windows）
-    explicit SocketBridge(const std::string& config);
+    // config：socket 地址
+    //   Unix socket：完整路径，如 /var/run/device-agent/business.sock
+    //   TCP：地址格式 host:port，如 127.0.0.1:7890
+    // mode：LISTEN（默认）或 CONNECT
+    explicit SocketBridge(const std::string& config,
+                          BridgeMode mode = BridgeMode::LISTEN);
     ~SocketBridge() override;
 
     bool start() override;
@@ -149,43 +180,59 @@ public:
     std::string poll_status() override;
     const char* type() const override { return "socket"; }
     bool is_connected() const override { return connected_.load(); }
+    BridgeMode mode() const override { return mode_; }
 
 private:
-    void server_loop();       // 监听 socket，等待业务应用连接
-    void client_loop();       // 主动连接业务应用
-    void handle_message(const std::string& json);  // 处理收到的消息
-    void send_to_client(const std::string& json);  // 发送消息到业务应用
-    bool setup_server_socket();   // 创建 socket 监听
-    bool setup_client_socket();   // 创建 socket 连接
+    // ── LISTEN 模式 ────────────────────────────────────
+    // accept_loop：只负责 accept()，收到连接后启动 session_thread
+    void accept_loop();
 
-    std::string config_;  // socket 路径或 host:port
+    // session_thread：已连接 socket 的读写循环
+    // 由 accept_loop 在收到连接后启动
+    void session_loop(int client_fd);
 
-    std::shared_ptr<IBusinessHandler> handler_;  // 业务处理器
-    std::atomic<bool> running_{false};   // 运行标志
-    std::atomic<bool> connected_{false}; // 连接标志
-    std::atomic<bool> is_server_{false}; // 是否是监听模式
+    // ── CONNECT 模式 ────────────────────────────────────
+    // client_loop：主动连接并保持，断了自动重连
+    void client_loop();
 
-    int server_fd_ = -1;  // 监听 socket fd
-    int client_fd_ = -1;  // 已连接 socket fd
+    // ── 通用 ───────────────────────────────────────────
+    // 创建监听 socket（Unix 或 TCP）
+    bool setup_listen_socket();
+    // 创建连接 socket（Unix 或 TCP）
+    bool setup_connect_socket();
 
-    std::thread server_thread_;  // 监听线程
-    std::thread client_thread_;  // 连接线程
+    // 处理收到的 JSON 消息
+    void handle_message(const std::string& json);
+    // 发送消息到已连接的 socket
+    void send_to_client(const std::string& json);
+    // 清理 session
+    void cleanup_session();
+
+    std::string config_;        // socket 地址
+    BridgeMode mode_;           // 模式
+
+    std::shared_ptr<IBusinessHandler> handler_;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> connected_{false};
+
+    int listen_fd_ = -1;        // 监听 socket（LISTEN 模式）
+    int session_fd_ = -1;       // 已连接 socket（当前 session）
+
+    std::thread accept_thread_;     // accept 线程（LISTEN 模式）
+    std::thread session_thread_;    // session 读写线程
+    std::thread reconnect_thread_;  // 重连线程（CONNECT 模式）
 
     // mutex 保护 latest_metrics_ 和 latest_status_
-    // 因为 poll_metrics/poll_status 可能和 server_loop/client_loop 并发调用
     std::mutex metrics_mu_;
     std::mutex status_mu_;
-    std::string latest_metrics_;  // 最新业务指标
-    std::string latest_status_;   // 最新业务状态
+    std::string latest_metrics_;
+    std::string latest_status_;
 
-    std::mutex send_mu_;  // 保护 send_to_client（socket 写操作）
+    std::mutex send_mu_;  // 保护 send_to_client
 };
 
 // ─── NullBridge ───────────────────────────────────────────
 // 空 Bridge（用于测试/演示，不连接业务应用）
-//
-// 当 type != "socket" 时使用此实现。
-// 所有接口都是空操作，业务指标返回 "{}"。
 class NullBridge : public IBusinessBridge {
 public:
     NullBridge() = default;
@@ -196,6 +243,7 @@ public:
     std::string poll_status() override { return "{}"; }
     const char* type() const override { return "null"; }
     bool is_connected() const override { return true; }
+    BridgeMode mode() const override { return BridgeMode::LISTEN; }
 };
 
 }  // namespace device_agent

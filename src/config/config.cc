@@ -84,6 +84,7 @@ Config Config::load(const std::string& filepath) {
     // Business bridge
     cfg.business_bridge.type = get_str("business_bridge_type");
     cfg.business_bridge.path = get_str("business_bridge_path");
+    cfg.business_bridge.mode = get_str("business_bridge_mode");
     cfg.business_bridge.reconnect_interval = get_int("business_bridge_reconnect_interval", 5);
 
     LOG_INFO("Config loaded from: " + filepath);
@@ -110,6 +111,7 @@ Config Config::load_from_env() {
     cfg.log_file = env("LOG_FILE");
     cfg.business_bridge.type = env("BUSINESS_BRIDGE_TYPE");
     cfg.business_bridge.path = env("BUSINESS_BRIDGE_PATH");
+    cfg.business_bridge.mode = env("BUSINESS_BRIDGE_MODE");
     cfg.business_bridge.reconnect_interval = std::atoi(env("BUSINESS_BRIDGE_RECONNECT_INTERVAL").c_str());
 
     LOG_INFO("Config loaded from environment variables");

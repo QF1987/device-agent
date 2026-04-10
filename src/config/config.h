@@ -66,10 +66,17 @@ struct StatusReportConfig {
 };
 
 // ─── 业务 Bridge 配置 ──────────────────────────────────────
+//
+// mode 选项：
+//   listen：device-agent 监听 socket，业务应用连接上来（推荐/默认）
+//   connect：device-agent 主动连接业务应用
 struct BusinessBridgeConfig {
     std::string type = "null";  // 桥接类型：null/socket/http/plugin
-    std::string path;           // socket 路径或 HTTP 地址
-    int reconnect_interval = 5; // 重连间隔（秒）
+    std::string path;           // socket 路径或地址
+                              //   Unix socket：完整路径，如 /var/run/device-agent/business.sock
+                              //   TCP：地址，如 127.0.0.1:7890
+    std::string mode = "listen"; // 模式：listen（默认）或 connect
+    int reconnect_interval = 5;  // 重连间隔（秒，connect 模式下使用）
 };
 
 // ─── 主配置结构 ───────────────────────────────────────────

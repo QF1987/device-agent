@@ -1,0 +1,15 @@
+{
+  "device_id": "DEV-001",
+  "token": "test-token-123",
+  "server_host": "127.0.0.1",
+  "server_port": 9090,
+  "use_tls": false,
+  "heartbeat_interval": 10,
+  "heartbeat_timeout": 5,
+  "status_interval": 60,
+  "business_bridge_type": "socket",
+  "business_bridge_path": "/tmp/device-agent/business.sock",
+  "business_bridge_mode": "listen",
+  "log_level": "debug",
+  "log_file": ""
+}

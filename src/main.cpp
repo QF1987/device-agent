@@ -159,14 +159,26 @@ int main(int argc, char* argv[]) {
     // 第 6 步：创建业务 Bridge
     // ============================================================
     // Bridge 负责和本地业务应用通信（获取业务数据）
-    // 两种模式：
-    //   socket：Unix Domain Socket（Linux/Mac）或 TCP localhost（Windows）
-    //           业务应用监听 socket，device-agent 连接上去读写业务数据
+    //
+    // 两种模式（由 business_bridge.mode 配置）：
+    //   listen（默认）：device-agent 监听 socket，业务应用主动连接上来
+    //                  适合 device-agent 作为后台守护进程的场景（推荐）
+    //   connect：device-agent 主动连接业务应用（少数场景）
+    //
+    // 类型：
+    //   socket：Unix Domain Socket（Linux/Mac）或 TCP（Windows）
     //   null：不连接业务应用，只有系统指标（测试/演示用）
     std::shared_ptr<device_agent::IBusinessBridge> bridge;
     if (config.business_bridge.type == "socket") {
-        bridge = std::make_shared<device_agent::SocketBridge>(config.business_bridge.path);
-        LOG_INFO("Business bridge: socket (" + config.business_bridge.path + ")");
+        // 根据 mode 决定 LISTEN 还是 CONNECT
+        device_agent::BridgeMode mode = device_agent::BridgeMode::LISTEN;
+        if (config.business_bridge.mode == "connect") {
+            mode = device_agent::BridgeMode::CONNECT;
+        }
+        bridge = std::make_shared<device_agent::SocketBridge>(
+            config.business_bridge.path, mode);
+        LOG_INFO("Business bridge: socket (" + config.business_bridge.path +
+                 ") mode=" + config.business_bridge.mode);
     } else {
         bridge = std::make_shared<device_agent::NullBridge>();
         LOG_INFO("Business bridge: null (no business data)");
