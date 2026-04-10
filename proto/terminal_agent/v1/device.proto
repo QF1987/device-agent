@@ -322,9 +322,12 @@ message EventReportResponse {
 // 指令
 // 服务端通过 CommandStream 推送给设备，设备收到后执行
 message Command {
+  // 目标设备 ID（CLI 通过此字段指定发给哪个设备）
+  string device_id = 1;
+
   // 指令唯一标识（UUID）
   // 设备执行完回报时需要带回此 ID，服务端据此匹配指令和执行结果
-  string command_id = 1;
+  string command_id = 2;
 
   // 指令类型
   // 可选值：
@@ -332,7 +335,7 @@ message Command {
   //   "update_config"   - 修改设备配置（payload_json 中携带新配置）
   //   "upgrade_firmware" - OTA 固件升级（payload_json 中携带下载地址和版本号）
   //   "custom"          - 自定义指令（payload_json 中携带具体命令）
-  string command_type = 2;
+  string command_type = 3;
 
   // 指令参数，JSON 格式字符串
   // 不同 command_type 的 payload 格式不同：
@@ -348,15 +351,15 @@ message Command {
   //
   // custom：
   //   由业务定义
-  string payload_json = 3;
+  string payload_json = 4;
 
   // 指令下发时间的毫秒时间戳（服务端生成指令时的时间）
-  int64  issued_at = 4;
+  int64  issued_at = 5;
 
   // 指令执行超时时间，单位秒
   // 设备收到指令后，如果超过此时间未完成执行，服务端标记为 timeout
   // 建议值：reboot = 30，update_config = 10，upgrade_firmware = 300
-  int64  timeout_seconds = 5;
+  int64  timeout_seconds = 6;
 }
 
 // 指令流请求
