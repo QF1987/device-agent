@@ -28,6 +28,7 @@
 #include <string>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 #include "terminal_agent/v1/service.pb.h"
 #include "terminal_agent/v1/device.pb.h"
@@ -110,6 +111,10 @@ public:
     void register_handler(
         const std::string& command_type,
         std::function<bool(const std::string& payload, std::string& err)> handler);
+
+private:
+    std::unordered_map<std::string,
+        std::function<bool(const std::string& payload, std::string& err)>> handlers_;
 };
 
 }  // namespace device_agent
