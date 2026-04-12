@@ -62,4 +62,16 @@ public:
     void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) override;
 };
 
+// ─── MacOSExecutor：macOS 专用执行器 ─────────────────────
+// 继承 LinuxExecutor，重写 macOS 特有行为：
+//   - reboot：fork + /sbin/reboot（真正重启）
+//   - upgradeApp：cp -R .app 到 /Applications
+class MacOSExecutor : public Executor {
+public:
+    void reboot(bool force, std::string& err) override;
+    void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
+    void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) override;
+};
+
 }  // namespace device_agent

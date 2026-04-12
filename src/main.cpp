@@ -40,6 +40,7 @@
 #include "config/config.h"
 #include "logger/logger.h"
 #include "bridge/bridge.h"
+#include "executor/executor.h"
 
 // ============================================================
 // 匿名命名空间：工具函数和全局状态
@@ -196,6 +197,19 @@ int main(int argc, char* argv[]) {
         [client](const terminal_agent::v1::CommandResult& result) -> bool {
             return client->report_command_result(result);
         });
+
+    // 根据平台选择正确的 Executor（放在配置校验前，确保日志能输出）
+#ifdef __APPLE__
+    handler.set_executor(std::make_shared<device_agent::MacOSExecutor>());
+    LOG_INFO("Using MacOSExecutor");
+#else
+    handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
+    LOG_INFO("Using LinuxExecutor");
+#endif
+
+    // ============================================================
+    // 第 5.5 步：配置校验
+    // ============================================================
 
     // 设置指令回调：当收到服务端指令时，交给 handler 处理
     client->set_command_callback(
