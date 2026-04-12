@@ -10,6 +10,7 @@
 // ============================================================
 
 #include "executor/executor.h"
+#include "reboot_state/reboot_state.h"
 #include "logger/logger.h"
 
 #ifdef __APPLE__
@@ -60,28 +61,78 @@ static bool extract_json_string(const std::string& json, const std::string& key,
 
 // ─── reboot ───────────────────────────────────────────────
 
-void LinuxExecutor::reboot(bool force, std::string& err) {
-    LOG_INFO("LinuxExecutor: executing reboot (force=" + std::string(force ? "true" : "false") + ")");
+std::string LinuxExecutor::reboot(bool force, const std::string& command_id, std::string& err) {
+    (void)force;
+    LOG_INFO("LinuxExecutor: executing reboot, command_id=" + command_id);
+
+    // ─── C+D 方案：写 pending 状态 ───────────────────────
+    RebootStateManager& state_mgr = RebootStateManager::instance();
+    int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    state_mgr.write_pending(command_id, "DEV-001", now_ms);
 
 #ifndef __APPLE__
+    // Linux: fork 子进程执行 reboot
     pid_t pid = fork();
     if (pid < 0) {
         err = "fork() failed: " + std::string(strerror(errno));
-        return;
+        LOG_ERROR("LinuxExecutor: fork failed: " + err);
+        return "failed";
     }
 
     if (pid == 0) {
+        // 子进程：延迟 3 秒后执行 reboot
         sleep(3);
         sync();
-        reboot(RB_AUTOBOOT);
-        _exit(1);
+
+        // ── 清 pending 文件（reboot 即将执行）─────────────
+        // 如果 reboot 成功，系统重启，文件已清 → 启动时无 pending
+        // 如果 reboot 失败，文件被删 → 启动时无 pending（由 failure 处理）
+        state_mgr.clear_pending();
+
+        // 调用 reboot(RB_AUTOBOOT) 系统调用
+        // 成功时不会返回，进程被内核重启系统
+        // 失败时返回 -1，errno 被设置
+        int ret = reboot(RB_AUTOBOOT);
+        // 如果 reboot 成功，进程被内核杀掉，不会执行到这里
+        // 如果失败，写失败状态文件
+        LOG_ERROR("LinuxExecutor: reboot syscall failed, errno=" + std::to_string(errno));
+        std::ofstream ofs("/tmp/device-agent-reboot-status.json");
+        if (ofs.is_open()) {
+            ofs << "{\n"
+                << "  \"command_id\": \"" << command_id << "\",\n"
+                << "  \"status\": \"failed\",\n"
+                << "  \"error\": \"reboot syscall failed, errno=" << std::to_string(errno) << "\"\n"
+                << "}\n";
+            ofs.close();
+        }
+        _exit(1);  // reboot 失败，退出
     }
 
-    LOG_INFO("Reboot scheduled in 3 seconds (child pid=" + std::to_string(pid) + ")");
+    // 父进程：非阻塞等待
+    LOG_INFO("LinuxExecutor: reboot child pid=" + std::to_string(pid) + ", waiting...");
+    int status;
+    pid_t waited = waitpid(pid, &status, WNOHANG);
+    if (waited == 0) {
+        // 子进程还没退出，reboot 正在执行
+        LOG_INFO("LinuxExecutor: reboot in progress, returning pending");
+        return "pending";
+    }
+
+    // 子进程已退出 = reboot 失败
+    if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        LOG_ERROR("LinuxExecutor: reboot child exited with code " + std::to_string(exit_code));
+        err = "reboot failed with exit code " + std::to_string(exit_code);
+        state_mgr.clear_pending();
+        return "failed";
+    }
+
+    return "pending";
 #else
-    // macOS: 需要 root 权限才能 reboot，这里只记录日志
-    LOG_WARN("macOS reboot requires super-user, simulating...");
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // macOS 上走 MacOSExecutor，不应该调用到这里
+    LOG_WARN("LinuxExecutor: called on macOS, should use MacOSExecutor");
+    return "failed";
 #endif
 }
 

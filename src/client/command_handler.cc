@@ -111,8 +111,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
     if (cmd_type == "reboot") {
         bool force = false;
         extract_json_bool(payload, "force", force);
-        executor->reboot(force, err_msg);
-        result.set_status(err_msg.empty() ? "success" : "failed");
+        std::string status = executor->reboot(force, cmd.command_id(), err_msg);
+        result.set_status(status);
         result.set_message(err_msg.empty() ? "reboot scheduled" : err_msg);
 
     } else if (cmd_type == "update_config") {

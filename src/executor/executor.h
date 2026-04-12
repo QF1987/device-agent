@@ -29,8 +29,10 @@ public:
 
     // reboot：重启设备
     //   force=true 表示强制重启（不等进程优雅退出）
+    //   command_id：指令 ID，用于 pending 状态管理
     //   err：失败时填充错误描述
-    virtual void reboot(bool force, std::string& err) = 0;
+    // 返回：成功返回 "pending"（reboot 已计划），失败返回 "failed"
+    virtual std::string reboot(bool force, const std::string& command_id, std::string& err) = 0;
 
     // updateConfig：更新配置项
     //   key：配置项名称
@@ -56,7 +58,7 @@ public:
 // 在 Linux/macOS 上运行的默认执行器。
 class LinuxExecutor : public Executor {
 public:
-    void reboot(bool force, std::string& err) override;
+    std::string reboot(bool force, const std::string& command_id, std::string& err) override;
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) override;
@@ -68,7 +70,7 @@ public:
 //   - upgradeApp：cp -R .app 到 /Applications
 class MacOSExecutor : public Executor {
 public:
-    void reboot(bool force, std::string& err) override;
+    std::string reboot(bool force, const std::string& command_id, std::string& err) override;
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) override;

@@ -22,6 +22,7 @@ set(SOURCES
     src/bridge/bridge.cc
     src/executor/linux_executor.cc
     src/executor/macos_executor.cc
+    src/reboot_state/reboot_state.cc
     ${GEN_DIR}/terminal_agent/v1/device.pb.cc
     ${GEN_DIR}/terminal_agent/v1/device.grpc.pb.cc
     ${GEN_DIR}/terminal_agent/v1/service.pb.cc
@@ -34,6 +35,7 @@ set(HEADERS
     src/config/config.h
     src/logger/logger.h
     src/executor/executor.h
+    src/reboot_state/reboot_state.h
 )
 
 add_executable(device-agent ${SOURCES} ${HEADERS})

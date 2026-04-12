@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "executor/executor.h"
+#include "reboot_state/reboot_state.h"
 #include "logger/logger.h"
 
 #include <unistd.h>
@@ -20,39 +21,79 @@ namespace device_agent {
 
 // ─── reboot ───────────────────────────────────────────────
 
-void MacOSExecutor::reboot(bool force, std::string& err) {
+std::string MacOSExecutor::reboot(bool force, const std::string& command_id, std::string& err) {
     (void)force;  // macOS 上 force 参数暂未使用
-    LOG_INFO("MacOSExecutor: executing reboot");
+    LOG_INFO("MacOSExecutor: executing reboot, command_id=" + command_id);
 
     // 测试模式：不真重启（环境变量 DEVICE_AGENT_TEST_MODE=1）
     if (std::getenv("DEVICE_AGENT_TEST_MODE") != nullptr) {
         LOG_WARN("MacOSExecutor: TEST MODE - skipping real reboot");
-        return;
+        return "pending";
     }
 
-    // fork 出子进程执行 reboot，父进程立即返回
+    // ─── C+D 方案：写 pending 状态 ───────────────────────
+    RebootStateManager& state_mgr = RebootStateManager::instance();
+    int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    state_mgr.write_pending(command_id, "DEV-001", now_ms);
+
+    // ─── fork 子进程执行 reboot ───────────────────────────
     pid_t pid = fork();
     if (pid < 0) {
         err = "fork() failed: " + std::string(strerror(errno));
         LOG_ERROR("MacOSExecutor: fork failed: " + err);
-        return;
+        return "failed";
     }
 
     if (pid == 0) {
         // 子进程：延迟 3 秒后执行重启
-        // 延迟确保父进程能先返回结果给调用方
         sleep(3);
         sync();
-        // /sbin/reboot 需要 root 权限
-        // 设备通常以 root 运行，如果非 root 会有权限错误
+
+        // ── 清 pending 文件（reboot 即将执行）─────────────
+        // 如果 reboot 成功，系统重启，文件已清 → 启动时无 pending
+        // 如果 reboot 失败，文件被删 → 启动时无 pending（由 failure 处理）
+        state_mgr.clear_pending();
+
+        // 执行 reboot 命令
         int ret = system("/sbin/reboot");
-        if (ret != 0) {
-            LOG_ERROR("MacOSExecutor: reboot failed, ret=" + std::to_string(ret));
+        // 如果 reboot 成功，进程被内核杀掉，不会执行到这里
+        // 如果失败，写失败状态文件
+        LOG_ERROR("MacOSExecutor: reboot command returned ret=" + std::to_string(ret) +
+                  " (system did not reboot)");
+        std::ofstream ofs("/tmp/device-agent-reboot-status.json");
+        if (ofs.is_open()) {
+            ofs << "{\n"
+                << "  \"command_id\": \"" << command_id << "\",\n"
+                << "  \"status\": \"failed\",\n"
+                << "  \"error\": \"reboot command returned " << std::to_string(ret) << "\"\n"
+                << "}\n";
+            ofs.close();
         }
-        _exit(1);  // 不会执行到这里
+        _exit(1);  // reboot 失败，退出
     }
 
-    LOG_INFO("MacOSExecutor: reboot scheduled in 3 seconds (child pid=" + std::to_string(pid) + ")");
+    // ─── 父进程：非阻塞等待 ──────────────────────────────
+    LOG_INFO("MacOSExecutor: reboot child pid=" + std::to_string(pid));
+
+    int status;
+    pid_t waited = waitpid(pid, &status, WNOHANG);
+    if (waited == 0) {
+        // 子进程还在运行（reboot 可能正在执行），返回 pending
+        LOG_INFO("MacOSExecutor: reboot in progress, returning pending");
+        return "pending";
+    }
+
+    // ─── 子进程已退出 = reboot 失败（立即返回）─────────
+    // 能执行到这里说明子进程立即退出了（如权限拒绝）
+    if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        LOG_ERROR("MacOSExecutor: reboot child exited immediately with code " + std::to_string(exit_code));
+        err = "reboot failed: command returned exit code " + std::to_string(exit_code);
+        return "failed";
+    }
+
+    return "pending";
 }
 
 // ─── updateConfig ──────────────────────────────────────────

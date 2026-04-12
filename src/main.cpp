@@ -41,6 +41,7 @@
 #include "logger/logger.h"
 #include "bridge/bridge.h"
 #include "executor/executor.h"
+#include "reboot_state/reboot_state.h"
 
 // ============================================================
 // 匿名命名空间：工具函数和全局状态
@@ -146,6 +147,21 @@ int main(int argc, char* argv[]) {
     LOG_INFO("=== device-agent starting ===");
     LOG_INFO("Device ID: " + config.auth.device_id);
     LOG_INFO("Server: " + config.server.server_address());
+
+    // ============================================================
+    // 第 4.5 步：检查上次是否有未完成的 reboot
+    // ============================================================
+    // C+D 方案：如果 pending 状态文件存在，说明上次 reboot 命令没有完成
+    // （可能是命令发出后系统还没重启，或者 reboot 失败了）
+    // 此时文件已被清（子进程在 reboot 前会清文件），
+    // 所以正常启动即可，不需要额外处理
+    {
+        device_agent::RebootStateManager& state_mgr = device_agent::RebootStateManager::instance();
+        if (state_mgr.has_pending()) {
+            LOG_WARN("Previous reboot pending state found - will be handled on next reconnect");
+            state_mgr.clear_pending();
+        }
+    }
 
     // ============================================================
     // 第 5 步：配置校验
