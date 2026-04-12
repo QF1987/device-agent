@@ -9,7 +9,6 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(GEN_DIR "${CMAKE_SOURCE_DIR}/gen")
 set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
@@ -20,10 +19,6 @@ set(COMMON_SOURCES
     src/executor/linux_executor.cc
     src/executor/macos_executor.cc
     src/reboot_state/reboot_state.cc
-    ${GEN_DIR}/terminal_agent/v1/device.pb.cc
-    ${GEN_DIR}/terminal_agent/v1/device.grpc.pb.cc
-    ${GEN_DIR}/terminal_agent/v1/service.pb.cc
-    ${GEN_DIR}/terminal_agent/v1/service.grpc.pb.cc
 )
 
 set(COMMON_HEADERS
@@ -45,6 +40,16 @@ if(ANDROID OR __ANDROID__)
     # Exclude desktop executors from Android build
     list(FILTER COMMON_SOURCES EXCLUDE REGEX "src/executor/linux_executor.cc$")
     list(FILTER COMMON_SOURCES EXCLUDE REGEX "src/executor/macos_executor.cc$")
+
+    # Proto files for Android: gen-android/ (v4.25.1)
+    set(GEN_ANDROID_DIR "${CMAKE_SOURCE_DIR}/gen-android")
+    file(MAKE_DIRECTORY "${GEN_ANDROID_DIR}/terminal_agent/v1/")
+    list(APPEND COMMON_SOURCES
+        "${GEN_ANDROID_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_ANDROID_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+        "${GEN_ANDROID_DIR}/terminal_agent/v1/service.pb.cc"
+        "${GEN_ANDROID_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+    )
 
     # Pre-built gRPC C++ for Android (built from grpc v1.62.2 source for NDK)
     # Each ABI has its own install directory
@@ -104,7 +109,7 @@ if(ANDROID OR __ANDROID__)
     target_include_directories(device-agent PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/gen
+        ${GEN_ANDROID_DIR}
         ${GRPC_ANDROID_INSTALL_DIR}/include
     )
 
@@ -121,23 +126,15 @@ if(ANDROID OR __ANDROID__)
 else()
     message(STATUS "=== Building device-agent for desktop ===")
 
-    # Proto files in gen/ are v4.25.1 (for Android).
-    # Desktop needs v7.34.1 for system protobuf v34.1.
-    # Copy desktop proto files (v7.34.1) from gen-desktop/ to gen/.
-    set(DESKTOP_GEN_DIR "${CMAKE_SOURCE_DIR}/gen-desktop")
-    set(ANDROID_GEN_DIR "${CMAKE_SOURCE_DIR}/gen")
-    if(EXISTS "${DESKTOP_GEN_DIR}/terminal_agent/v1/service.pb.h")
-        message(STATUS "Copying desktop proto files from gen-desktop/")
-        file(COPY
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/device.pb.h"
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/device.pb.cc"
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/service.grpc.pb.h"
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/service.grpc.pb.cc"
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/service.pb.h"
-            "${DESKTOP_GEN_DIR}/terminal_agent/v1/service.pb.cc"
-            DESTINATION "${ANDROID_GEN_DIR}/terminal_agent/v1/"
-        )
-    endif()
+    # Proto files for Desktop: gen-desktop/ (v34.1, pre-generated)
+    # gen/ is only used by Android (gen-android/)
+    set(GEN_DESKTOP_DIR "${CMAKE_SOURCE_DIR}/gen-desktop")
+    list(APPEND COMMON_SOURCES
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+    )
 
     add_executable(device-agent
         ${COMMON_SOURCES}
@@ -148,7 +145,7 @@ else()
     target_include_directories(device-agent PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/gen
+        ${GEN_DESKTOP_DIR}
         /opt/homebrew/Cellar/grpc/1.80.0/include
         /opt/homebrew/Cellar/protobuf/34.1/include
         /opt/homebrew/Cellar/abseil/20260107.1/include

@@ -2,7 +2,6 @@
 build/
 bin/
 lib/
-gen/
 
 # IDE
 .vscode/
@@ -27,7 +26,12 @@ android/app/proguard-rules.pro
 
 # Desktop build (separate working dir)
 build-desktop/
-gen-android/
 
-# Proto generated (use gen-desktop for desktop, gen/ for android)
-# Keep gen-desktop/ in git
+# Proto generated files (temporary build dir)
+# Proto source files (keep in git):
+#   gen-android/  → Android proto (v4.25.1)
+#   gen-desktop/ → Desktop proto (v34.1)
+gen/
+
+# gRPC prebuilt libraries (committed to git, persistent)
+# android/grpc-android-prebuilt/<ABI>/
