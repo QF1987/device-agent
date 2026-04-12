@@ -76,4 +76,18 @@ public:
     void upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) override;
 };
 
+// ─── AndroidExecutor：Android 专用执行器 ─────────────────
+// 通过 JNI 调用 Android Java API
+//   - reboot：ActivityManager.shutdown() 或 /system/bin/reboot
+//   - upgradeApp：pm install -r（降级：无系统签名时走普通安装）
+//   - UI 提示：通过 JNI 调用 UIHelper.showToast()
+// 注意：仅在 Android 平台编译（__ANDROID__ 宏）
+class AndroidExecutor : public Executor {
+public:
+    std::string reboot(bool force, const std::string& command_id, std::string& err) override;
+    void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
+    void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& apkPath, const std::string& md5, std::string& err) override;
+};
+
 }  // namespace device_agent

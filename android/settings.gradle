@@ -1,0 +1,21 @@
+// Gradle settings for Android build
+// 完整 Android Studio 项目配置需在 Android Studio 中生成，此文件提供基础结构
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "device-agent"
+include ':app'

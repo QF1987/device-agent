@@ -1,0 +1,70 @@
+// app/build.gradle - Android App 模块
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.deviceagent'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.deviceagent"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        externalNativeBuild {
+            cmake {
+                // C++ 源码路径：../../src/ （和 macOS/Linux 共用）
+                path "../../src/CMakeLists.txt"
+                version "3.22.1"
+            }
+        }
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        }
+    }
+
+    buildTypes {
+        debug {
+            // debuggable C++ daemon
+            cppFlags += "-DDEBUG=1"
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    // 打包 C++ native library
+    packagingOptions {
+        jniLibs {
+            keep "libdevice-agent.so"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
+    // Lifecycle
+    implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
+}
+
+externalNativeBuild {
+    cmake {
+        // 复用 src/ 下的 C++ 源码
+        path "../../src/CMakeLists.txt"
+    }
+}
