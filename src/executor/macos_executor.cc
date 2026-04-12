@@ -24,6 +24,12 @@ void MacOSExecutor::reboot(bool force, std::string& err) {
     (void)force;  // macOS 上 force 参数暂未使用
     LOG_INFO("MacOSExecutor: executing reboot");
 
+    // 测试模式：不真重启（环境变量 DEVICE_AGENT_TEST_MODE=1）
+    if (std::getenv("DEVICE_AGENT_TEST_MODE") != nullptr) {
+        LOG_WARN("MacOSExecutor: TEST MODE - skipping real reboot");
+        return;
+    }
+
     // fork 出子进程执行 reboot，父进程立即返回
     pid_t pid = fork();
     if (pid < 0) {
