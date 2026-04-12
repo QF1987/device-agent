@@ -97,8 +97,12 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (!executor_) {
+#ifdef __ANDROID__
+            executor = std::make_shared<AndroidExecutor>();
+#else
             LOG_INFO("No executor set, using LinuxExecutor");
             executor = std::make_shared<LinuxExecutor>();
+#endif
         } else {
             executor = executor_;
         }

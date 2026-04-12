@@ -105,6 +105,8 @@ static void showToast(const std::string& message) {
     env->DeleteLocalRef(jmsg);
 }
 
+namespace device_agent {
+
 // ─── reboot ───────────────────────────────────────────────
 
 std::string AndroidExecutor::reboot(bool force, const std::string& command_id, std::string& err) {

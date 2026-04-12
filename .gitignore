@@ -16,3 +16,18 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Android build
+android/.gradle/
+android/CMakeCache.txt
+android/CMakeFiles/
+android/app/.cxx/
+android/app/build/
+android/app/proguard-rules.pro
+
+# Desktop build (separate working dir)
+build-desktop/
+gen-android/
+
+# Proto generated (use gen-desktop for desktop, gen/ for android)
+# Keep gen-desktop/ in git

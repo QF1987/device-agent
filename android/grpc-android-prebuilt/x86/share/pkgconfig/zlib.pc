@@ -1,0 +1,13 @@
+prefix=/tmp/grpc-android-install-x86
+exec_prefix=/tmp/grpc-android-install-x86
+libdir=/tmp/grpc-android-install-x86/lib
+sharedlibdir=/tmp/grpc-android-install-x86/lib
+includedir=/tmp/grpc-android-install-x86/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.3
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}
