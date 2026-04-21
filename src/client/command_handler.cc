@@ -144,12 +144,34 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         result.set_message(err_msg.empty() ? "firmware upgrade scheduled" : err_msg);
 
     } else if (cmd_type == "upgrade_app") {
-        std::string apkUrl, md5;
-        extract_json_string(payload, "apk_url", apkUrl);
+        std::string apkPath, md5;
+        extract_json_string(payload, "apk_path", apkPath);
         extract_json_string(payload, "md5", md5);
-        executor->upgradeApp(apkUrl, md5, err_msg);
+        executor->upgradeApp(apkPath, md5, err_msg);
         result.set_status(err_msg.empty() ? "success" : "failed");
         result.set_message(err_msg.empty() ? "app upgrade scheduled" : err_msg);
+
+    } else if (cmd_type == "download_ready") {
+        std::string batch_id, file_id, file_type, url, sha256;
+        int64_t file_size = 0;
+        extract_json_string(payload, "batch_id", batch_id);
+        extract_json_string(payload, "file_id", file_id);
+        extract_json_string(payload, "file_type", file_type);
+        extract_json_string(payload, "download_url", url);
+        extract_json_string(payload, "sha256", sha256);
+        // 尝试提取整数 file_size（如果 payload 有的话）
+        // file_size 通过 DownloadReadyCommand proto 传递，这里简化处理
+        if (batch_id.empty() || file_id.empty() || url.empty()) {
+            err_msg = "invalid payload: missing required fields for download_ready";
+            result.set_status("failed");
+            result.set_message(err_msg);
+        } else {
+            // 将 download_ready 命令转发给 Java 层处理
+            // AndroidExecutor 提供了 upgradeDownloadReady 方法
+            executor->upgradeDownloadReady(batch_id, file_id, file_type, url, sha256, file_size, err_msg);
+            result.set_status(err_msg.empty() ? "success" : "failed");
+            result.set_message(err_msg.empty() ? "download started" : err_msg);
+        }
 
     } else {
         err_msg = "unknown command type: " + cmd_type;

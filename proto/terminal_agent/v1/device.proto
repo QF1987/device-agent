@@ -319,6 +319,24 @@ message EventReportResponse {
 
 // ─── 服务端 → 设备：指令 ────────────────────────────────
 
+// 下载就绪命令
+// 服务端通知设备：有一个文件（APK 或系统固件）可以下载
+// 设备收到后：启动下载 → 校验 SHA256 → 安装 → 上报状态
+message DownloadReadyCommand {
+    // 批次 ID，用于状态追踪
+    string batch_id = 1;
+    // 文件 ID，唯一标识本批次中的文件
+    string file_id = 2;
+    // 文件类型：apk（Android 应用）或 system（系统固件）
+    string file_type = 3;
+    // 下载 URL，支持 HTTP/HTTPS
+    string download_url = 4;
+    // SHA256 校验值（hex 编码）
+    string sha256 = 5;
+    // 文件大小（字节），用于进度计算
+    int64 file_size = 6;
+}
+
 // 指令
 // 服务端通过 CommandStream 推送给设备，设备收到后执行
 message Command {
@@ -334,6 +352,8 @@ message Command {
   //   "reboot"          - 重启设备
   //   "update_config"   - 修改设备配置（payload_json 中携带新配置）
   //   "upgrade_firmware" - OTA 固件升级（payload_json 中携带下载地址和版本号）
+  //   "upgrade_app"     - 升级单个 APK（payload_json 中携带 apk_path 和 md5）
+  //   "download_ready"  - 批次下载指令（payload_json 中携带批次信息，详见 DownloadReadyCommand）
   //   "custom"          - 自定义指令（payload_json 中携带具体命令）
   string command_type = 3;
 
@@ -349,6 +369,13 @@ message Command {
   // upgrade_firmware：
   //   {"version": "v2.4.0", "url": "https://...", "checksum": "sha256:..."}
   //
+  // upgrade_app：
+  //   {"apk_path": "/data/local/tmp/app.apk", "md5": "abc123..."}
+  //
+  // download_ready：
+  //   {"batch_id": "batch-20240407-001", "file_id": "file-01", "file_type": "apk",
+  //    "download_url": "https://...", "sha256": "abc123...", "file_size": 1048576}
+  //
   // custom：
   //   由业务定义
   string payload_json = 4;
@@ -358,7 +385,7 @@ message Command {
 
   // 指令执行超时时间，单位秒
   // 设备收到指令后，如果超过此时间未完成执行，服务端标记为 timeout
-  // 建议值：reboot = 30，update_config = 10，upgrade_firmware = 300
+  // 建议值：reboot = 30，update_config = 10，upgrade_firmware = 300，download_ready = 600
   int64  timeout_seconds = 6;
 }
 
@@ -394,4 +421,55 @@ message CommandResult {
 
   // 执行完成时间的毫秒时间戳
   int64  executed_at = 5;
+}
+
+// ─── 状态上报消息 ────────────────────────────────────────
+
+// ReleaseStatusRequest：下载/安装状态上报
+// 设备在 download_ready 指令执行过程中主动上报
+message ReleaseStatusRequest {
+    // 设备 ID
+    string device_id = 1;
+
+    // 批次 ID（来自 download_ready 命令）
+    string batch_id = 2;
+
+    // 文件 ID（来自 download_ready 命令）
+    string file_id = 3;
+
+    // 当前状态
+    // 可选值：
+    //   "downloading"     - 下载进行中
+    //   "downloaded"      - 下载完成（校验通过）
+    //   "installing"      - 安装进行中
+    //   "installed"       - 安装完成
+    //   "download_failed" - 下载失败
+    //   "install_failed"  - 安装失败
+    string status = 4;
+
+    // 已下载字节数（download_progress 时使用）
+    int64 downloaded_bytes = 5;
+
+    // 错误码（失败时使用）
+    // 可选值：
+    //   "NETWORK_ERROR"     - 网络错误（连接失败、DNS 失败等）
+    //   "CHECKSUM_FAILED"   - SHA256 校验失败
+    //   "STORAGE_ERROR"     - 存储空间不足或文件写入失败
+    //   "SERVER_ERROR"      - 服务器返回错误（404/500 等）
+    //   "INSTALL_ERROR"     - APK 安装失败
+    //   "INVALID_FILE_TYPE" - 不支持的文件类型
+    //   "CANCELLED"         - 用户取消下载
+    string error_code = 6;
+
+    // 错误详情（失败时使用，人类可读）
+    string error_message = 7;
+
+    // 上报时间
+    int64 timestamp = 8;
+}
+
+// ReleaseStatusResponse：状态上报响应
+message ReleaseStatusResponse {
+    bool accepted = 1;
+    string message = 2;
 }

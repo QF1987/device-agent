@@ -18,6 +18,7 @@
 #include "executor/executor.h"
 #include "reboot_state/reboot_state.h"
 #include "logger/logger.h"
+#include "jni_bridge.h"
 
 #include <jni.h>
 #include <string>
@@ -36,17 +37,14 @@ static const char* kPackageManagerClass = "android/content/pm/IPackageManager";
 
 // ─── JNI 工具函数 ─────────────────────────────────────────
 
-// 全局 JVM 引用（由 JNI_OnLoad 设置）
-static JavaVM* g_jvm = nullptr;
-
-JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
-    (void)reserved;
-    g_jvm = vm;
-    return JNI_VERSION_1_6;
-}
+// 全局 JVM 引用（由 jni_wrapper.cpp 的 JNI_OnLoad 设置）
+// 注意：g_jvm 和 g_java_service 的定义在此文件中，
+//       jni_wrapper.cpp 通过 jni_bridge.h 中的 extern 引用使用它们。
+JavaVM* g_jvm = nullptr;
+jobject g_java_service = nullptr;
 
 // 获取 JNIEnv（如果当前线程没有 attached，需要 AttachCurrentThread）
-static JNIEnv* getJNIEnv() {
+JNIEnv* getJNIEnv() {
     JNIEnv* env = nullptr;
     if (g_jvm == nullptr) {
         LOG_ERROR("AndroidExecutor: JVM not initialized");
@@ -358,6 +356,59 @@ void AndroidExecutor::upgradeApp(const std::string& apkPath, const std::string& 
             showToast("App install failed");
         }
     }
+}
+
+// ─── upgradeDownloadReady ────────────────────────────────
+// 处理 download_ready 命令：转发给 Java 层 DownloadManager
+void AndroidExecutor::upgradeDownloadReady(
+        const std::string& batchId,
+        const std::string& fileId,
+        const std::string& fileType,
+        const std::string& downloadUrl,
+        const std::string& sha256,
+        int64_t fileSize,
+        std::string& err) {
+    LOG_INFO("AndroidExecutor: upgradeDownloadReady batch=" + batchId + " file=" + fileId +
+             " type=" + fileType + " url=" + downloadUrl);
+
+    if (g_jvm == nullptr || g_java_service == nullptr) {
+        err = "Java service not available";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return;
+    }
+
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        err = "JNIEnv not available";
+        return;
+    }
+
+    jclass serviceCls = env->GetObjectClass(g_java_service);
+    jmethodID method = env->GetMethodID(
+        serviceCls, "onDownloadReady",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V");
+    if (method == nullptr) {
+        err = "onDownloadReady method not found in Java service";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return;
+    }
+
+    jstring jBatch   = env->NewStringUTF(batchId.c_str());
+    jstring jFile    = env->NewStringUTF(fileId.c_str());
+    jstring jType    = env->NewStringUTF(fileType.c_str());
+    jstring jUrl     = env->NewStringUTF(downloadUrl.c_str());
+    jstring jSha     = env->NewStringUTF(sha256.c_str());
+
+    env->CallVoidMethod(g_java_service, method,
+        jBatch, jFile, jType, jUrl, jSha, static_cast<jlong>(fileSize));
+
+    env->DeleteLocalRef(jBatch);
+    env->DeleteLocalRef(jFile);
+    env->DeleteLocalRef(jType);
+    env->DeleteLocalRef(jUrl);
+    env->DeleteLocalRef(jSha);
+
+    LOG_INFO("AndroidExecutor: download_ready forwarded to Java layer");
 }
 
 }  // namespace device_agent
