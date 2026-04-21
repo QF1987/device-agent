@@ -16,12 +16,13 @@ trap cleanup EXIT
 
 echo "==> 1. 注册测试设备"
 PGPASSWORD="$PGPASSWORD" psql -h localhost -U deviceops -d deviceops -c \
-    "INSERT INTO devices (id, name, region, status, version) VALUES ('$DEVICE_ID', 'smoke-test', 'test', 'online', '1.0.0');" 2>/dev/null
+    "INSERT INTO devices (id, name, type, region, address, status, last_heartbeat, firmware, config, installed_at, stats)
+     VALUES ('$DEVICE_ID', 'smoke-test', 'android', 'test', '127.0.0.1', 'online', NOW(), '1.0.0', '{}', NOW(), '{}');" 2>/dev/null
 
 echo "==> 2. 写入 update_config 命令到 DB（模拟 batch config）"
 PGPASSWORD="$PGPASSWORD" psql -h localhost -U deviceops -d deviceops -c \
     "INSERT INTO commands (id, command_id, device_id, command_type, payload_json, status, timeout_seconds, issued_at, created_by)
-     VALUES (gen_random_uuid()::text, 'smoke-cmd-'$(date +%s)', '$DEVICE_ID', 'update_config', '{\"key\":\"poll_interval_ms\",\"value\":\"5000\"}', 'pending', 60, NOW(), 'smoke-test');" 2>/dev/null
+     VALUES (gen_random_uuid()::text, gen_random_uuid(), '$DEVICE_ID', 'update_config', '{\"key\":\"poll_interval_ms\",\"value\":\"5000\"}', 'pending', 60, NOW(), 'smoke-test');" 2>/dev/null
 
 echo "==> 3. 查询 DB 确认 pending"
 STATUS=$(PGPASSWORD="$PGPASSWORD" psql -h localhost -U deviceops -d deviceops -tAc \
