@@ -78,6 +78,9 @@ extern DeviceConfigDefaultTypeInternal _DeviceConfig_default_instance_;
 class DeviceMetrics;
 struct DeviceMetricsDefaultTypeInternal;
 extern DeviceMetricsDefaultTypeInternal _DeviceMetrics_default_instance_;
+class DownloadReadyCommand;
+struct DownloadReadyCommandDefaultTypeInternal;
+extern DownloadReadyCommandDefaultTypeInternal _DownloadReadyCommand_default_instance_;
 class EventReport;
 struct EventReportDefaultTypeInternal;
 extern EventReportDefaultTypeInternal _EventReport_default_instance_;
@@ -90,6 +93,12 @@ extern HeartbeatRequestDefaultTypeInternal _HeartbeatRequest_default_instance_;
 class HeartbeatResponse;
 struct HeartbeatResponseDefaultTypeInternal;
 extern HeartbeatResponseDefaultTypeInternal _HeartbeatResponse_default_instance_;
+class ReleaseStatusRequest;
+struct ReleaseStatusRequestDefaultTypeInternal;
+extern ReleaseStatusRequestDefaultTypeInternal _ReleaseStatusRequest_default_instance_;
+class ReleaseStatusResponse;
+struct ReleaseStatusResponseDefaultTypeInternal;
+extern ReleaseStatusResponseDefaultTypeInternal _ReleaseStatusResponse_default_instance_;
 class StatusReport;
 struct StatusReportDefaultTypeInternal;
 extern StatusReportDefaultTypeInternal _StatusReport_default_instance_;
@@ -297,6 +306,494 @@ class StatusReportResponse final :
                               ::google::protobuf::Arena* arena, const Impl_& from);
     ::google::protobuf::internal::ArenaStringPtr message_;
     bool accepted_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto;
+};// -------------------------------------------------------------------
+
+class ReleaseStatusResponse final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:terminal_agent.v1.ReleaseStatusResponse) */ {
+ public:
+  inline ReleaseStatusResponse() : ReleaseStatusResponse(nullptr) {}
+  ~ReleaseStatusResponse() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR ReleaseStatusResponse(::google::protobuf::internal::ConstantInitialized);
+
+  inline ReleaseStatusResponse(const ReleaseStatusResponse& from)
+      : ReleaseStatusResponse(nullptr, from) {}
+  ReleaseStatusResponse(ReleaseStatusResponse&& from) noexcept
+    : ReleaseStatusResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline ReleaseStatusResponse& operator=(const ReleaseStatusResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ReleaseStatusResponse& operator=(ReleaseStatusResponse&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ReleaseStatusResponse& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ReleaseStatusResponse* internal_default_instance() {
+    return reinterpret_cast<const ReleaseStatusResponse*>(
+               &_ReleaseStatusResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  friend void swap(ReleaseStatusResponse& a, ReleaseStatusResponse& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ReleaseStatusResponse* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ReleaseStatusResponse* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ReleaseStatusResponse* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ReleaseStatusResponse>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const ReleaseStatusResponse& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const ReleaseStatusResponse& from) {
+    ReleaseStatusResponse::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(ReleaseStatusResponse* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "terminal_agent.v1.ReleaseStatusResponse";
+  }
+  protected:
+  explicit ReleaseStatusResponse(::google::protobuf::Arena* arena);
+  ReleaseStatusResponse(::google::protobuf::Arena* arena, const ReleaseStatusResponse& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kMessageFieldNumber = 2,
+    kAcceptedFieldNumber = 1,
+  };
+  // string message = 2;
+  void clear_message() ;
+  const std::string& message() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_message(Arg_&& arg, Args_... args);
+  std::string* mutable_message();
+  PROTOBUF_NODISCARD std::string* release_message();
+  void set_allocated_message(std::string* value);
+
+  private:
+  const std::string& _internal_message() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_message(
+      const std::string& value);
+  std::string* _internal_mutable_message();
+
+  public:
+  // bool accepted = 1;
+  void clear_accepted() ;
+  bool accepted() const;
+  void set_accepted(bool value);
+
+  private:
+  bool _internal_accepted() const;
+  void _internal_set_accepted(bool value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:terminal_agent.v1.ReleaseStatusResponse)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      1, 2, 0,
+      55, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::ArenaStringPtr message_;
+    bool accepted_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto;
+};// -------------------------------------------------------------------
+
+class ReleaseStatusRequest final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:terminal_agent.v1.ReleaseStatusRequest) */ {
+ public:
+  inline ReleaseStatusRequest() : ReleaseStatusRequest(nullptr) {}
+  ~ReleaseStatusRequest() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR ReleaseStatusRequest(::google::protobuf::internal::ConstantInitialized);
+
+  inline ReleaseStatusRequest(const ReleaseStatusRequest& from)
+      : ReleaseStatusRequest(nullptr, from) {}
+  ReleaseStatusRequest(ReleaseStatusRequest&& from) noexcept
+    : ReleaseStatusRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline ReleaseStatusRequest& operator=(const ReleaseStatusRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ReleaseStatusRequest& operator=(ReleaseStatusRequest&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ReleaseStatusRequest& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ReleaseStatusRequest* internal_default_instance() {
+    return reinterpret_cast<const ReleaseStatusRequest*>(
+               &_ReleaseStatusRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    14;
+
+  friend void swap(ReleaseStatusRequest& a, ReleaseStatusRequest& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ReleaseStatusRequest* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ReleaseStatusRequest* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ReleaseStatusRequest* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ReleaseStatusRequest>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const ReleaseStatusRequest& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const ReleaseStatusRequest& from) {
+    ReleaseStatusRequest::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(ReleaseStatusRequest* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "terminal_agent.v1.ReleaseStatusRequest";
+  }
+  protected:
+  explicit ReleaseStatusRequest(::google::protobuf::Arena* arena);
+  ReleaseStatusRequest(::google::protobuf::Arena* arena, const ReleaseStatusRequest& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kDeviceIdFieldNumber = 1,
+    kBatchIdFieldNumber = 2,
+    kFileIdFieldNumber = 3,
+    kStatusFieldNumber = 4,
+    kErrorCodeFieldNumber = 6,
+    kErrorMessageFieldNumber = 7,
+    kDownloadedBytesFieldNumber = 5,
+    kTimestampFieldNumber = 8,
+  };
+  // string device_id = 1;
+  void clear_device_id() ;
+  const std::string& device_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_device_id(Arg_&& arg, Args_... args);
+  std::string* mutable_device_id();
+  PROTOBUF_NODISCARD std::string* release_device_id();
+  void set_allocated_device_id(std::string* value);
+
+  private:
+  const std::string& _internal_device_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_device_id(
+      const std::string& value);
+  std::string* _internal_mutable_device_id();
+
+  public:
+  // string batch_id = 2;
+  void clear_batch_id() ;
+  const std::string& batch_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_batch_id(Arg_&& arg, Args_... args);
+  std::string* mutable_batch_id();
+  PROTOBUF_NODISCARD std::string* release_batch_id();
+  void set_allocated_batch_id(std::string* value);
+
+  private:
+  const std::string& _internal_batch_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_batch_id(
+      const std::string& value);
+  std::string* _internal_mutable_batch_id();
+
+  public:
+  // string file_id = 3;
+  void clear_file_id() ;
+  const std::string& file_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_file_id(Arg_&& arg, Args_... args);
+  std::string* mutable_file_id();
+  PROTOBUF_NODISCARD std::string* release_file_id();
+  void set_allocated_file_id(std::string* value);
+
+  private:
+  const std::string& _internal_file_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_file_id(
+      const std::string& value);
+  std::string* _internal_mutable_file_id();
+
+  public:
+  // string status = 4;
+  void clear_status() ;
+  const std::string& status() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_status(Arg_&& arg, Args_... args);
+  std::string* mutable_status();
+  PROTOBUF_NODISCARD std::string* release_status();
+  void set_allocated_status(std::string* value);
+
+  private:
+  const std::string& _internal_status() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_status(
+      const std::string& value);
+  std::string* _internal_mutable_status();
+
+  public:
+  // string error_code = 6;
+  void clear_error_code() ;
+  const std::string& error_code() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_error_code(Arg_&& arg, Args_... args);
+  std::string* mutable_error_code();
+  PROTOBUF_NODISCARD std::string* release_error_code();
+  void set_allocated_error_code(std::string* value);
+
+  private:
+  const std::string& _internal_error_code() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_error_code(
+      const std::string& value);
+  std::string* _internal_mutable_error_code();
+
+  public:
+  // string error_message = 7;
+  void clear_error_message() ;
+  const std::string& error_message() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_error_message(Arg_&& arg, Args_... args);
+  std::string* mutable_error_message();
+  PROTOBUF_NODISCARD std::string* release_error_message();
+  void set_allocated_error_message(std::string* value);
+
+  private:
+  const std::string& _internal_error_message() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_error_message(
+      const std::string& value);
+  std::string* _internal_mutable_error_message();
+
+  public:
+  // int64 downloaded_bytes = 5;
+  void clear_downloaded_bytes() ;
+  ::int64_t downloaded_bytes() const;
+  void set_downloaded_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_downloaded_bytes() const;
+  void _internal_set_downloaded_bytes(::int64_t value);
+
+  public:
+  // int64 timestamp = 8;
+  void clear_timestamp() ;
+  ::int64_t timestamp() const;
+  void set_timestamp(::int64_t value);
+
+  private:
+  ::int64_t _internal_timestamp() const;
+  void _internal_set_timestamp(::int64_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:terminal_agent.v1.ReleaseStatusRequest)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      3, 8, 0,
+      108, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::ArenaStringPtr device_id_;
+    ::google::protobuf::internal::ArenaStringPtr batch_id_;
+    ::google::protobuf::internal::ArenaStringPtr file_id_;
+    ::google::protobuf::internal::ArenaStringPtr status_;
+    ::google::protobuf::internal::ArenaStringPtr error_code_;
+    ::google::protobuf::internal::ArenaStringPtr error_message_;
+    ::int64_t downloaded_bytes_;
+    ::int64_t timestamp_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -942,6 +1439,271 @@ class EventReport final :
     ::google::protobuf::internal::ArenaStringPtr message_;
     ::google::protobuf::internal::ArenaStringPtr detail_json_;
     ::int64_t timestamp_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto;
+};// -------------------------------------------------------------------
+
+class DownloadReadyCommand final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:terminal_agent.v1.DownloadReadyCommand) */ {
+ public:
+  inline DownloadReadyCommand() : DownloadReadyCommand(nullptr) {}
+  ~DownloadReadyCommand() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR DownloadReadyCommand(::google::protobuf::internal::ConstantInitialized);
+
+  inline DownloadReadyCommand(const DownloadReadyCommand& from)
+      : DownloadReadyCommand(nullptr, from) {}
+  DownloadReadyCommand(DownloadReadyCommand&& from) noexcept
+    : DownloadReadyCommand() {
+    *this = ::std::move(from);
+  }
+
+  inline DownloadReadyCommand& operator=(const DownloadReadyCommand& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline DownloadReadyCommand& operator=(DownloadReadyCommand&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetArena() == from.GetArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const DownloadReadyCommand& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const DownloadReadyCommand* internal_default_instance() {
+    return reinterpret_cast<const DownloadReadyCommand*>(
+               &_DownloadReadyCommand_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    10;
+
+  friend void swap(DownloadReadyCommand& a, DownloadReadyCommand& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(DownloadReadyCommand* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() != nullptr &&
+        GetArena() == other->GetArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetArena() == other->GetArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(DownloadReadyCommand* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  DownloadReadyCommand* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<DownloadReadyCommand>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const DownloadReadyCommand& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const DownloadReadyCommand& from) {
+    DownloadReadyCommand::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  ::google::protobuf::internal::CachedSize* AccessCachedSize() const final;
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void InternalSwap(DownloadReadyCommand* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "terminal_agent.v1.DownloadReadyCommand";
+  }
+  protected:
+  explicit DownloadReadyCommand(::google::protobuf::Arena* arena);
+  DownloadReadyCommand(::google::protobuf::Arena* arena, const DownloadReadyCommand& from);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kBatchIdFieldNumber = 1,
+    kFileIdFieldNumber = 2,
+    kFileTypeFieldNumber = 3,
+    kDownloadUrlFieldNumber = 4,
+    kSha256FieldNumber = 5,
+    kFileSizeFieldNumber = 6,
+  };
+  // string batch_id = 1;
+  void clear_batch_id() ;
+  const std::string& batch_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_batch_id(Arg_&& arg, Args_... args);
+  std::string* mutable_batch_id();
+  PROTOBUF_NODISCARD std::string* release_batch_id();
+  void set_allocated_batch_id(std::string* value);
+
+  private:
+  const std::string& _internal_batch_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_batch_id(
+      const std::string& value);
+  std::string* _internal_mutable_batch_id();
+
+  public:
+  // string file_id = 2;
+  void clear_file_id() ;
+  const std::string& file_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_file_id(Arg_&& arg, Args_... args);
+  std::string* mutable_file_id();
+  PROTOBUF_NODISCARD std::string* release_file_id();
+  void set_allocated_file_id(std::string* value);
+
+  private:
+  const std::string& _internal_file_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_file_id(
+      const std::string& value);
+  std::string* _internal_mutable_file_id();
+
+  public:
+  // string file_type = 3;
+  void clear_file_type() ;
+  const std::string& file_type() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_file_type(Arg_&& arg, Args_... args);
+  std::string* mutable_file_type();
+  PROTOBUF_NODISCARD std::string* release_file_type();
+  void set_allocated_file_type(std::string* value);
+
+  private:
+  const std::string& _internal_file_type() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_file_type(
+      const std::string& value);
+  std::string* _internal_mutable_file_type();
+
+  public:
+  // string download_url = 4;
+  void clear_download_url() ;
+  const std::string& download_url() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_download_url(Arg_&& arg, Args_... args);
+  std::string* mutable_download_url();
+  PROTOBUF_NODISCARD std::string* release_download_url();
+  void set_allocated_download_url(std::string* value);
+
+  private:
+  const std::string& _internal_download_url() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_download_url(
+      const std::string& value);
+  std::string* _internal_mutable_download_url();
+
+  public:
+  // string sha256 = 5;
+  void clear_sha256() ;
+  const std::string& sha256() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_sha256(Arg_&& arg, Args_... args);
+  std::string* mutable_sha256();
+  PROTOBUF_NODISCARD std::string* release_sha256();
+  void set_allocated_sha256(std::string* value);
+
+  private:
+  const std::string& _internal_sha256() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_sha256(
+      const std::string& value);
+  std::string* _internal_mutable_sha256();
+
+  public:
+  // int64 file_size = 6;
+  void clear_file_size() ;
+  ::int64_t file_size() const;
+  void set_file_size(::int64_t value);
+
+  private:
+  ::int64_t _internal_file_size() const;
+  void _internal_set_file_size(::int64_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:terminal_agent.v1.DownloadReadyCommand)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<
+      3, 6, 0,
+      89, 2>
+      _table_;
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+
+        inline explicit constexpr Impl_(
+            ::google::protobuf::internal::ConstantInitialized) noexcept;
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena);
+        inline explicit Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                              ::google::protobuf::Arena* arena, const Impl_& from);
+    ::google::protobuf::internal::ArenaStringPtr batch_id_;
+    ::google::protobuf::internal::ArenaStringPtr file_id_;
+    ::google::protobuf::internal::ArenaStringPtr file_type_;
+    ::google::protobuf::internal::ArenaStringPtr download_url_;
+    ::google::protobuf::internal::ArenaStringPtr sha256_;
+    ::int64_t file_size_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -1701,7 +2463,7 @@ class CommandStreamRequest final :
                &_CommandStreamRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    12;
 
   friend void swap(CommandStreamRequest& a, CommandStreamRequest& b) {
     a.Swap(&b);
@@ -1882,7 +2644,7 @@ class CommandResult final :
                &_CommandResult_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    12;
+    13;
 
   friend void swap(CommandResult& a, CommandResult& b) {
     a.Swap(&b);
@@ -2129,7 +2891,7 @@ class Command final :
                &_Command_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    11;
 
   friend void swap(Command& a, Command& b) {
     a.Swap(&b);
@@ -4825,6 +5587,298 @@ inline void EventReportResponse::set_allocated_message(std::string* value) {
 
 // -------------------------------------------------------------------
 
+// DownloadReadyCommand
+
+// string batch_id = 1;
+inline void DownloadReadyCommand::clear_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.batch_id_.ClearToEmpty();
+}
+inline const std::string& DownloadReadyCommand::batch_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.batch_id)
+  return _internal_batch_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_batch_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.batch_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.batch_id)
+}
+inline std::string* DownloadReadyCommand::mutable_batch_id() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_batch_id();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.batch_id)
+  return _s;
+}
+inline const std::string& DownloadReadyCommand::_internal_batch_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.batch_id_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_batch_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.batch_id_.Set(value, GetArena());
+}
+inline std::string* DownloadReadyCommand::_internal_mutable_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.batch_id_.Mutable( GetArena());
+}
+inline std::string* DownloadReadyCommand::release_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.batch_id)
+  return _impl_.batch_id_.Release();
+}
+inline void DownloadReadyCommand::set_allocated_batch_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.batch_id_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.batch_id_.IsDefault()) {
+          _impl_.batch_id_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.batch_id)
+}
+
+// string file_id = 2;
+inline void DownloadReadyCommand::clear_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_id_.ClearToEmpty();
+}
+inline const std::string& DownloadReadyCommand::file_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.file_id)
+  return _internal_file_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_file_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.file_id)
+}
+inline std::string* DownloadReadyCommand::mutable_file_id() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_file_id();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.file_id)
+  return _s;
+}
+inline const std::string& DownloadReadyCommand::_internal_file_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.file_id_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_file_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_id_.Set(value, GetArena());
+}
+inline std::string* DownloadReadyCommand::_internal_mutable_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.file_id_.Mutable( GetArena());
+}
+inline std::string* DownloadReadyCommand::release_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.file_id)
+  return _impl_.file_id_.Release();
+}
+inline void DownloadReadyCommand::set_allocated_file_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_id_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.file_id_.IsDefault()) {
+          _impl_.file_id_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.file_id)
+}
+
+// string file_type = 3;
+inline void DownloadReadyCommand::clear_file_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_type_.ClearToEmpty();
+}
+inline const std::string& DownloadReadyCommand::file_type() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.file_type)
+  return _internal_file_type();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_file_type(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_type_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.file_type)
+}
+inline std::string* DownloadReadyCommand::mutable_file_type() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_file_type();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.file_type)
+  return _s;
+}
+inline const std::string& DownloadReadyCommand::_internal_file_type() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.file_type_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_file_type(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_type_.Set(value, GetArena());
+}
+inline std::string* DownloadReadyCommand::_internal_mutable_file_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.file_type_.Mutable( GetArena());
+}
+inline std::string* DownloadReadyCommand::release_file_type() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.file_type)
+  return _impl_.file_type_.Release();
+}
+inline void DownloadReadyCommand::set_allocated_file_type(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_type_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.file_type_.IsDefault()) {
+          _impl_.file_type_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.file_type)
+}
+
+// string download_url = 4;
+inline void DownloadReadyCommand::clear_download_url() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.download_url_.ClearToEmpty();
+}
+inline const std::string& DownloadReadyCommand::download_url() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.download_url)
+  return _internal_download_url();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_download_url(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.download_url_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.download_url)
+}
+inline std::string* DownloadReadyCommand::mutable_download_url() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_download_url();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.download_url)
+  return _s;
+}
+inline const std::string& DownloadReadyCommand::_internal_download_url() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.download_url_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_download_url(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.download_url_.Set(value, GetArena());
+}
+inline std::string* DownloadReadyCommand::_internal_mutable_download_url() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.download_url_.Mutable( GetArena());
+}
+inline std::string* DownloadReadyCommand::release_download_url() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.download_url)
+  return _impl_.download_url_.Release();
+}
+inline void DownloadReadyCommand::set_allocated_download_url(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.download_url_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.download_url_.IsDefault()) {
+          _impl_.download_url_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.download_url)
+}
+
+// string sha256 = 5;
+inline void DownloadReadyCommand::clear_sha256() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.sha256_.ClearToEmpty();
+}
+inline const std::string& DownloadReadyCommand::sha256() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.sha256)
+  return _internal_sha256();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_sha256(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.sha256_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.sha256)
+}
+inline std::string* DownloadReadyCommand::mutable_sha256() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_sha256();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.sha256)
+  return _s;
+}
+inline const std::string& DownloadReadyCommand::_internal_sha256() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.sha256_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_sha256(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.sha256_.Set(value, GetArena());
+}
+inline std::string* DownloadReadyCommand::_internal_mutable_sha256() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.sha256_.Mutable( GetArena());
+}
+inline std::string* DownloadReadyCommand::release_sha256() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.sha256)
+  return _impl_.sha256_.Release();
+}
+inline void DownloadReadyCommand::set_allocated_sha256(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.sha256_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.sha256_.IsDefault()) {
+          _impl_.sha256_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.sha256)
+}
+
+// int64 file_size = 6;
+inline void DownloadReadyCommand::clear_file_size() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_size_ = ::int64_t{0};
+}
+inline ::int64_t DownloadReadyCommand::file_size() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.file_size)
+  return _internal_file_size();
+}
+inline void DownloadReadyCommand::set_file_size(::int64_t value) {
+  _internal_set_file_size(value);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.file_size)
+}
+inline ::int64_t DownloadReadyCommand::_internal_file_size() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.file_size_;
+}
+inline void DownloadReadyCommand::_internal_set_file_size(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_size_ = value;
+}
+
+// -------------------------------------------------------------------
+
 // Command
 
 // string device_id = 1;
@@ -5379,6 +6433,454 @@ inline void CommandResult::_internal_set_executed_at(::int64_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.executed_at_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// ReleaseStatusRequest
+
+// string device_id = 1;
+inline void ReleaseStatusRequest::clear_device_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.device_id_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::device_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.device_id)
+  return _internal_device_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_device_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.device_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.device_id)
+}
+inline std::string* ReleaseStatusRequest::mutable_device_id() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_device_id();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.device_id)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_device_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.device_id_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_device_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.device_id_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_device_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.device_id_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_device_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.device_id)
+  return _impl_.device_id_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_device_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.device_id_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.device_id_.IsDefault()) {
+          _impl_.device_id_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.device_id)
+}
+
+// string batch_id = 2;
+inline void ReleaseStatusRequest::clear_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.batch_id_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::batch_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.batch_id)
+  return _internal_batch_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_batch_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.batch_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.batch_id)
+}
+inline std::string* ReleaseStatusRequest::mutable_batch_id() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_batch_id();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.batch_id)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_batch_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.batch_id_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_batch_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.batch_id_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.batch_id_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_batch_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.batch_id)
+  return _impl_.batch_id_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_batch_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.batch_id_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.batch_id_.IsDefault()) {
+          _impl_.batch_id_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.batch_id)
+}
+
+// string file_id = 3;
+inline void ReleaseStatusRequest::clear_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_id_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::file_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.file_id)
+  return _internal_file_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_file_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.file_id)
+}
+inline std::string* ReleaseStatusRequest::mutable_file_id() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_file_id();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.file_id)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_file_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.file_id_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_file_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.file_id_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.file_id_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_file_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.file_id)
+  return _impl_.file_id_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_file_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.file_id_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.file_id_.IsDefault()) {
+          _impl_.file_id_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.file_id)
+}
+
+// string status = 4;
+inline void ReleaseStatusRequest::clear_status() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.status_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::status() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.status)
+  return _internal_status();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_status(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.status_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.status)
+}
+inline std::string* ReleaseStatusRequest::mutable_status() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_status();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.status)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_status() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.status_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_status(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.status_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_status() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.status_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_status() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.status)
+  return _impl_.status_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_status(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.status_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.status_.IsDefault()) {
+          _impl_.status_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.status)
+}
+
+// int64 downloaded_bytes = 5;
+inline void ReleaseStatusRequest::clear_downloaded_bytes() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.downloaded_bytes_ = ::int64_t{0};
+}
+inline ::int64_t ReleaseStatusRequest::downloaded_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.downloaded_bytes)
+  return _internal_downloaded_bytes();
+}
+inline void ReleaseStatusRequest::set_downloaded_bytes(::int64_t value) {
+  _internal_set_downloaded_bytes(value);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.downloaded_bytes)
+}
+inline ::int64_t ReleaseStatusRequest::_internal_downloaded_bytes() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.downloaded_bytes_;
+}
+inline void ReleaseStatusRequest::_internal_set_downloaded_bytes(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.downloaded_bytes_ = value;
+}
+
+// string error_code = 6;
+inline void ReleaseStatusRequest::clear_error_code() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.error_code_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::error_code() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.error_code)
+  return _internal_error_code();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_error_code(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.error_code_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.error_code)
+}
+inline std::string* ReleaseStatusRequest::mutable_error_code() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_error_code();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.error_code)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_error_code() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.error_code_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_error_code(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.error_code_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_error_code() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.error_code_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_error_code() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.error_code)
+  return _impl_.error_code_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_error_code(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.error_code_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.error_code_.IsDefault()) {
+          _impl_.error_code_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.error_code)
+}
+
+// string error_message = 7;
+inline void ReleaseStatusRequest::clear_error_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.error_message_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusRequest::error_message() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.error_message)
+  return _internal_error_message();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_error_message(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.error_message_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.error_message)
+}
+inline std::string* ReleaseStatusRequest::mutable_error_message() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_error_message();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.error_message)
+  return _s;
+}
+inline const std::string& ReleaseStatusRequest::_internal_error_message() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.error_message_.Get();
+}
+inline void ReleaseStatusRequest::_internal_set_error_message(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.error_message_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusRequest::_internal_mutable_error_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.error_message_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusRequest::release_error_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.error_message)
+  return _impl_.error_message_.Release();
+}
+inline void ReleaseStatusRequest::set_allocated_error_message(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.error_message_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.error_message_.IsDefault()) {
+          _impl_.error_message_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.error_message)
+}
+
+// int64 timestamp = 8;
+inline void ReleaseStatusRequest::clear_timestamp() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.timestamp_ = ::int64_t{0};
+}
+inline ::int64_t ReleaseStatusRequest::timestamp() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.timestamp)
+  return _internal_timestamp();
+}
+inline void ReleaseStatusRequest::set_timestamp(::int64_t value) {
+  _internal_set_timestamp(value);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.timestamp)
+}
+inline ::int64_t ReleaseStatusRequest::_internal_timestamp() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.timestamp_;
+}
+inline void ReleaseStatusRequest::_internal_set_timestamp(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.timestamp_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// ReleaseStatusResponse
+
+// bool accepted = 1;
+inline void ReleaseStatusResponse::clear_accepted() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.accepted_ = false;
+}
+inline bool ReleaseStatusResponse::accepted() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusResponse.accepted)
+  return _internal_accepted();
+}
+inline void ReleaseStatusResponse::set_accepted(bool value) {
+  _internal_set_accepted(value);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusResponse.accepted)
+}
+inline bool ReleaseStatusResponse::_internal_accepted() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.accepted_;
+}
+inline void ReleaseStatusResponse::_internal_set_accepted(bool value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.accepted_ = value;
+}
+
+// string message = 2;
+inline void ReleaseStatusResponse::clear_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.message_.ClearToEmpty();
+}
+inline const std::string& ReleaseStatusResponse::message() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusResponse.message)
+  return _internal_message();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void ReleaseStatusResponse::set_message(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.message_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusResponse.message)
+}
+inline std::string* ReleaseStatusResponse::mutable_message() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  std::string* _s = _internal_mutable_message();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusResponse.message)
+  return _s;
+}
+inline const std::string& ReleaseStatusResponse::_internal_message() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.message_.Get();
+}
+inline void ReleaseStatusResponse::_internal_set_message(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.message_.Set(value, GetArena());
+}
+inline std::string* ReleaseStatusResponse::_internal_mutable_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.message_.Mutable( GetArena());
+}
+inline std::string* ReleaseStatusResponse::release_message() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusResponse.message)
+  return _impl_.message_.Release();
+}
+inline void ReleaseStatusResponse::set_allocated_message(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.message_.SetAllocated(value, GetArena());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.message_.IsDefault()) {
+          _impl_.message_.Set("", GetArena());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusResponse.message)
 }
 
 #ifdef __GNUC__
