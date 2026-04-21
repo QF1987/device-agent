@@ -28,6 +28,7 @@ set(COMMON_HEADERS
     src/logger/logger.h
     src/executor/executor.h
     src/reboot_state/reboot_state.h
+    src/jni_bridge.h
 )
 
 # ─── Android: build as JNI shared library ─────────────────
@@ -36,6 +37,7 @@ if(ANDROID OR __ANDROID__)
 
     add_definitions(-D__ANDROID__)
     list(APPEND COMMON_SOURCES src/executor/android_executor.cc)
+    list(APPEND COMMON_SOURCES src/jni_wrapper.cpp)
 
     # Exclude desktop executors from Android build
     list(FILTER COMMON_SOURCES EXCLUDE REGEX "src/executor/linux_executor.cc$")

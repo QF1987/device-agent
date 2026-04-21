@@ -18,6 +18,8 @@ import java.security.MessageDigest
 import java.lang.ref.WeakReference
 import org.json.JSONObject
 
+external fun nativeDispatchCommand(type: String, payload: String): String
+
 private const val PREFS_NAME = "device_agent_config"
 private const val KEY_SERVER_URL = "server_url"
 private const val KEY_DEVICE_ID = "device_id"
@@ -55,6 +57,15 @@ class DeviceAgentService : Service() {
         private const val TAG = "DeviceAgentService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "device_agent_channel"
+
+        init {
+            try {
+                System.loadLibrary("device-agent")
+                android.util.Log.i(TAG, "native lib loaded")
+            } catch (e: UnsatisfiedLinkError) {
+                android.util.Log.e(TAG, "loadLibrary failed: ${e.message}")
+            }
+        }
     }
     override fun onCreate() {
         super.onCreate()
@@ -198,6 +209,8 @@ object CommandPoller {
             "DOWNLOAD_READY" -> handleDL(cmdId, p, svc)
             "UPGRADE_APP" -> handleUP(cmdId, p, svc)
             "CHECK_LOCAL_APK" -> handleCheckLocalApk(cmdId, p, svc)
+            "REBOOT", "reboot" -> handleReboot(cmdId, p, svc)
+            "UPDATE_CONFIG", "update_config" -> handleUpdateConfig(cmdId, p, svc)
         }
     }
     private fun handleCheckLocalApk(cmdId: String, p: JSONObject, svc: Service) {
@@ -274,6 +287,51 @@ object CommandPoller {
         reportCS(cmdId, "failed", "Install timeout (expected $expected)")
         UpgradingMark.clear(svc)
         removeSkip(cmdId)
+    }
+    private fun handleReboot(cmdId: String, p: JSONObject, svc: Service) {
+        android.util.Log.i(TAG, "REBOOT cmd=$cmdId payload=$p")
+        reportCS(cmdId, "executing", "Reboot initiated via JNI")
+        Thread {
+            try {
+                val payload = JSONObject().apply {
+                    put("force", p.optBoolean("force", false))
+                    put("command_id", cmdId)
+                }
+                val result = nativeDispatchCommand("reboot", payload.toString())
+                android.util.Log.i(TAG, "reboot native result: $result")
+                val obj = JSONObject(result)
+                val status = obj.optString("status", "failed")
+                val msg = obj.optString("message", "")
+                if (status != "pending") {
+                    reportCS(cmdId, status, msg)
+                }
+            } catch (e: Throwable) {
+                android.util.Log.e(TAG, "handleReboot failed: ${e.message}")
+                reportCS(cmdId, "failed", "JNI dispatch error: ${e.message}")
+            }
+        }.start()
+    }
+    private fun handleUpdateConfig(cmdId: String, p: JSONObject, svc: Service) {
+        val key = p.optString("key", "")
+        val value = p.optString("value", "")
+        android.util.Log.i(TAG, "UPDATE_CONFIG cmd=$cmdId key=$key")
+        if (key.isEmpty()) {
+            reportCS(cmdId, "failed", "Empty key")
+            return
+        }
+        try {
+            val payload = JSONObject().apply {
+                put("key", key)
+                put("value", value)
+            }
+            val result = nativeDispatchCommand("update_config", payload.toString())
+            android.util.Log.i(TAG, "update_config native result: $result")
+            val obj = JSONObject(result)
+            reportCS(cmdId, obj.optString("status", "failed"), obj.optString("message", ""))
+        } catch (e: Throwable) {
+            android.util.Log.e(TAG, "handleUpdateConfig failed: ${e.message}")
+            reportCS(cmdId, "failed", "JNI dispatch error: ${e.message}")
+        }
     }
     private fun handleDL(cmdId: String, p: JSONObject, svc: Service) {
         val batchId = p.optString("batch_id", ""); val fileId = p.getString("file_id")
