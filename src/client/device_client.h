@@ -93,7 +93,7 @@ private:
     // gRPC 的 metadata 机制：在 HTTP 头中携带认证信息
     void set_auth_metadata(grpc::ClientContext& ctx);
 
-    const Config& config_;  // 配置引用（不持有所有权）
+    const Config config_;  // 持有配置副本（避免悬垂引用）
 
     // gRPC Stub：生成的 RPC 客户端桩
     // unique_ptr 管理生命周期，自动释放

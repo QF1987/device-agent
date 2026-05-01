@@ -1,12 +1,12 @@
-prefix=/tmp/grpc-android-install
-exec_prefix=/tmp/grpc-android-install
-libdir=/tmp/grpc-android-install/lib
-sharedlibdir=/tmp/grpc-android-install/lib
-includedir=/tmp/grpc-android-install/include
+prefix=/Users/qf/.openclaw/workspace/device-agent/android/grpc-android-prebuilt/arm64-v8a
+exec_prefix=/Users/qf/.openclaw/workspace/device-agent/android/grpc-android-prebuilt/arm64-v8a
+libdir=/Users/qf/.openclaw/workspace/device-agent/android/grpc-android-prebuilt/arm64-v8a/lib
+sharedlibdir=/Users/qf/.openclaw/workspace/device-agent/android/grpc-android-prebuilt/arm64-v8a/lib
+includedir=/Users/qf/.openclaw/workspace/device-agent/android/grpc-android-prebuilt/arm64-v8a/include
 
 Name: zlib
 Description: zlib compression library
-Version: 1.3
+Version: 1.3.1.1
 
 Requires:
 Libs: -L${libdir} -L${sharedlibdir} -lz

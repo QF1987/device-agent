@@ -124,6 +124,11 @@ public:
         const std::string& sha256,
         int64_t fileSize,
         std::string& err) override;
+
+private:
+    // JNI fallback reboot：父进程中通过 JNI 回调 Kotlin 层执行 reboot
+    // 当 fork 子进程的系统级 reboot 全部失败时调用
+    std::string tryJNIReboot(const std::string& command_id, std::string& err);
 };
 
 }  // namespace device_agent

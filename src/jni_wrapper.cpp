@@ -32,21 +32,21 @@
 // JNI native 方法实现
 static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort);
 static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(JNIEnv* env, jclass clazz);
-static void Java_com_deviceagent_DeviceAgentService_onUpgradeApp_impl(JNIEnv* env, jclass clazz, jstring jApkUrl, jstring jMd5);
-static void Java_com_deviceagent_DeviceAgentService_onDownloadReady_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jFileType, jstring jDownloadUrl, jstring jSha256, jlong jFileSize);
-static void Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jStatus, jlong jDownloadedBytes, jstring jErrorCode, jstring jErrorMessage);
-static void Java_com_deviceagent_DeviceAgentService_nativeUpgradeFirmware_impl(JNIEnv* env, jclass clazz, jstring jFilePath);
-static jstring Java_com_deviceagent_DeviceAgentService_nativeDispatchCommand_impl(JNIEnv* env, jclass clazz, jstring jCmdType, jstring jPayloadJson);
 
 // ─── 全局变量（跨函数共享）────────────────────────────
 // g_jvm / g_java_service 在 jni_bridge.h 声明为 extern（由 android_executor.cc 定义）
 // g_client / g_client_mutex 仅在此文件使用
 static std::shared_ptr<device_agent::DeviceClient> g_client;
+static std::shared_ptr<device_agent::Executor> g_executor;
+static std::unique_ptr<device_agent::CommandHandler> g_handler;
 static std::mutex g_client_mutex;
 
 // ─── JNI_OnLoad（库加载时保存 JVM + 注册所有 native 方法）──
 
 // JNI 方法表（用于 RegisterNatives）
+// 注意：只有 Kotlin "external fun" 声明的方法才能注册到 RegisterNatives。
+// onUpgradeApp / onDownloadReady 等是普通 Kotlin 方法，C++ 通过 CallVoidMethod 回调，
+// 不需要也不应该放在这里。
 static JNINativeMethod g_methods[] = {
     {
         const_cast<char*>("nativeStart"),
@@ -57,31 +57,6 @@ static JNINativeMethod g_methods[] = {
         const_cast<char*>("nativeStop"),
         const_cast<char*>("()V"),
         reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeStop_impl)
-    },
-    {
-        const_cast<char*>("onUpgradeApp"),
-        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;)V"),
-        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_onUpgradeApp_impl)
-    },
-    {
-        const_cast<char*>("onDownloadReady"),
-        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V"),
-        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_onDownloadReady_impl)
-    },
-    {
-        const_cast<char*>("nativeReportReleaseStatus"),
-        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;)V"),
-        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl)
-    },
-    {
-        const_cast<char*>("nativeUpgradeFirmware"),
-        const_cast<char*>("(Ljava/lang/String;)V"),
-        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeUpgradeFirmware_impl)
-    },
-    {
-        const_cast<char*>("nativeDispatchCommand"),
-        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
-        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeDispatchCommand_impl)
     }
 };
 
@@ -200,17 +175,22 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     {
         std::lock_guard<std::mutex> lock(g_client_mutex);
         g_client = client;
+        g_executor = executor;
     }
 
-    device_agent::CommandHandler handler(
+    // 存为全局变量，避免 JNI 函数返回后 handler 被析构
+    // （command_callback_ 捕获了 handler 引用，handler 必须比 client 活得久）
+    g_handler = std::make_unique<device_agent::CommandHandler>(
         [client](const terminal_agent::v1::CommandResult& result) -> bool {
             return client->report_command_result(result);
         });
-    handler.set_executor(executor);
+    g_handler->set_executor(executor);
 
     client->set_command_callback(
-        [&handler](const terminal_agent::v1::Command& cmd) {
-            handler.handle(cmd);
+        [](const terminal_agent::v1::Command& cmd) {
+            if (g_handler) {
+                g_handler->handle(cmd);
+            }
         });
 
     client->start();
@@ -228,6 +208,15 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
     (void)env;
     (void)clazz;
     LOGI("nativeStop called");
+    {
+        std::lock_guard<std::mutex> lock(g_client_mutex);
+        if (g_client) {
+            g_client->stop();
+            g_client.reset();
+        }
+        g_handler.reset();
+        g_executor.reset();
+    }
     if (g_java_service != nullptr) {
         JNIEnv* env_local = getJNIEnv();
         if (env_local != nullptr) {
@@ -241,213 +230,6 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
 // ─── onUpgradeApp 实现 ─────────────────────────────────
 // Kotlin: onUpgradeApp(apkUrl: String, md5: String)
 // JNI:    (JNIEnv*, jclass, jstring(url), jstring(md5)) → void
-static void Java_com_deviceagent_DeviceAgentService_onUpgradeApp_impl(
-    JNIEnv* env,
-    jclass clazz,
-    jstring jApkUrl,
-    jstring jMd5) {
-
-    (void)clazz;
-
-    if (g_java_service == nullptr) {
-        LOGE("onUpgradeApp: g_java_service is null!");
-        return;
-    }
-
-    const char* apkUrl = env->GetStringUTFChars(jApkUrl, nullptr);
-    const char* md5 = env->GetStringUTFChars(jMd5, nullptr);
-
-    LOGI("onUpgradeApp: url=%s, md5=%s", apkUrl, md5);
-
-    // 转换为 jstring 并调用 Java 方法
-    jstring jUrl = env->NewStringUTF(apkUrl);
-    jstring jMd5Str = env->NewStringUTF(md5);
-
-    jclass serviceCls = env->GetObjectClass(g_java_service);
-    jmethodID method = env->GetMethodID(serviceCls, "onUpgradeApp", "(Ljava/lang/String;Ljava/lang/String;)V");
-    if (method != nullptr) {
-        env->CallVoidMethod(g_java_service, method, jUrl, jMd5Str);
-        LOGI("onUpgradeApp: Java method called successfully");
-    } else {
-        LOGE("onUpgradeApp: method not found");
-    }
-
-    env->ReleaseStringUTFChars(jApkUrl, apkUrl);
-    env->ReleaseStringUTFChars(jMd5, md5);
-    env->DeleteLocalRef(jUrl);
-    env->DeleteLocalRef(jMd5Str);
-}
-
 // ─── onDownloadReady 实现 ────────────────────────────────
 // Kotlin: onDownloadReady(batchId, fileId, fileType, downloadUrl, sha256, fileSize)
 // JNI:    (JNIEnv*, jclass, jstring x6) → void
-static void Java_com_deviceagent_DeviceAgentService_onDownloadReady_impl(
-    JNIEnv* env,
-    jclass clazz,
-    jstring jBatchId,
-    jstring jFileId,
-    jstring jFileType,
-    jstring jDownloadUrl,
-    jstring jSha256,
-    jlong jFileSize) {
-
-    (void)clazz;
-
-    const char* batchId    = env->GetStringUTFChars(jBatchId, nullptr);
-    const char* fileId    = env->GetStringUTFChars(jFileId, nullptr);
-    const char* fileType  = env->GetStringUTFChars(jFileType, nullptr);
-    const char* url       = env->GetStringUTFChars(jDownloadUrl, nullptr);
-    const char* sha256    = env->GetStringUTFChars(jSha256, nullptr);
-    // jFileSize is jlong (no need to ReleaseStringUTFChars)
-
-    LOGI("onDownloadReady: batch=%s file=%s type=%s url=%s sha=%s size=%lld",
-         batchId, fileId, fileType, url, sha256, (long long)jFileSize);
-
-    // 将下载任务转发给 Java 层（onDownloadReady Kotlin 扩展函数）
-    jstring jBatch   = env->NewStringUTF(batchId);
-    jstring jFile    = env->NewStringUTF(fileId);
-    jstring jType    = env->NewStringUTF(fileType);
-    jstring jUrl     = env->NewStringUTF(url);
-    jstring jSha     = env->NewStringUTF(sha256);
-
-    jclass serviceCls = env->GetObjectClass(g_java_service);
-    jmethodID method = env->GetMethodID(
-        serviceCls, "onDownloadReady",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V");
-    if (method != nullptr) {
-        env->CallVoidMethod(g_java_service, method,
-            jBatch, jFile, jType, jUrl, jSha, jFileSize);
-        LOGI("onDownloadReady: Java method called");
-    } else {
-        LOGE("onDownloadReady: method not found");
-    }
-
-    env->ReleaseStringUTFChars(jBatchId, batchId);
-    env->ReleaseStringUTFChars(jFileId, fileId);
-    env->ReleaseStringUTFChars(jFileType, fileType);
-    env->ReleaseStringUTFChars(jDownloadUrl, url);
-    env->ReleaseStringUTFChars(jSha256, sha256);
-    env->DeleteLocalRef(jBatch);
-    env->DeleteLocalRef(jFile);
-    env->DeleteLocalRef(jType);
-    env->DeleteLocalRef(jUrl);
-    env->DeleteLocalRef(jSha);
-}
-
-// ─── nativeReportReleaseStatus 实现 ─────────────────────
-// Kotlin 调 native，上报下载/安装状态给 native 层
-// native 层通过 gRPC ReportReleaseStatus 发送到服务端
-static void Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(
-    JNIEnv* env,
-    jclass clazz,
-    jstring jBatchId,
-    jstring jFileId,
-    jstring jStatus,
-    jlong jDownloadedBytes,
-    jstring jErrorCode,
-    jstring jErrorMessage) {
-
-    (void)clazz;
-
-    const char* batchId  = env->GetStringUTFChars(jBatchId, nullptr);
-    const char* fileId  = env->GetStringUTFChars(jFileId, nullptr);
-    const char* status  = env->GetStringUTFChars(jStatus, nullptr);
-    const char* errCode = env->GetStringUTFChars(jErrorCode, nullptr);
-    const char* errMsg  = env->GetStringUTFChars(jErrorMessage, nullptr);
-
-    LOGI("nativeReportReleaseStatus: batch=%s file=%s status=%s bytes=%lld err=%s:%s",
-         batchId, fileId, status, (long long)jDownloadedBytes,
-         errCode && errCode[0] ? errCode : "none",
-         errMsg  && errMsg[0]  ? errMsg  : "none");
-
-    // TODO: 通过 gRPC ReportReleaseStatus 上报到服务端
-    // 当前 gen-android proto 尚未包含 ReleaseStatusRequest，
-    // 等 proto 重新生成（protoc 4.25.1）后补全此处 gRPC 调用
-
-    env->ReleaseStringUTFChars(jBatchId, batchId);
-    env->ReleaseStringUTFChars(jFileId, fileId);
-    env->ReleaseStringUTFChars(jStatus, status);
-    env->ReleaseStringUTFChars(jErrorCode, errCode);
-    env->ReleaseStringUTFChars(jErrorMessage, errMsg);
-}
-
-// ─── nativeUpgradeFirmware 实现 ──────────────────────────
-// 将 system 固件升级请求转发给 AndroidExecutor
-static void Java_com_deviceagent_DeviceAgentService_nativeUpgradeFirmware_impl(
-    JNIEnv* env,
-    jclass clazz,
-    jstring jFilePath) {
-
-    (void)clazz;
-
-    const char* filePath = env->GetStringUTFChars(jFilePath, nullptr);
-    LOGI("nativeUpgradeFirmware: path=%s", filePath);
-
-    // 复用 AndroidExecutor 的 upgradeFirmware
-    // 注意：这里在 JNI wrapper 线程中直接调用，不走 CommandHandler
-    std::string err;
-    device_agent::AndroidExecutor executor;
-    executor.upgradeFirmware(filePath, "", err);
-
-    env->ReleaseStringUTFChars(jFilePath, filePath);
-}
-
-// ─── nativeDispatchCommand 实现（方案 A 入口）────────────
-// Kotlin 签名: external fun nativeDispatchCommand(type: String, payload: String): String
-// 返回 JSON: {"status":"pending"|"completed"|"failed", "message":"..."}
-static jstring Java_com_deviceagent_DeviceAgentService_nativeDispatchCommand_impl(
-    JNIEnv* env, jclass clazz, jstring jCmdType, jstring jPayloadJson) {
-    (void)clazz;
-
-    const char* cmdType = env->GetStringUTFChars(jCmdType, nullptr);
-    const char* payload = env->GetStringUTFChars(jPayloadJson, nullptr);
-    std::string type = cmdType ? cmdType : "";
-    std::string payloadStr = payload ? payload : "";
-    env->ReleaseStringUTFChars(jCmdType, cmdType);
-    env->ReleaseStringUTFChars(jPayloadJson, payload);
-
-    LOGI("nativeDispatchCommand: type=%s payload=%s", type.c_str(), payloadStr.c_str());
-
-    device_agent::AndroidExecutor executor;
-    std::string status = "failed";
-    std::string message;
-
-    auto extract = [&](const std::string& key) -> std::string {
-        std::string needle = "\"" + key + "\"";
-        auto k = payloadStr.find(needle);
-        if (k == std::string::npos) return "";
-        auto colon = payloadStr.find(':', k);
-        if (colon == std::string::npos) return "";
-        auto q1 = payloadStr.find('"', colon + 1);
-        if (q1 == std::string::npos) return "";
-        auto q2 = payloadStr.find('"', q1 + 1);
-        if (q2 == std::string::npos) return "";
-        return payloadStr.substr(q1 + 1, q2 - q1 - 1);
-    };
-
-    std::string err;
-    if (type == "reboot" || type == "REBOOT") {
-        std::string force_str = extract("force");
-        bool force = (force_str == "true");
-        std::string cmdId = extract("command_id");
-        status = executor.reboot(force, cmdId, err);
-        message = err;
-    } else if (type == "update_config" || type == "UPDATE_CONFIG") {
-        std::string key = extract("key");
-        std::string value = extract("value");
-        if (key.empty()) {
-            status = "failed";
-            message = "empty key";
-        } else {
-            executor.updateConfig(key, value, err);
-            status = err.empty() ? "completed" : "failed";
-            message = err.empty() ? ("Updated " + key) : err;
-        }
-    } else {
-        status = "failed";
-        message = "unknown command type: " + type;
-    }
-
-    std::string result = "{\"status\":\"" + status + "\",\"message\":\"" + message + "\"}";
-    return env->NewStringUTF(result.c_str());
-}

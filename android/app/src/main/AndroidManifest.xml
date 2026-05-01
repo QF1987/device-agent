@@ -1,39 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.deviceagent">
 
-    <!-- Foreground service permission for persistent daemon -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <!-- Network permissions (device-agent needs gRPC connection) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Package installation (for app upgrade) -->
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- For system signature: REQUEST_PACKAGE_INSTALLS -->
-
-    <!-- System reboot (system signature or root) -->
-    <uses-permission android:name="android.permission.REBOOT" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 读写外部存储，用于读取 adb push 到 /sdcard/Download/ 的 APK -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- Android 11+ 访问所有文件的权限（设备管理应用自升级用） -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application
-        android:label="device-agent"
+        android:allowBackup="false"
         android:icon="@drawable/ic_notification"
-        android:allowBackup="false">
+        android:label="device-agent"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- Main Activity (optional, for debugging UI) -->
+        <!-- MainActivity：桌面入口 + 手动拉起 Service 的跳板（Theme.NoDisplay 透明） -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.AppCompat.Light">
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- device-agent Foreground Service -->
         <service
             android:name=".DeviceAgentService"
             android:exported="false"
@@ -43,14 +45,26 @@
                 android:value="device_management" />
         </service>
 
-        <!-- Boot receiver: start service on device boot -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="true">
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

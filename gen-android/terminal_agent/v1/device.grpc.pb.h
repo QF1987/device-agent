@@ -24,6 +24,7 @@
 #include <grpcpp/support/status.h>
 #include <grpcpp/support/stub_options.h>
 #include <grpcpp/support/sync_stream.h>
+#include <grpcpp/ports_def.inc>
 
 namespace terminal_agent {
 namespace v1 {
@@ -32,4 +33,5 @@ namespace v1 {
 }  // namespace terminal_agent
 
 
+#include <grpcpp/ports_undef.inc>
 #endif  // GRPC_terminal_5fagent_2fv1_2fdevice_2eproto__INCLUDED

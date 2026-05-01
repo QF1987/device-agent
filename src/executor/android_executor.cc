@@ -26,6 +26,7 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
+#include <set>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -103,6 +104,11 @@ static void showToast(const std::string& message) {
     env->DeleteLocalRef(jmsg);
 }
 
+// 全局变量：记录已经尝试过 reboot 的 command_id
+// 避免 serve 重推同一条 reboot 命令时反复执行
+static std::set<std::string> g_reboot_attempted;
+static std::mutex g_reboot_attempted_mu;
+
 namespace device_agent {
 
 // ─── reboot ───────────────────────────────────────────────
@@ -117,16 +123,26 @@ std::string AndroidExecutor::reboot(bool force, const std::string& command_id, s
         return "pending";
     }
 
+    // ─── 防重入：如果这条命令已经尝试过 reboot，直接返回失败 ──
+    {
+        std::lock_guard<std::mutex> lock(g_reboot_attempted_mu);
+        if (g_reboot_attempted.count(command_id) > 0) {
+            err = "reboot already attempted for this command, device did not restart";
+            LOG_WARN("AndroidExecutor: " + err);
+            return "failed";
+        }
+        g_reboot_attempted.insert(command_id);
+    }
+
     // ─── C+D 方案：写 pending 状态 ───────────────────────
     RebootStateManager& state_mgr = RebootStateManager::instance();
     int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     state_mgr.write_pending(command_id, "android-device", now_ms);
 
-    // 显示系统提示
     showToast("System reboot initiated...");
 
-    // ─── fork 子进程执行 reboot ───────────────────────────
+    // ─── fork 子进程执行系统级 reboot（纯 C，不调 JNI）───
     pid_t pid = fork();
     if (pid < 0) {
         err = "fork() failed: " + std::string(strerror(errno));
@@ -136,98 +152,105 @@ std::string AndroidExecutor::reboot(bool force, const std::string& command_id, s
     }
 
     if (pid == 0) {
-        // 子进程：延迟 3 秒后执行 reboot
+        // ═══════════════════════════════════════════════════
+        // 子进程：纯 C 环境，禁止调用任何 JNI 函数！
+        // Android Runtime (ART) 在 fork 后 JNI 状态不安全，
+        // 调用 JNI 会触发 SIGABRT。
+        // ═══════════════════════════════════════════════════
         sleep(3);
-
-        // ── 清 pending 文件（reboot 即将执行）─────────────
         state_mgr.clear_pending();
 
-        // 尝试多种 reboot 方式，按优先级降序：
-        // 1. PowerManager.reboot() — 需要 Java JNI，最可靠
-        // 2. /system/bin/reboot — 需要 root
-        // 3. /sbin/shutdown -r — 需要 root
+        // 方式 1：svc power reboot（shell 权限，最通用）
+        LOG_INFO("[child] trying: svc power reboot");
+        system("svc power reboot");
+        sleep(8);
 
-        bool success = false;
-
-        // 方式 1：通过 JNI 调用 PowerManager.reboot()
-        if (g_jvm != nullptr) {
-            JNIEnv* env = getJNIEnv();
-            if (env != nullptr) {
-                // 获取 ActivityManager.Service
-                jclass activityManagerClass = env->FindClass("android/app/ActivityManager");
-                if (activityManagerClass != nullptr) {
-                    jmethodID getService = env->GetStaticMethodID(
-                        activityManagerClass, "getService", "()Landroid/app/IActivityManager;");
-                    if (getService != nullptr) {
-                        jobject iActivityManager = env->CallStaticObjectMethod(
-                            activityManagerClass, getService);
-                        if (iActivityManager != nullptr) {
-                            jclass iActivityManagerClass = env->GetObjectClass(iActivityManager);
-                            jmethodID shutdown = env->GetMethodID(
-                                iActivityManagerClass, "shutdown", "(I)V");
-                            if (shutdown != nullptr) {
-                                // 0 = shutdown, 1 = reboot
-                                env->CallVoidMethod(iActivityManager, shutdown, 1);
-                                success = true;
-                                LOG_INFO("AndroidExecutor: called ActivityManager.shutdown(reboot=true)");
-                            }
-                        }
-                    }
-                }
-            }
+        // 方式 2：直接 reboot 命令（需要 root）
+        if (hasElevatedPrivileges()) {
+            LOG_INFO("[child] trying: /system/bin/reboot (root)");
+            system("/system/bin/reboot");
+            sleep(5);
         }
 
-        // 方式 2：fallback 到 shell 命令
-        if (!success) {
-            if (hasElevatedPrivileges()) {
-                // root 权限：直接调用 reboot
-                int ret = system("/system/bin/reboot");
-                if (ret == 0) success = true;
-            } else {
-                // 普通权限：尝试 pm reboot（需要 root）
-                int ret = system("/system/bin/pm reboot");
-                if (ret == 0) success = true;
-            }
-        }
+        // 方式 3：设置系统属性触发重启（需要 root）
+        LOG_INFO("[child] trying: setprop sys.powerctl reboot");
+        system("setprop sys.powerctl reboot");
+        sleep(5);
 
-        // 如果所有方式都失败
-        if (!success) {
-            LOG_ERROR("AndroidExecutor: all reboot methods failed");
-            std::ofstream ofs("/tmp/device-agent-reboot-status.json");
-            if (ofs.is_open()) {
-                ofs << "{\n"
-                    << "  \"command_id\": \"" << command_id << "\",\n"
-                    << "  \"status\": \"failed\",\n"
-                    << "  \"error\": \"no method available to reboot\"\n"
-                    << "}\n";
-                ofs.close();
-            }
-            showToast("Reboot failed: insufficient permissions");
-            _exit(1);
-        }
-
-        // reboot 成功，系统会重启，不会执行到这里
-        _exit(0);
+        // 所有系统级方式都失败
+        LOG_ERROR("[child] all system-level reboot methods failed");
+        _exit(1);
     }
 
-    // ─── 父进程：非阻塞等待 ──────────────────────────────
+    // ═══════════════════════════════════════════════════════
+    // 父进程：非阻塞等待 + JNI fallback
+    // ═══════════════════════════════════════════════════════
     LOG_INFO("AndroidExecutor: reboot child pid=" + std::to_string(pid));
 
+    // 先做一次非阻塞检查
     int status;
     pid_t waited = waitpid(pid, &status, WNOHANG);
-    if (waited == 0) {
-        LOG_INFO("AndroidExecutor: reboot in progress, returning pending");
-        return "pending";
+    if (waited > 0 && WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        if (exit_code != 0) {
+            LOG_WARN("AndroidExecutor: child exited with code " + std::to_string(exit_code) + ", trying JNI fallback");
+            return tryJNIReboot(command_id, err);
+        }
     }
 
-    // 子进程立即退出 = reboot 失败
-    if (WIFEXITED(status)) {
-        int exit_code = WEXITSTATUS(status);
-        LOG_ERROR("AndroidExecutor: reboot child exited with code " + std::to_string(exit_code));
-        err = "reboot failed: no method available";
+    // 子进程还在运行（正在尝试系统级 reboot）
+    // 启动后台线程：5 秒后如果系统还没重启，尝试 JNI fallback
+    std::thread([this, command_id]() {
+        sleep(5);
+        LOG_INFO("AndroidExecutor: system reboot may have failed, trying JNI fallback...");
+        std::string err;
+        std::string result = tryJNIReboot(command_id, err);
+        if (result == "failed") {
+            LOG_ERROR("AndroidExecutor: JNI reboot fallback also failed: " + err);
+            // 失败状态已通过 tryJNIReboot 内部机制处理
+        }
+    }).detach();
+
+    return "pending";
+}
+
+// ─── JNI fallback reboot（父进程中执行，安全使用 JNI）───
+std::string AndroidExecutor::tryJNIReboot(const std::string& command_id, std::string& err) {
+    LOG_INFO("AndroidExecutor: trying JNI reboot fallback");
+
+    if (g_jvm == nullptr || g_java_service == nullptr) {
+        err = "JNI not available for reboot fallback";
+        LOG_ERROR("AndroidExecutor: " + err);
         return "failed";
     }
 
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        err = "Cannot get JNIEnv for reboot";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return "failed";
+    }
+
+    // 回调 Kotlin 层的 onReboot() 方法
+    // Kotlin 层会按权限等级尝试：PowerManager.reboot() → Runtime.exec() → su
+    jclass cls = env->GetObjectClass(g_java_service);
+    if (cls == nullptr) {
+        err = "Cannot get service class";
+        return "failed";
+    }
+
+    jmethodID method = env->GetMethodID(cls, "onReboot", "()V");
+    if (method == nullptr) {
+        err = "onReboot method not found in Kotlin service";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return "failed";
+    }
+
+    env->CallVoidMethod(g_java_service, method);
+    LOG_INFO("AndroidExecutor: onReboot() called via JNI");
+
+    // onReboot() 会触发系统重启，如果成功我们不会返回
+    // 如果失败，Kotlin 层会打日志，我们这里返回 pending 等待超时
     return "pending";
 }
 

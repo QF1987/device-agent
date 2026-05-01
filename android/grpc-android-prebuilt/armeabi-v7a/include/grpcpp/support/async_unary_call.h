@@ -20,7 +20,6 @@
 #define GRPCPP_SUPPORT_ASYNC_UNARY_CALL_H
 
 #include <grpc/grpc.h>
-#include <grpc/support/log.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/impl/call.h>
 #include <grpcpp/impl/call_op_set.h>
@@ -29,6 +28,8 @@
 #include <grpcpp/impl/service_type.h>
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/status.h>
+
+#include "absl/log/absl_check.h"
 
 namespace grpc {
 
@@ -98,9 +99,10 @@ class ClientAsyncResponseReaderHelper {
     ClientAsyncResponseReader<R>* result = new (grpc_call_arena_alloc(
         call.call(), sizeof(ClientAsyncResponseReader<R>)))
         ClientAsyncResponseReader<R>(call, context);
-    SetupRequest<BaseR, BaseW>(
-        call.call(), &result->single_buf_, &result->read_initial_metadata_,
-        &result->finish_, static_cast<const BaseW&>(request));
+    SetupRequest<BaseR, BaseW>(channel, call.call(), &result->single_buf_,
+                               &result->read_initial_metadata_,
+                               &result->finish_,
+                               static_cast<const BaseW&>(request));
 
     return result;
   }
@@ -109,7 +111,7 @@ class ClientAsyncResponseReaderHelper {
 
   template <class R, class W>
   static void SetupRequest(
-      grpc_call* call,
+      grpc::ChannelInterface* channel, grpc_call* call,
       grpc::internal::CallOpSendInitialMetadata** single_buf_ptr,
       std::function<void(ClientContext*, internal::Call*,
                          internal::CallOpSendInitialMetadata*, void*)>*
@@ -129,8 +131,10 @@ class ClientAsyncResponseReaderHelper {
     SingleBufType* single_buf =
         new (grpc_call_arena_alloc(call, sizeof(SingleBufType))) SingleBufType;
     *single_buf_ptr = single_buf;
+
     // TODO(ctiller): don't assert
-    GPR_ASSERT(single_buf->SendMessage(request).ok());
+    ABSL_CHECK(
+        single_buf->SendMessage(request, channel->memory_allocator()).ok());
     single_buf->ClientSendClose();
 
     // The purpose of the following functions is to type-erase the actual
@@ -144,7 +148,7 @@ class ClientAsyncResponseReaderHelper {
           auto* single_buf = static_cast<SingleBufType*>(single_buf_view);
           single_buf->set_output_tag(tag);
           single_buf->RecvInitialMetadata(context);
-          call->PerformOps(single_buf);
+          single_buf->FillOps(call);
         };
 
     // Note that this function goes one step further than the previous one
@@ -171,7 +175,7 @@ class ClientAsyncResponseReaderHelper {
         finish_buf->RecvMessage(static_cast<R*>(msg));
         finish_buf->AllowNoMessage();
         finish_buf->ClientRecvStatus(context, status);
-        call->PerformOps(finish_buf);
+        finish_buf->FillOps(call);
       } else {
         auto* single_buf = static_cast<SingleBufType*>(single_buf_view);
         single_buf->set_output_tag(tag);
@@ -179,7 +183,7 @@ class ClientAsyncResponseReaderHelper {
         single_buf->RecvMessage(static_cast<R*>(msg));
         single_buf->AllowNoMessage();
         single_buf->ClientRecvStatus(context, status);
-        call->PerformOps(single_buf);
+        single_buf->FillOps(call);
       }
     };
   }
@@ -220,7 +224,7 @@ class ClientAsyncResponseReader final
  public:
   // always allocated against a call arena, no memory free required
   static void operator delete(void* /*ptr*/, std::size_t size) {
-    GPR_ASSERT(size == sizeof(ClientAsyncResponseReader));
+    ABSL_CHECK_EQ(size, sizeof(ClientAsyncResponseReader));
   }
 
   // This operator should never be called as the memory should be freed as part
@@ -228,10 +232,10 @@ class ClientAsyncResponseReader final
   // delete to the operator new so that some compilers will not complain (see
   // https://github.com/grpc/grpc/issues/11301) Note at the time of adding this
   // there are no tests catching the compiler warning.
-  static void operator delete(void*, void*) { GPR_ASSERT(false); }
+  static void operator delete(void*, void*) { ABSL_CHECK(false); }
 
   void StartCall() override {
-    GPR_DEBUG_ASSERT(!started_);
+    ABSL_DCHECK(!started_);
     started_ = true;
     internal::ClientAsyncResponseReaderHelper::StartCall(context_, single_buf_);
   }
@@ -243,8 +247,8 @@ class ClientAsyncResponseReader final
   ///   - the \a ClientContext associated with this call is updated with
   ///     possible initial and trailing metadata sent from the server.
   void ReadInitialMetadata(void* tag) override {
-    GPR_DEBUG_ASSERT(started_);
-    GPR_DEBUG_ASSERT(!context_->initial_metadata_received_);
+    ABSL_DCHECK(started_);
+    ABSL_DCHECK(!context_->initial_metadata_received_);
     read_initial_metadata_(context_, &call_, single_buf_, tag);
     initial_metadata_read_ = true;
   }
@@ -255,7 +259,7 @@ class ClientAsyncResponseReader final
   ///   - the \a ClientContext associated with this call is updated with
   ///     possible initial and trailing metadata sent from the server.
   void Finish(R* msg, grpc::Status* status, void* tag) override {
-    GPR_DEBUG_ASSERT(started_);
+    ABSL_DCHECK(started_);
     finish_(context_, &call_, initial_metadata_read_, single_buf_, &finish_buf_,
             static_cast<void*>(msg), status, tag);
   }
@@ -294,7 +298,7 @@ class ServerAsyncResponseWriter final
     : public grpc::internal::ServerAsyncStreamingInterface {
  public:
   explicit ServerAsyncResponseWriter(grpc::ServerContext* ctx)
-      : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
+      : call_(), ctx_(ctx) {}
 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
   ///
@@ -304,7 +308,7 @@ class ServerAsyncResponseWriter final
   ///
   /// \param[in] tag Tag identifying this request.
   void SendInitialMetadata(void* tag) override {
-    GPR_ASSERT(!ctx_->sent_initial_metadata_);
+    ABSL_CHECK(!ctx_->sent_initial_metadata_);
 
     meta_buf_.set_output_tag(tag);
     meta_buf_.SendInitialMetadata(&ctx_->initial_metadata_,
@@ -313,7 +317,7 @@ class ServerAsyncResponseWriter final
       meta_buf_.set_compression_level(ctx_->compression_level());
     }
     ctx_->sent_initial_metadata_ = true;
-    call_.PerformOps(&meta_buf_);
+    meta_buf_.FillOps(&call_);
   }
 
   /// Indicate that the stream is to be finished and request notification
@@ -348,12 +352,13 @@ class ServerAsyncResponseWriter final
     }
     // The response is dropped if the status is not OK.
     if (status.ok()) {
-      finish_buf_.ServerSendStatus(&ctx_->trailing_metadata_,
-                                   finish_buf_.SendMessage(msg));
+      finish_buf_.ServerSendStatus(
+          &ctx_->trailing_metadata_,
+          finish_buf_.SendMessage(msg, ctx_->memory_allocator()));
     } else {
       finish_buf_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     }
-    call_.PerformOps(&finish_buf_);
+    finish_buf_.FillOps(&call_);
   }
 
   /// Indicate that the stream is to be finished with a non-OK status,
@@ -373,7 +378,7 @@ class ServerAsyncResponseWriter final
   /// deallocate them once the Finish operation is complete (i.e. a result
   /// arrives in the completion queue).
   void FinishWithError(const grpc::Status& status, void* tag) {
-    GPR_ASSERT(!status.ok());
+    ABSL_CHECK(!status.ok());
     finish_buf_.set_output_tag(tag);
     if (!ctx_->sent_initial_metadata_) {
       finish_buf_.SendInitialMetadata(&ctx_->initial_metadata_,
@@ -384,7 +389,7 @@ class ServerAsyncResponseWriter final
       ctx_->sent_initial_metadata_ = true;
     }
     finish_buf_.ServerSendStatus(&ctx_->trailing_metadata_, status);
-    call_.PerformOps(&finish_buf_);
+    finish_buf_.FillOps(&call_);
   }
 
  private:

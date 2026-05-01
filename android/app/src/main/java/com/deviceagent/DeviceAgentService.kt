@@ -18,7 +18,7 @@ import java.security.MessageDigest
 import java.lang.ref.WeakReference
 import org.json.JSONObject
 
-external fun nativeDispatchCommand(type: String, payload: String): String
+
 
 private const val PREFS_NAME = "device_agent_config"
 private const val KEY_SERVER_URL = "server_url"
@@ -66,6 +66,11 @@ class DeviceAgentService : Service() {
                 android.util.Log.e(TAG, "loadLibrary failed: ${e.message}")
             }
         }
+
+        @JvmStatic
+        external fun nativeStart(service: Any, host: String, port: Int): Int
+        @JvmStatic
+        external fun nativeStop()
     }
     override fun onCreate() {
         super.onCreate()
@@ -78,7 +83,19 @@ class DeviceAgentService : Service() {
         mainServiceRef = WeakReference(this)
         try { File(filesDir, "upgrading").delete(); File(filesDir, "upgrading.tmp").delete(); File(filesDir, "skip_cmds.txt").delete() } catch (e: Exception) {}
         mkChannel(); startForeground(NOTIFICATION_ID, mkNotification("device-agent running"))
-        CommandPoller.start()
+        // 方案 B: gRPC streaming 替代 HTTP polling
+        // gRPC 端口固定 9090，HTTP API 端口 8080
+        val (parsedHost, _) = try {
+            val u = java.net.URL(cfgServerUrl)
+            Pair(u.host, if (u.port > 0) u.port else 8080)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to parse server URL: $cfgServerUrl", e)
+            Pair("localhost", 8080)
+        }
+        val grpcPort = 9090
+        android.util.Log.i(TAG, "Starting native gRPC: host=$parsedHost port=$grpcPort")
+        val ret = nativeStart(this, parsedHost, grpcPort)
+        android.util.Log.i(TAG, "nativeStart returned: $ret")
         // 15秒后检查本地 download 目录，如有 APK 则自升级
         android.os.Handler(mainLooper).postDelayed({
             android.util.Log.i(TAG, "Checking for local APK to self-upgrade...")
@@ -89,7 +106,7 @@ class DeviceAgentService : Service() {
                 if (apkFile != null && apkFile.exists()) {
                     android.util.Log.i(TAG, "Found local APK: ${apkFile.absolutePath}, attempting self-install")
                     UpgradingMark.write(this@DeviceAgentService, "self_upgrade")
-                    val result = CommandPoller.runPmInstall(apkFile.absolutePath)
+                    val result = runPmInstall(apkFile.absolutePath)
                     android.util.Log.i(TAG, "Self-install result: $result")
                     if (result.startsWith("SUCCESS")) {
                         android.util.Log.i(TAG, "Self-upgrade SUCCESS, stopping")
@@ -121,20 +138,226 @@ class DeviceAgentService : Service() {
         return START_STICKY
     }
     override fun onBind(i: Intent?): IBinder? = null
-    override fun onDestroy() { CommandPoller.stop(); mainServiceRef = null; super.onDestroy() }
+    override fun onDestroy() {
+        nativeStop()
+        mainServiceRef = null
+        super.onDestroy()
+    }
     private fun mkChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "device-agent", NotificationManager.IMPORTANCE_LOW))
+                NotificationChannel(CHANNEL_ID, "device-agent", NotificationManager.IMPORTANCE_HIGH))
     }
+    // ─── JNI callbacks (called from C++ native code) ─────────────
+
+    fun showToast(msg: String) {
+        android.os.Handler(mainLooper).post {
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun onCommandResult(cmdId: String, status: String) {
+        android.util.Log.i(TAG, "onCommandResult: cmdId=$cmdId status=$status")
+    }
+
+    // ─── onReboot：JNI fallback reboot（父进程调用）───
+    // 当 fork 子进程的系统级 reboot 全部失败时，由 C++ 层回调
+    // 在这里尝试 Android 原生 API 方式重启
+    fun onReboot() {
+        android.util.Log.i(TAG, "onReboot: JNI fallback reboot started")
+        Thread {
+            try {
+                // 方式 1：PowerManager.reboot（需要 REBOOT 权限，系统签名 app）
+                val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                pm.reboot("device-agent")
+                android.util.Log.i(TAG, "PowerManager.reboot() succeeded")
+            } catch (e: SecurityException) {
+                android.util.Log.w(TAG, "PowerManager.reboot denied: ${e.message}, trying Runtime.exec")
+                try {
+                    // 方式 2：Runtime.exec svc power reboot（需要 shell 权限）
+                    val proc = Runtime.getRuntime().exec(arrayOf("svc", "power", "reboot"))
+                    val exitCode = proc.waitFor()
+                    android.util.Log.i(TAG, "svc power reboot exit=$exitCode")
+                } catch (e2: Exception) {
+                    android.util.Log.w(TAG, "svc power reboot failed: ${e2.message}, trying su")
+                    try {
+                        // 方式 3：su -c reboot（需要 root）
+                        val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "reboot"))
+                        val exitCode = proc.waitFor()
+                        android.util.Log.i(TAG, "su -c reboot exit=$exitCode")
+                    } catch (e3: Exception) {
+                        android.util.Log.e(TAG, "All JNI reboot methods failed: ${e3.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "onReboot unexpected error: ${e.message}")
+            }
+        }.start()
+    }
+
+    fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long) {
+        android.util.Log.i(TAG, "onDownloadReady: batch=$batchId file=$fileId type=$fileType url=$downloadUrl size=$fileSize")
+        synchronized(inFlightCmds) { if (inFlightCmds.contains(fileId)) { android.util.Log.i(TAG, "Skip already in-flight: $fileId"); return } }
+        Thread { handleDownloadAndInstall(batchId, fileId, downloadUrl, sha256) }.start()
+    }
+
+    fun onUpgradeApp(apkUrl: String, md5: String) {
+        android.util.Log.i(TAG, "onUpgradeApp: url=$apkUrl md5=$md5")
+        Thread { handleUpgradeInstall(apkUrl, md5) }.start()
+    }
+
+    // ─── Download + Install helpers ─────────────────────────────
+
+    private fun handleDownloadAndInstall(batchId: String, fileId: String, url: String, sha: String) {
+        val svc = this
+        if (UpgradingMark.isUpgrading(svc)) {
+            android.util.Log.i(TAG, "Already upgrading, skip download_ready")
+            return
+        }
+        synchronized(inFlightFiles) { if (inFlightFiles.contains(fileId)) return; inFlightFiles.add(fileId) }
+        val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fileId.apk")
+        reportReleaseStatus(batchId, fileId, "downloading")
+        if (!downloadFile(url, dest, sha)) {
+            synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
+            reportCommandStatus(fileId, "failed", "Download failed")
+            reportReleaseStatus(batchId, fileId, "download_failed")
+            return
+        }
+        synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
+        reportReleaseStatus(batchId, fileId, "downloaded", dest.length())
+        android.util.Log.i(TAG, "Download OK, running pm install")
+        UpgradingMark.write(svc, fileId)
+        reportCommandStatus(fileId, "installing", "Copying APK")
+        reportReleaseStatus(batchId, fileId, "installing")
+        val tmp = File("/data/local/tmp/$fileId.apk")
+        try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
+            android.util.Log.e(TAG, "Copy failed: ${e.message}")
+            reportCommandStatus(fileId, "failed", "Copy failed")
+            reportReleaseStatus(batchId, fileId, "install_failed")
+            UpgradingMark.clear(svc); removeSkip(fileId); return
+        }
+        reportCommandStatus(fileId, "installing", "Running pm install")
+        val result = runPmInstall(tmp.absolutePath)
+        android.util.Log.i("DeviceAgentService", "pm install result: $result")
+        if (result.startsWith("SUCCESS")) {
+            val vc = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (e: Exception) { 0L }
+            reportCommandStatus(fileId, "completed", "Installed version $vc")
+            reportReleaseStatus(batchId, fileId, "installed")
+            UpgradingMark.clear(svc)
+            try { tmp.delete() } catch (e: Exception) {}
+            try { dest.delete() } catch (e: Exception) {}
+        } else {
+            android.util.Log.e("DeviceAgentService", "pm install failed: $result")
+            reportCommandStatus(fileId, "failed", result)
+            reportReleaseStatus(batchId, fileId, "install_failed")
+            UpgradingMark.clear(svc); removeSkip(fileId)
+            try { tmp.delete() } catch (e: Exception) {}
+        }
+    }
+
+    private fun handleUpgradeInstall(url: String, md5: String) {
+        val svc = this
+        if (UpgradingMark.isUpgrading(svc)) return
+        if (url.isNotEmpty()) {
+            val fid = "upgrade_${System.currentTimeMillis()}"
+            val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
+            if (!downloadFileMD5(url, dest, md5)) {
+                reportCommandStatus(fid, "failed", "Download failed"); return
+            }
+            UpgradingMark.write(svc, fid)
+            val tmp = File("/data/local/tmp/$fid.apk")
+            try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
+                reportCommandStatus(fid, "failed", "Copy failed"); UpgradingMark.clear(svc); removeSkip(fid); return
+            }
+            val result = runPmInstall(tmp.absolutePath)
+            if (result.startsWith("SUCCESS")) {
+                val vc = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (e: Exception) { 0L }
+                reportCommandStatus(fid, "completed", "Installed version $vc")
+                UpgradingMark.clear(svc)
+            } else {
+                reportCommandStatus(fid, "failed", result)
+                UpgradingMark.clear(svc); removeSkip(fid)
+            }
+            try { tmp.delete() } catch (e: Exception) {}
+            try { dest.delete() } catch (e: Exception) {}
+        }
+    }
+
+    // ─── Reporting helpers ──────────────────────────────────────
+
+    private fun reportCommandStatus(cmdId: String, status: String, msg: String) {
+        try {
+            val j = JSONObject().apply { put("command_id", cmdId); put("status", status); put("result_message", msg) }
+            val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/report").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
+            c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
+            c.outputStream.use { it.write(j.toString().toByteArray()) }
+            android.util.Log.i(TAG, "Report: $cmdId status=$status httpCode=${c.responseCode}")
+            c.disconnect()
+        } catch (e: Exception) { android.util.Log.e(TAG, "Report failed: ${e.message}") }
+    }
+
+    private fun reportReleaseStatus(batchId: String, fileId: String, status: String, bytes: Long = 0) {
+        if (batchId.isEmpty()) return
+        Thread {
+            try {
+                val j = JSONObject().apply { put("batch_id", batchId); put("file_id", fileId); put("status", status); put("downloaded_bytes", bytes) }
+                val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/release_status").openConnection() as HttpURLConnection
+                c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
+                c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
+                c.outputStream.use { it.write(j.toString().toByteArray()) }; c.responseCode; c.disconnect()
+            } catch (e: Exception) {}
+        }.start()
+    }
+
+    private fun downloadFile(url: String, dest: File, sha: String): Boolean {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = URL(url).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
+            conn.setRequestProperty("Accept", "application/octet-stream")
+            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
+            val d = java.security.MessageDigest.getInstance("SHA-256")
+            java.io.FileOutputStream(dest).use { fos ->
+                conn.inputStream.use { inp ->
+                    val buf = ByteArray(8192); var n: Int
+                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
+                }
+            }; conn.disconnect()
+            val actual = d.digest().joinToString("") { "%02x".format(it) }
+            if (sha.isNotEmpty() && !actual.equals(sha, true)) { android.util.Log.e(TAG, "SHA256 mismatch"); dest.delete(); return false }
+            android.util.Log.i(TAG, "SHA256 OK: $actual"); true
+        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
+    }
+
+    private fun downloadFileMD5(url: String, dest: File, md5: String): Boolean {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = URL(url).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
+            conn.setRequestProperty("Accept", "application/octet-stream")
+            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
+            val d = java.security.MessageDigest.getInstance("MD5")
+            java.io.FileOutputStream(dest).use { fos ->
+                conn.inputStream.use { inp ->
+                    val buf = ByteArray(8192); var n: Int
+                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
+                }
+            }; conn.disconnect()
+            val actual = d.digest().joinToString("") { "%02x".format(it) }
+            if (md5.isNotEmpty() && !actual.equals(md5, true)) { android.util.Log.e(TAG, "MD5 mismatch"); dest.delete(); return false }
+            android.util.Log.i(TAG, "MD5 OK: $actual"); true
+        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
+    }
+
     private fun mkNotification(text: String): Notification {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL_ID).setContentTitle("device-agent").setContentText(text)
-                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_LOW).build()
+                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_HIGH).build()
         else
             @Suppress("DEPRECATION")
             Notification.Builder(this).setContentTitle("device-agent").setContentText(text)
-                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_LOW).build()
+                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_HIGH).build()
     }
 }
 
@@ -167,393 +390,15 @@ private fun removeSkip(cmdId: String) {
     } catch (e: Exception) {}
 }
 
-object CommandPoller {
-    private const val TAG = "CommandPoller"
-    private const val POLL_MS = 10_000L
-    private const val CONN_TO = 5_000
-    private const val READ_TO = 30_000
-    @Volatile private var running = false
-    private var thread: Thread? = null
-    fun start() {
-        if (running) return
-        running = true
-        android.util.Log.i(TAG, "CommandPoller start")
-        thread = Thread {
-            while (running) {
-                try { poll() } catch (e: Exception) { android.util.Log.w(TAG, "Poll error: ${e.message}") }
-                try { Thread.sleep(POLL_MS) } catch (e: InterruptedException) { break }
-            }
-        }.apply { start() }
-    }
-    fun stop() { running = false; thread?.interrupt(); thread = null }
-    private fun poll() {
-        val conn = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/poll").openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"; conn.connectTimeout = CONN_TO; conn.readTimeout = READ_TO
-        conn.setRequestProperty("Accept", "application/json")
-        if (conn.responseCode != 200) { conn.disconnect(); return }
-        val body = conn.inputStream.bufferedReader().readText(); conn.disconnect()
-        android.util.Log.d(TAG, "Poll response: $body")
-        val cmds = JSONObject(body).optJSONArray("commands") ?: return
-        for (i in 0 until cmds.length()) {
-            val c = cmds.getJSONObject(i)
-            android.util.Log.i(TAG, "cmd: ${c.getString("command_type")} id=${c.getString("command_id")}")
-            handleCmd(c.getString("command_id"), c.getString("command_type").uppercase(), c.optString("payload_json", "{}"))
-        }
-    }
-    private fun handleCmd(cmdId: String, type: String, payloadJson: String) {
-        if (markSkipped(cmdId)) { android.util.Log.i(TAG, "Skip $cmdId"); return }
-        val svc = mainServiceRef?.get() ?: return
-        if ((type == "DOWNLOAD_READY" || type == "UPGRADE_APP" || type == "CHECK_LOCAL_APK") && UpgradingMark.isUpgrading(svc)) return
-        val p = JSONObject(payloadJson)
-        when (type) {
-            "DOWNLOAD_READY" -> handleDL(cmdId, p, svc)
-            "UPGRADE_APP" -> handleUP(cmdId, p, svc)
-            "CHECK_LOCAL_APK" -> handleCheckLocalApk(cmdId, p, svc)
-            "REBOOT", "reboot" -> handleReboot(cmdId, p, svc)
-            "UPDATE_CONFIG", "update_config" -> handleUpdateConfig(cmdId, p, svc)
-        }
-    }
-    private fun handleCheckLocalApk(cmdId: String, p: JSONObject, svc: Service) {
-        // 优先使用 app 私有外部存储路径：/sdcard/Android/data/<pkg>/files/DeviceAgent/Apk/
-        // 这个路径不需要任何权限，app 天然有完整访问权限
-        // 如果没有外部存储，则回退到 filesDir（/data/data/<pkg>/files/）
-        val customPath = p.optString("path", "")
-        val dir: File = if (customPath.isNotEmpty()) {
-            File(customPath)
-        } else {
-            // 自动检测最优路径
-            val extDir = svc.getExternalFilesDir("DeviceAgent/Apk")
-            if (extDir != null) extDir else File(svc.filesDir, "DeviceAgent/Apk")
-        }
 
-        // 自动创建目录（如果不存在）
-        if (!dir.exists()) {
-            android.util.Log.i(TAG, "Creating upgrade directory: ${dir.absolutePath}")
-            if (!dir.mkdirs()) {
-                android.util.Log.e(TAG, "Failed to create directory: ${dir.absolutePath}")
-                reportCS(cmdId, "failed", "Cannot create directory: ${dir.absolutePath}")
-                return
-            }
-        }
-
-        android.util.Log.i(TAG, "CHECK_LOCAL_APK scanning: ${dir.absolutePath}")
-        val apks = dir.listFiles { _, name -> name.endsWith(".apk") }
-        if (apks == null || apks.isEmpty()) {
-            android.util.Log.i(TAG, "No APK found in ${dir.absolutePath}")
-            reportCS(cmdId, "failed", "No APK found in ${dir.absolutePath}")
-            return
-        }
-        val apkFile = apks.maxByOrNull { it.lastModified() }!!
-        android.util.Log.i(TAG, "Found APK: ${apkFile.absolutePath}, launching install intent (MIUI will prompt)")
-        UpgradingMark.write(svc, cmdId)
-        reportCS(cmdId, "installing", "MIUI confirmation required for ${apkFile.name}")
-        try {
-            val uri = androidx.core.content.FileProvider.getUriForFile(svc, "${svc.packageName}.fileprovider", apkFile)
-            svc.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
-            android.util.Log.i(TAG, "Install intent launched, waiting for MIUI confirmation...")
-            Thread {
-                waitInstallResult(cmdId, apkFile, svc)
-            }.start()
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "Install intent failed: ${e.message}")
-            reportCS(cmdId, "failed", e.message ?: "Install failed")
-            UpgradingMark.clear(svc)
-        }
-    }
-    private fun waitInstallResult(cmdId: String, apkFile: File, svc: Service) {
-        val expected = try { svc.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)?.longVersionCode ?: 0L } catch (e: Exception) { 0L }
-        val before = try { svc.packageManager.getPackageInfo(svc.packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-        android.util.Log.i(TAG, "waitInstallResult expected=$expected before=$before")
-        var n = 0
-        while (n < 30) {
-            Thread.sleep(2000); n++
-            try {
-                val vc = svc.packageManager.getPackageInfo(svc.packageName, 0).longVersionCode
-                android.util.Log.i(TAG, "versionCode=$vc (expected=$expected)")
-                if (vc == expected || vc > before) {
-                    reportCS(cmdId, "completed", "Installed version $vc")
-                    UpgradingMark.clear(svc)
-                    android.util.Log.i(TAG, "Install SUCCESS")
-                    return
-                }
-            } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                android.util.Log.d(TAG, "waitInstallResult attempt $n/30")
-            }
-        }
-        android.util.Log.e(TAG, "Install timeout")
-        reportCS(cmdId, "failed", "Install timeout (expected $expected)")
-        UpgradingMark.clear(svc)
-        removeSkip(cmdId)
-    }
-    private fun handleReboot(cmdId: String, p: JSONObject, svc: Service) {
-        android.util.Log.i(TAG, "REBOOT cmd=$cmdId payload=$p")
-        reportCS(cmdId, "executing", "Reboot initiated via JNI")
-        Thread {
-            try {
-                val payload = JSONObject().apply {
-                    put("force", p.optBoolean("force", false))
-                    put("command_id", cmdId)
-                }
-                val result = nativeDispatchCommand("reboot", payload.toString())
-                android.util.Log.i(TAG, "reboot native result: $result")
-                val obj = JSONObject(result)
-                val status = obj.optString("status", "failed")
-                val msg = obj.optString("message", "")
-                if (status != "pending") {
-                    reportCS(cmdId, status, msg)
-                }
-            } catch (e: Throwable) {
-                android.util.Log.e(TAG, "handleReboot failed: ${e.message}")
-                reportCS(cmdId, "failed", "JNI dispatch error: ${e.message}")
-            }
-        }.start()
-    }
-    private fun handleUpdateConfig(cmdId: String, p: JSONObject, svc: Service) {
-        val key = p.optString("key", "")
-        val value = p.optString("value", "")
-        android.util.Log.i(TAG, "UPDATE_CONFIG cmd=$cmdId key=$key")
-        if (key.isEmpty()) {
-            reportCS(cmdId, "failed", "Empty key")
-            return
-        }
-        try {
-            val payload = JSONObject().apply {
-                put("key", key)
-                put("value", value)
-            }
-            val result = nativeDispatchCommand("update_config", payload.toString())
-            android.util.Log.i(TAG, "update_config native result: $result")
-            val obj = JSONObject(result)
-            reportCS(cmdId, obj.optString("status", "failed"), obj.optString("message", ""))
-        } catch (e: Throwable) {
-            android.util.Log.e(TAG, "handleUpdateConfig failed: ${e.message}")
-            reportCS(cmdId, "failed", "JNI dispatch error: ${e.message}")
-        }
-    }
-    private fun handleDL(cmdId: String, p: JSONObject, svc: Service) {
-        val batchId = p.optString("batch_id", ""); val fileId = p.getString("file_id")
-        val url = p.getString("download_url"); val sha = p.optString("sha256", ""); val size = p.optLong("file_size", 0)
-        android.util.Log.i(TAG, "download_ready: batch=$batchId file=$fileId size=$size")
-        synchronized(inFlightFiles) { if (inFlightFiles.contains(fileId)) return; inFlightFiles.add(fileId) }
-        Thread {
-            val dest = File(File(svc.filesDir, "downloads").also { it.mkdirs() }, "$fileId.apk")
-            reportRS(batchId, fileId, "downloading")
-            if (!download(url, dest, sha)) {
-                synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
-                reportCS(cmdId, "failed", "Download failed"); reportRS(batchId, fileId, "download_failed"); return@Thread
-            }
-            synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
-            reportRS(batchId, fileId, "downloaded", size)
-            android.util.Log.i(TAG, "Download OK, running pm install")
-            UpgradingMark.write(svc, cmdId)
-            reportCS(cmdId, "installing", "Copying APK")
-            reportRS(batchId, fileId, "installing")
-            val tmp = File("/data/local/tmp/$fileId.apk")
-            try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
-                android.util.Log.e(TAG, "Copy failed: ${e.message}"); reportCS(cmdId, "failed", "Copy failed")
-                reportRS(batchId, fileId, "install_failed"); UpgradingMark.clear(svc); removeSkip(cmdId); return@Thread
-            }
-            reportCS(cmdId, "installing", "Running pm install")
-            val result = runPmInstall(tmp.absolutePath)
-            android.util.Log.i(TAG, "pm install result: $result")
-            if (result.startsWith("SUCCESS")) {
-                val vc = try { svc.packageManager.getPackageInfo(svc.packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-                reportCS(cmdId, "completed", "Installed version $vc"); reportRS(batchId, fileId, "installed")
-                UpgradingMark.clear(svc)
-                try { tmp.delete() } catch (e: Exception) {}; try { dest.delete() } catch (e: Exception) {}
-            } else {
-                android.util.Log.e(TAG, "pm install failed: $result"); reportCS(cmdId, "failed", result)
-                reportRS(batchId, fileId, "install_failed"); UpgradingMark.clear(svc); removeSkip(cmdId)
-                try { tmp.delete() } catch (e: Exception) {}
-            }
-        }.start()
-    }
-    private fun handleUP(cmdId: String, p: JSONObject, svc: Service) {
-        val url = p.optString("download_url", ""); val md5 = p.optString("md5", ""); val apk = p.optString("apk_path", "")
-        val fid = "upgrade_${System.currentTimeMillis()}"
-        when {
-            url.isNotEmpty() -> {
-                Thread {
-                    val dest = File(File(svc.filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
-                    if (!downloadMD5(url, dest, md5)) { reportCS(cmdId, "failed", "Download failed"); return@Thread }
-                    UpgradingMark.write(svc, cmdId)
-                    val tmp = File("/data/local/tmp/$fid.apk")
-                    try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
-                        reportCS(cmdId, "failed", "Copy failed"); UpgradingMark.clear(svc); removeSkip(cmdId); return@Thread
-                    }
-                    val result = runPmInstall(tmp.absolutePath)
-                    if (result.startsWith("SUCCESS")) {
-                        val vc = try { svc.packageManager.getPackageInfo(svc.packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-                        reportCS(cmdId, "completed", "Installed version $vc"); UpgradingMark.clear(svc)
-                    } else { reportCS(cmdId, "failed", result); UpgradingMark.clear(svc); removeSkip(cmdId) }
-                    try { tmp.delete() } catch (e: Exception) {}; try { dest.delete() } catch (e: Exception) {}
-                }.start()
-            }
-            apk.isNotEmpty() -> {
-                UpgradingMark.write(svc, cmdId)
-                val result = runPmInstall(apk)
-                if (result.startsWith("SUCCESS")) {
-                    val vc = try { svc.packageManager.getPackageInfo(svc.packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-                    reportCS(cmdId, "completed", "Installed version $vc"); UpgradingMark.clear(svc)
-                } else { reportCS(cmdId, "failed", result); UpgradingMark.clear(svc); removeSkip(cmdId) }
-            }
-        }
-    }
-    private fun download(url: String, dest: File, sha: String): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"; conn.connectTimeout = CONN_TO; conn.readTimeout = READ_TO
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
-            val d = MessageDigest.getInstance("SHA-256")
-            java.io.FileOutputStream(dest).use { fos ->
-                conn.inputStream.use { inp ->
-                    val buf = ByteArray(8192); var n: Int
-                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
-                }
-            }; conn.disconnect()
-            val actual = d.digest().joinToString("") { "%02x".format(it) }
-            if (sha.isNotEmpty() && !actual.equals(sha, true)) { android.util.Log.e(TAG, "SHA256 mismatch"); dest.delete(); return false }
-            android.util.Log.i(TAG, "SHA256 OK: $actual"); true
-        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
-    }
-    private fun downloadMD5(url: String, dest: File, md5: String): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"; conn.connectTimeout = CONN_TO; conn.readTimeout = READ_TO
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
-            val d = MessageDigest.getInstance("MD5")
-            java.io.FileOutputStream(dest).use { fos ->
-                conn.inputStream.use { inp ->
-                    val buf = ByteArray(8192); var n: Int
-                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
-                }
-            }; conn.disconnect()
-            val actual = d.digest().joinToString("") { "%02x".format(it) }
-            if (md5.isNotEmpty() && !actual.equals(md5, true)) { android.util.Log.e(TAG, "MD5 mismatch"); dest.delete(); return false }
-            android.util.Log.i(TAG, "MD5 OK: $actual"); true
-        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
-    }
-    private fun reportRS(batchId: String, fileId: String, status: String, bytes: Long = 0) {
-        if (batchId.isEmpty()) return
-        Thread {
-            try {
-                val j = JSONObject().apply { put("batch_id", batchId); put("file_id", fileId); put("status", status); put("downloaded_bytes", bytes) }
-                val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/release_status").openConnection() as HttpURLConnection
-                c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
-                c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
-                c.outputStream.use { it.write(j.toString().toByteArray()) }; c.responseCode; c.disconnect()
-            } catch (e: Exception) {}
-        }.start()
-    }
-    private fun reportCS(cmdId: String, status: String, msg: String) {
-        try {
-            val j = JSONObject().apply { put("command_id", cmdId); put("status", status); put("result_message", msg) }
-            val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/report").openConnection() as HttpURLConnection
-            c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
-            c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
-            c.outputStream.use { it.write(j.toString().toByteArray()) }
-            val httpCode = c.responseCode
-            android.util.Log.i(TAG, "Report: $cmdId status=$status httpCode=$httpCode")
-            c.disconnect()
-        } catch (e: Exception) { android.util.Log.e(TAG, "Report failed: ${e.message}") }
-    }
-    fun runPmInstall(apkPath: String): String {
-        return try {
-            val p = Runtime.getRuntime().exec(arrayOf("pm", "install", "-r", apkPath))
-            val out = p.inputStream.bufferedReader().readText().trim()
-            val err = p.errorStream.bufferedReader().readText().trim()
-            val code = p.waitFor()
-            android.util.Log.i(TAG, "pm install exitCode=$code out=$out err=$err")
-            if (code == 0 || out.startsWith("Success")) "SUCCESS" else if (err.isNotEmpty()) err else out
-        } catch (e: Exception) { android.util.Log.e(TAG, "pm install exception: ${e.message}"); "Exception: ${e.message}" }
-    }
+fun runPmInstall(apkPath: String): String {
+    return try {
+        val p = Runtime.getRuntime().exec(arrayOf("pm", "install", "-r", apkPath))
+        val out = p.inputStream.bufferedReader().readText().trim()
+        val err = p.errorStream.bufferedReader().readText().trim()
+        val code = p.waitFor()
+        android.util.Log.i("DeviceAgentService", "pm install exitCode=$code out=$out err=$err")
+        if (code == 0 || out.startsWith("Success")) "SUCCESS" else if (err.isNotEmpty()) err else out
+    } catch (e: Exception) { android.util.Log.e("DeviceAgentService", "pm install exception: ${e.message}"); "Exception: ${e.message}" }
 }
 
-class UpgradeService : Service() {
-    companion object { private const val TAG = "UpgradeService"; private const val NID = 1002; private const val CID = "upgrade_channel" }
-    override fun onCreate() {
-        super.onCreate()
-        android.util.Log.i(TAG, "UpgradeService onCreate")
-        UpgradingMark.clear(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CID, "app-upgrade", NotificationManager.IMPORTANCE_LOW))
-        }
-        startForeground(NID, Notification.Builder(this, CID).setContentTitle("Upgrading").setContentText("Installing update...")
-            .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_LOW).build())
-    }
-    override fun onStartCommand(i: Intent?, f: Int, s: Int): Int {
-        val cmdId = i?.getStringExtra("command_id") ?: ""; val apk = i?.getStringExtra("apk_path") ?: ""
-        val batchId = i?.getStringExtra("batch_id") ?: ""; val fileId = i?.getStringExtra("file_id") ?: ""
-        android.util.Log.i(TAG, "UpgradeService cmdId=$cmdId apk=$apk")
-        if (apk.isEmpty()) { stopSelf(); return START_NOT_STICKY }
-        Thread { install(File(apk), cmdId, batchId, fileId) }.start()
-        return START_NOT_STICKY
-    }
-    override fun onBind(i: Intent?): IBinder? = null
-    private fun install(f: File, cmdId: String, batchId: String, fileId: String) {
-        if (!f.exists()) { onFail(cmdId, batchId, fileId, "APK not found"); return }
-        val expected = try { packageManager.getPackageArchiveInfo(f.absolutePath, 0)?.longVersionCode ?: 0L } catch (e: Exception) { 0L }
-        val before = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-        android.util.Log.i(TAG, "Expected=$expected before=$before")
-        try {
-            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
-            android.util.Log.i(TAG, "Install intent launched")
-            reportCS(cmdId, "installing", "Install started")
-            waitInstall(cmdId, batchId, fileId, expected, before)
-        } catch (e: Exception) { android.util.Log.e(TAG, "Install error: ${e.message}"); onFail(cmdId, batchId, fileId, e.message ?: "error") }
-    }
-    private fun waitInstall(cmdId: String, batchId: String, fileId: String, expected: Long, before: Long) {
-        var n = 0
-        while (n < 30) {
-            Thread.sleep(2000); n++
-            try {
-                val vc = packageManager.getPackageInfo(packageName, 0).longVersionCode
-                android.util.Log.i(TAG, "versionCode=$vc (expected=$expected)")
-                if (vc == expected || vc > before) { onSucc(cmdId, batchId, fileId, vc); return }
-            } catch (e: android.content.pm.PackageManager.NameNotFoundException) { android.util.Log.d(TAG, "attempt $n/30") }
-        }
-        android.util.Log.e(TAG, "Install timeout"); onFail(cmdId, batchId, fileId, "Install timeout (expected $expected)")
-    }
-    private fun onSucc(cmdId: String, batchId: String, fileId: String, vc: Long) {
-        reportCS(cmdId, "completed", "Installed version $vc"); reportRS(batchId, fileId, "installed")
-        UpgradingMark.clear(this); stopSelf()
-    }
-    private fun onFail(cmdId: String, batchId: String, fileId: String, reason: String) {
-        reportCS(cmdId, "failed", reason); reportRS(batchId, fileId, "install_failed")
-        UpgradingMark.clear(this); removeSkip(cmdId); stopSelf()
-    }
-    private fun reportCS(cmdId: String, status: String, msg: String) {
-        try {
-            val j = JSONObject().apply { put("command_id", cmdId); put("status", status); put("result_message", msg) }
-            val c = URL("$cfgServerUrl/api/v1/devices/ANDROID-001/report").openConnection() as HttpURLConnection
-            c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
-            c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
-            c.outputStream.use { it.write(j.toString().toByteArray()) }
-            val httpCode = c.responseCode
-            android.util.Log.i(TAG, "Report: $cmdId status=$status httpCode=$httpCode")
-            c.disconnect()
-        } catch (e: Exception) { android.util.Log.e(TAG, "Report failed: ${e.message}") }
-    }
-    private fun reportRS(batchId: String, fileId: String, status: String) {
-        if (batchId.isEmpty()) return
-        try {
-            val j = JSONObject().apply { put("batch_id", batchId); put("file_id", fileId); put("status", status) }
-            val c = URL("$cfgServerUrl/api/v1/devices/ANDROID-001/release_status").openConnection() as HttpURLConnection
-            c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
-            c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
-            c.outputStream.use { it.write(j.toString().toByteArray()) }; c.responseCode; c.disconnect()
-        } catch (e: Exception) {}
-    }
-}

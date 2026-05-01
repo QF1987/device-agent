@@ -120,8 +120,8 @@ if(ANDROID OR __ANDROID__)
         log
         Threads::Threads
         protobuf::libprotobuf
-        gRPC::grpc++_unsecure
-        gRPC::grpc_unsecure
+        gRPC::grpc++
+        gRPC::grpc
     )
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─

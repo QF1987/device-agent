@@ -19,17 +19,10 @@
 #ifndef GRPCPP_SERVER_CONTEXT_H
 #define GRPCPP_SERVER_CONTEXT_H
 
-#include <grpc/support/port_platform.h>
-
-#include <atomic>
-#include <cassert>
-#include <map>
-#include <memory>
-#include <type_traits>
-#include <vector>
-
 #include <grpc/grpc.h>
+#include <grpc/impl/call.h>
 #include <grpc/impl/compression_types.h>
+#include <grpc/support/port_platform.h>
 #include <grpcpp/impl/call.h>
 #include <grpcpp/impl/call_op_set.h>
 #include <grpcpp/impl/codegen/create_auth_context.h>
@@ -46,6 +39,13 @@
 #include <grpcpp/support/status.h>
 #include <grpcpp/support/string_ref.h>
 #include <grpcpp/support/time.h>
+
+#include <atomic>
+#include <cassert>
+#include <map>
+#include <memory>
+#include <type_traits>
+#include <vector>
 
 struct grpc_metadata;
 struct grpc_call;
@@ -297,6 +297,10 @@ class ServerContextBase {
     return call_metric_recorder_;
   }
 
+  grpc_event_engine::experimental::MemoryAllocator* memory_allocator() {
+    return memory_allocator_;
+  }
+
   /// EXPERIMENTAL API
   /// Returns the call's authority.
   grpc::string_ref ExperimentalGetAuthority() const;
@@ -419,12 +423,15 @@ class ServerContextBase {
   /// Return the tag queued by BeginCompletionOp()
   grpc::internal::CompletionQueueTag* GetCompletionOpTag();
 
-  void set_call(grpc_call* call, bool call_metric_recording_enabled,
-                experimental::ServerMetricRecorder* server_metric_recorder) {
+  void set_call(
+      grpc_call* call, bool call_metric_recording_enabled,
+      experimental::ServerMetricRecorder* server_metric_recorder,
+      grpc_event_engine::experimental::MemoryAllocator* memory_allocator) {
     call_.call = call;
     if (call_metric_recording_enabled) {
       CreateCallMetricRecorder(server_metric_recorder);
     }
+    memory_allocator_ = memory_allocator;
   }
 
   void BindDeadlineAndMetadata(gpr_timespec deadline, grpc_metadata_array* arr);
@@ -495,15 +502,16 @@ class ServerContextBase {
   RpcAllocatorState* message_allocator_state_ = nullptr;
   ContextAllocator* context_allocator_ = nullptr;
   experimental::CallMetricRecorder* call_metric_recorder_ = nullptr;
+  grpc_event_engine::experimental::MemoryAllocator* memory_allocator_ = nullptr;
 
   class Reactor : public grpc::ServerUnaryReactor {
    public:
     void OnCancel() override {}
     void OnDone() override {}
     // Override InternalInlineable for this class since its reactions are
-    // trivial and thus do not need to be run from the executor (triggering a
-    // thread hop). This should only be used by internal reactors (thus the
-    // name) and not by user application code.
+    // trivial and thus do not need to be run from the EventEngine (potentially
+    // triggering a thread hop). This should only be used by internal reactors
+    // (thus the name) and not by user application code.
     bool InternalInlineable() override { return true; }
   };
 
@@ -520,7 +528,9 @@ class ServerContextBase {
    public:
     TestServerCallbackUnary(ServerContextBase* ctx,
                             std::function<void(grpc::Status)> func)
-        : reactor_(ctx->DefaultReactor()), func_(std::move(func)) {
+        : reactor_(ctx->DefaultReactor()),
+          func_(std::move(func)),
+          call_(ctx->c_call()) {
       this->BindReactor(reactor_);
     }
     void Finish(grpc::Status s) override {
@@ -537,12 +547,16 @@ class ServerContextBase {
 
    private:
     void CallOnDone() override {}
+
+    grpc_call* call() override { return call_; }
+
     grpc::internal::ServerReactor* reactor() override { return reactor_; }
 
     grpc::ServerUnaryReactor* const reactor_;
     std::atomic_bool status_set_{false};
     grpc::Status status_;
     const std::function<void(grpc::Status s)> func_;
+    grpc_call* call_;
   };
 
   alignas(Reactor) char default_reactor_[sizeof(Reactor)];
