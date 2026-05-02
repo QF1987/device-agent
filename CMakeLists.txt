@@ -19,6 +19,7 @@ set(COMMON_SOURCES
     src/executor/linux_executor.cc
     src/executor/macos_executor.cc
     src/reboot_state/reboot_state.cc
+    src/download/android_download_manager.cc
 )
 
 set(COMMON_HEADERS
@@ -27,6 +28,8 @@ set(COMMON_HEADERS
     src/config/config.h
     src/logger/logger.h
     src/executor/executor.h
+    src/download/idownload_manager.h
+    src/download/android_download_manager.h
     src/reboot_state/reboot_state.h
     src/jni_bridge.h
 )

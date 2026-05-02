@@ -193,19 +193,4 @@ void MacOSExecutor::upgradeApp(const std::string& appPath, const std::string& md
     LOG_INFO("MacOSExecutor: app upgrade completed");
 }
 
-// ─── upgradeDownloadReady ────────────────────────────────
-
-void MacOSExecutor::upgradeDownloadReady(
-        const std::string& batchId,
-        const std::string& fileId,
-        const std::string& fileType,
-        const std::string& downloadUrl,
-        const std::string& sha256,
-        int64_t fileSize,
-        std::string& err) {
-    (void)batchId; (void)fileId; (void)fileType;
-    (void)downloadUrl; (void)sha256; (void)fileSize;
-    err = "upgradeDownloadReady is only supported on Android";
-}
-
 }  // namespace device_agent

@@ -52,18 +52,6 @@ public:
     //   err：失败时填充错误描述
     // 注意：LinuxExecutor 此方法永远返回 "not supported"
     virtual void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) = 0;
-
-    // upgradeDownloadReady：处理 download_ready 命令
-    //   转发给 Java 层处理（DownloadManager 负责下载、校验、安装）
-    //   err：失败时填充错误描述
-    virtual void upgradeDownloadReady(
-        const std::string& batchId,
-        const std::string& fileId,
-        const std::string& fileType,
-        const std::string& downloadUrl,
-        const std::string& sha256,
-        int64_t fileSize,
-        std::string& err) = 0;
 };
 
 // ─── LinuxExecutor：Linux/macOS 实现 ─────────────────────
@@ -74,14 +62,6 @@ public:
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) override;
-    void upgradeDownloadReady(
-        const std::string& batchId,
-        const std::string& fileId,
-        const std::string& fileType,
-        const std::string& downloadUrl,
-        const std::string& sha256,
-        int64_t fileSize,
-        std::string& err) override;
 };
 
 // ─── MacOSExecutor：macOS 专用执行器 ─────────────────────
@@ -94,14 +74,6 @@ public:
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) override;
-    void upgradeDownloadReady(
-        const std::string& batchId,
-        const std::string& fileId,
-        const std::string& fileType,
-        const std::string& downloadUrl,
-        const std::string& sha256,
-        int64_t fileSize,
-        std::string& err) override;
 };
 
 // ─── AndroidExecutor：Android 专用执行器 ─────────────────
@@ -116,14 +88,6 @@ public:
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& apkPath, const std::string& md5, std::string& err) override;
-    void upgradeDownloadReady(
-        const std::string& batchId,
-        const std::string& fileId,
-        const std::string& fileType,
-        const std::string& downloadUrl,
-        const std::string& sha256,
-        int64_t fileSize,
-        std::string& err) override;
 
 private:
     // JNI fallback reboot：父进程中通过 JNI 回调 Kotlin 层执行 reboot

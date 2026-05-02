@@ -41,6 +41,10 @@
 #include "logger/logger.h"
 #include "bridge/bridge.h"
 #include "executor/executor.h"
+#include "download/idownload_manager.h"
+#ifdef __ANDROID__
+#include "download/android_download_manager.h"
+#endif
 #include "reboot_state/reboot_state.h"
 
 // ============================================================
@@ -217,13 +221,17 @@ int main(int argc, char* argv[]) {
     // 根据平台选择正确的 Executor（放在配置校验前，确保日志能输出）
 #ifdef __ANDROID__
     handler.set_executor(std::make_shared<device_agent::AndroidExecutor>());
-    LOG_INFO("Using AndroidExecutor");
+    handler.set_download_manager(std::make_shared<device_agent::AndroidDownloadManager>());
+    LOG_INFO("Using AndroidExecutor + AndroidDownloadManager");
+    LOG_INFO("Using AndroidExecutor + AndroidDownloadManager");
 #elif __APPLE__
     handler.set_executor(std::make_shared<device_agent::MacOSExecutor>());
-    LOG_INFO("Using MacOSExecutor");
+    // TODO: handler.set_download_manager(std::make_shared<device_agent::CurlDownloadManager>());
+    LOG_INFO("Using MacOSExecutor (download manager not yet implemented)");
 #else
     handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
-    LOG_INFO("Using LinuxExecutor");
+    // TODO: handler.set_download_manager(std::make_shared<device_agent::CurlDownloadManager>());
+    LOG_INFO("Using LinuxExecutor (download manager not yet implemented)");
 #endif
 
     // ============================================================

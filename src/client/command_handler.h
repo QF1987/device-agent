@@ -31,8 +31,9 @@
 
 namespace device_agent {
 
-// 前向声明：Executor 定义在 executor.h
+// 前向声明：Executor 定义在 executor.h，IDownloadManager 定义在 download/idownload_manager.h
 class Executor;
+class IDownloadManager;
 
 // ─── CommandHandler：指令处理器 ────────────────────────────
 class CommandHandler {
@@ -46,6 +47,10 @@ public:
     // 如果不设置，默认用 LinuxExecutor
     void set_executor(std::shared_ptr<Executor> executor);
 
+    // 设置下载管理器（AndroidDownloadManager / CurlDownloadManager）
+    // 不设置时，download_ready 命令将返回 "not supported"
+    void set_download_manager(std::shared_ptr<IDownloadManager> dl_mgr);
+
     // 处理指令（异步模式，立即返回，结果通过回调回报）
     void handle(const terminal_agent::v1::Command& cmd);
 
@@ -57,6 +62,7 @@ public:
 private:
     ResultReporter reporter_;
     std::shared_ptr<Executor> executor_;
+    std::shared_ptr<IDownloadManager> dl_mgr_;
     std::mutex mu_;
 };
 

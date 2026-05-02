@@ -7,7 +7,16 @@
 
 #include "client/command_handler.h"
 #include "executor/executor.h"
+#include "download/idownload_manager.h"
 #include "logger/logger.h"
+
+#ifdef __ANDROID__
+#include "download/android_download_manager.h"
+#endif
+
+#ifdef __ANDROID__
+#include "download/android_download_manager.h"
+#endif
 
 #include <cstring>
 #include <sstream>
@@ -67,6 +76,11 @@ CommandHandler::CommandHandler(ResultReporter reporter)
 void CommandHandler::set_executor(std::shared_ptr<Executor> executor) {
     std::lock_guard<std::mutex> lock(mu_);
     executor_ = std::move(executor);
+}
+
+void CommandHandler::set_download_manager(std::shared_ptr<IDownloadManager> dl_mgr) {
+    std::lock_guard<std::mutex> lock(mu_);
+    dl_mgr_ = std::move(dl_mgr);
 }
 
 void CommandHandler::handle(const terminal_agent::v1::Command& cmd) {
@@ -159,18 +173,46 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "file_type", file_type);
         extract_json_string(payload, "download_url", url);
         extract_json_string(payload, "sha256", sha256);
-        // 尝试提取整数 file_size（如果 payload 有的话）
-        // file_size 通过 DownloadReadyCommand proto 传递，这里简化处理
+
+        // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
+        std::shared_ptr<IDownloadManager> dl_mgr;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            if (!dl_mgr_) {
+#ifdef __ANDROID__
+                dl_mgr_ = std::make_shared<AndroidDownloadManager>();
+#endif
+            }
+            dl_mgr = dl_mgr_;
+        }
+
         if (batch_id.empty() || file_id.empty() || url.empty()) {
             err_msg = "invalid payload: missing required fields for download_ready";
             result.set_status("failed");
             result.set_message(err_msg);
+        } else if (!dl_mgr) {
+            err_msg = "no download manager configured";
+            result.set_status("failed");
+            result.set_message(err_msg);
         } else {
-            // 将 download_ready 命令转发给 Java 层处理
-            // AndroidExecutor 提供了 upgradeDownloadReady 方法
-            executor->upgradeDownloadReady(batch_id, file_id, file_type, url, sha256, file_size, err_msg);
-            result.set_status(err_msg.empty() ? "success" : "failed");
-            result.set_message(err_msg.empty() ? "download started" : err_msg);
+            DownloadRequest req;
+            req.url = url;
+            req.dest_path = "";  // 由下载管理器自行决定存储路径
+            req.expected_sha256 = sha256;
+            req.file_size = file_size;
+            req.batch_id = batch_id;
+            req.file_id = file_id;
+            req.file_type = file_type;
+
+            dl_mgr->download(req, nullptr, [](bool ok, const std::string& err) {
+                if (!ok) {
+                    LOG_ERROR("download_ready: download failed: " + err);
+                } else {
+                    LOG_INFO("download_ready: download dispatched");
+                }
+            });
+            result.set_status("success");
+            result.set_message("download dispatched");
         }
 
     } else {

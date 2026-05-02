@@ -230,7 +230,9 @@ bool DeviceClient::report_event(const terminal_agent::v1::EventReport& event) {
 
 bool DeviceClient::report_command_result(
         const terminal_agent::v1::CommandResult& result) {
-    std::lock_guard<std::mutex> lock(stub_mu_);
+    // 注意：不能用 stub_mu_，因为 CommandStream 持有 stub_mu_ 的同时会调用 command_callback_
+    // 而 command_callback_ 最终会调用本方法，导致死锁。
+    // gRPC stub 是线程安全的（不同 RPC 调用之间），不需要额外加锁。
 
     terminal_agent::v1::CommandResultResponse resp;
     grpc::ClientContext ctx;
