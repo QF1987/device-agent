@@ -11,6 +11,12 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
+import com.deviceagent.install.IAppInstaller
+import com.deviceagent.install.InstallEvent
+import com.deviceagent.install.InstallEventBus
+import com.deviceagent.install.SilentInstaller
+import com.deviceagent.install.CustomInstaller
+import com.deviceagent.install.NormalInstaller
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -71,7 +77,20 @@ class DeviceAgentService : Service() {
         external fun nativeStart(service: Any, host: String, port: Int): Int
         @JvmStatic
         external fun nativeStop()
+        @JvmStatic
+        external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String): Boolean
+
+        /** 根据 BuildConfig flavor 创建对应的安装器 */
+        private fun createInstaller(service: DeviceAgentService): IAppInstaller = when (BuildConfig.INSTALL_MODE) {
+            "silent"  -> SilentInstaller(service)
+            "custom"  -> CustomInstaller(service)
+            else      -> NormalInstaller(service)
+        }
     }
+
+    // 安装器（策略模式，由 productFlavor 决定具体实现）
+    private val installer: IAppInstaller by lazy { createInstaller(this) }
+
     override fun onCreate() {
         super.onCreate()
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -81,7 +100,13 @@ class DeviceAgentService : Service() {
         cfgDeviceId = if (!savedId.isNullOrEmpty()) savedId else BuildConfig.DEFAULT_DEVICE_ID
         android.util.Log.i(TAG, "DeviceAgentService onCreate cfgServerUrl=$cfgServerUrl cfgDeviceId=$cfgDeviceId")
         mainServiceRef = WeakReference(this)
-        try { File(filesDir, "upgrading").delete(); File(filesDir, "upgrading.tmp").delete(); File(filesDir, "skip_cmds.txt").delete() } catch (e: Exception) {}
+
+        // 订阅安装完成事件（观察者模式）
+        InstallEventBus.subscribe { event -> handleInstallEvent(event) }
+
+        try { File(filesDir, "upgrading").delete(); File(filesDir, "upgrading.tmp").delete(); File(filesDir, "skip_cmds.txt").delete(); File(filesDir, "pending_upgrade").delete() } catch (e: Exception) {}
+        // 取消可能残留的重启闹钟（上次启动成功，不需要了）
+        RestartReceiver.cancelRestart(this)
         mkChannel(); startForeground(NOTIFICATION_ID, mkNotification("device-agent running"))
         // 方案 B: gRPC streaming 替代 HTTP polling
         // gRPC 端口固定 9090，HTTP API 端口 8080
@@ -104,17 +129,37 @@ class DeviceAgentService : Service() {
             if (apks != null && apks.isNotEmpty()) {
                 val apkFile = apks.maxByOrNull { it.lastModified() }
                 if (apkFile != null && apkFile.exists()) {
-                    android.util.Log.i(TAG, "Found local APK: ${apkFile.absolutePath}, attempting self-install")
-                    UpgradingMark.write(this@DeviceAgentService, "self_upgrade")
-                    val result = runPmInstall(apkFile.absolutePath)
-                    android.util.Log.i(TAG, "Self-install result: $result")
-                    if (result.startsWith("SUCCESS")) {
-                        android.util.Log.i(TAG, "Self-upgrade SUCCESS, stopping")
-                        UpgradingMark.clear(this@DeviceAgentService)
+                    // 防不完整下载：文件最后修改时间超过 10 秒才尝试安装
+                    val age = System.currentTimeMillis() - apkFile.lastModified()
+                    if (age < 10_000) {
+                        android.util.Log.i(TAG, "APK too fresh (${age}ms old), skipping self-upgrade to avoid partial file")
                     } else {
-                        android.util.Log.e(TAG, "Self-upgrade FAILED: $result, will retry on next restart")
-                        UpgradingMark.clear(this@DeviceAgentService)
-                        removeSkip("self_upgrade")
+                        // 检查 APK 版本：与当前相同 → 上次安装残留，删除
+                        val apkInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                        val apkVersion = apkInfo?.longVersionCode ?: 0
+                        val curVersion = packageManager.getPackageInfo(packageName, 0).longVersionCode
+                        if (apkVersion > 0 && apkVersion == curVersion) {
+                            android.util.Log.i(TAG, "Stale APK (v$apkVersion matches current), deleting: ${apkFile.name}")
+                            apkFile.delete()
+                            return@postDelayed
+                        }
+
+                        android.util.Log.i(TAG, "Found local APK: ${apkFile.absolutePath} (${apkFile.length()} bytes) v$apkVersion, attempting self-install via ${installer.mode}")
+                        UpgradingMark.write(this@DeviceAgentService, "self_upgrade")
+                        RestartReceiver.scheduleRestart(this@DeviceAgentService)
+                        // 记录当前版本号，RestartReceiver 用于判断升级是否完成
+                        try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
+                        installer.install(apkFile) { result ->
+                            if (result.success) {
+                                android.util.Log.i(TAG, "Self-upgrade SUCCESS via ${installer.mode}")
+                                UpgradingMark.clear(this@DeviceAgentService)
+                                apkFile.delete()  // 升级成功，删除源 APK 避免重复通知
+                            } else {
+                                android.util.Log.e(TAG, "Self-upgrade FAILED: ${result.message}, will retry on next restart")
+                                UpgradingMark.clear(this@DeviceAgentService)
+                                removeSkip("self_upgrade")
+                            }
+                        }
                     }
                 }
             } else {
@@ -217,6 +262,7 @@ class DeviceAgentService : Service() {
         synchronized(inFlightFiles) { if (inFlightFiles.contains(fileId)) return; inFlightFiles.add(fileId) }
         val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fileId.apk")
         reportReleaseStatus(batchId, fileId, "downloading")
+        updateNotification("⏬ 正在下载...")
         if (!downloadFile(url, dest, sha)) {
             synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
             reportCommandStatus(fileId, "failed", "Download failed")
@@ -225,61 +271,67 @@ class DeviceAgentService : Service() {
         }
         synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
         reportReleaseStatus(batchId, fileId, "downloaded", dest.length())
-        android.util.Log.i(TAG, "Download OK, running pm install")
+        android.util.Log.i(TAG, "Download OK, installing via ${installer.mode}")
         UpgradingMark.write(svc, fileId)
-        reportCommandStatus(fileId, "installing", "Copying APK")
+        reportCommandStatus(fileId, "installing", "Running ${installer.mode} installer")
         reportReleaseStatus(batchId, fileId, "installing")
-        val tmp = File("/data/local/tmp/$fileId.apk")
-        try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
-            android.util.Log.e(TAG, "Copy failed: ${e.message}")
-            reportCommandStatus(fileId, "failed", "Copy failed")
-            reportReleaseStatus(batchId, fileId, "install_failed")
-            UpgradingMark.clear(svc); removeSkip(fileId); return
-        }
-        reportCommandStatus(fileId, "installing", "Running pm install")
-        val result = runPmInstall(tmp.absolutePath)
-        android.util.Log.i("DeviceAgentService", "pm install result: $result")
-        if (result.startsWith("SUCCESS")) {
-            val vc = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-            reportCommandStatus(fileId, "completed", "Installed version $vc")
-            reportReleaseStatus(batchId, fileId, "installed")
-            UpgradingMark.clear(svc)
-            try { tmp.delete() } catch (e: Exception) {}
-            try { dest.delete() } catch (e: Exception) {}
-        } else {
-            android.util.Log.e("DeviceAgentService", "pm install failed: $result")
-            reportCommandStatus(fileId, "failed", result)
-            reportReleaseStatus(batchId, fileId, "install_failed")
-            UpgradingMark.clear(svc); removeSkip(fileId)
-            try { tmp.delete() } catch (e: Exception) {}
+        updateNotification("📦 正在安装...")
+
+        RestartReceiver.scheduleRestart(this)
+        // 记录当前版本号，RestartReceiver 用于判断升级是否完成
+        try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
+        installer.install(dest) { result ->
+            if (result.success) {
+                // 记录 sessionId → (batchId, fileId)，等 InstallEventBus 推送最终结果
+                if (result.sessionId > 0) {
+                    synchronized(pendingInstalls) {
+                        pendingInstalls[result.sessionId] = PendingInstall(batchId, fileId)
+                    }
+                }
+                // Silent mode: install 是同步的，可能已经完成
+                if (installer.mode == "silent") {
+                    android.util.Log.i(TAG, "Silent install: ${result.message}")
+                    // InstallResultReceiver 会通过 bus 回调最终结果
+                } else {
+                    android.util.Log.i(TAG, "Install submitted: ${result.message}")
+                }
+            } else {
+                android.util.Log.e(TAG, "${installer.mode} install failed: ${result.message}")
+                reportCommandStatus(fileId, "failed", result.message)
+                reportReleaseStatus(batchId, fileId, "install_failed")
+                UpgradingMark.clear(svc)
+                removeSkip(fileId)
+                try { dest.delete() } catch (_: Exception) {}
+            }
         }
     }
 
     private fun handleUpgradeInstall(url: String, md5: String) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) return
-        if (url.isNotEmpty()) {
-            val fid = "upgrade_${System.currentTimeMillis()}"
-            val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
-            if (!downloadFileMD5(url, dest, md5)) {
-                reportCommandStatus(fid, "failed", "Download failed"); return
-            }
-            UpgradingMark.write(svc, fid)
-            val tmp = File("/data/local/tmp/$fid.apk")
-            try { dest.inputStream().use { i -> tmp.outputStream().use { o -> i.copyTo(o) } } } catch (e: Exception) {
-                reportCommandStatus(fid, "failed", "Copy failed"); UpgradingMark.clear(svc); removeSkip(fid); return
-            }
-            val result = runPmInstall(tmp.absolutePath)
-            if (result.startsWith("SUCCESS")) {
-                val vc = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (e: Exception) { 0L }
-                reportCommandStatus(fid, "completed", "Installed version $vc")
-                UpgradingMark.clear(svc)
+        if (url.isEmpty()) return
+        val fid = "upgrade_${System.currentTimeMillis()}"
+        val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
+        if (!downloadFileMD5(url, dest, md5)) {
+            reportCommandStatus(fid, "failed", "Download failed"); return
+        }
+        UpgradingMark.write(svc, fid)
+        reportCommandStatus(fid, "installing", "Running ${installer.mode} installer")
+        RestartReceiver.scheduleRestart(this)
+        // 记录当前版本号，RestartReceiver 用于判断升级是否完成
+        try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
+        installer.install(dest) { result ->
+            if (result.success) {
+                if (result.sessionId > 0) {
+                    synchronized(pendingInstalls) {
+                        pendingInstalls[result.sessionId] = PendingInstall("", fid)
+                    }
+                }
             } else {
-                reportCommandStatus(fid, "failed", result)
+                reportCommandStatus(fid, "failed", result.message)
                 UpgradingMark.clear(svc); removeSkip(fid)
             }
-            try { tmp.delete() } catch (e: Exception) {}
-            try { dest.delete() } catch (e: Exception) {}
+            try { dest.delete() } catch (_: Exception) {}
         }
     }
 
@@ -300,13 +352,10 @@ class DeviceAgentService : Service() {
     private fun reportReleaseStatus(batchId: String, fileId: String, status: String, bytes: Long = 0) {
         if (batchId.isEmpty()) return
         Thread {
-            try {
-                val j = JSONObject().apply { put("batch_id", batchId); put("file_id", fileId); put("status", status); put("downloaded_bytes", bytes) }
-                val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/release_status").openConnection() as HttpURLConnection
-                c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
-                c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
-                c.outputStream.use { it.write(j.toString().toByteArray()) }; c.responseCode; c.disconnect()
-            } catch (e: Exception) {}
+            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, "", "") }
+            catch (e: Exception) {
+                android.util.Log.e(TAG, "reportReleaseStatus native: ${e.message}")
+            }
         }.start()
     }
 
@@ -359,46 +408,84 @@ class DeviceAgentService : Service() {
             Notification.Builder(this).setContentTitle("device-agent").setContentText(text)
                 .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_HIGH).build()
     }
-}
 
-private val skipFile: File get() = File("/data/data/com.deviceagent/files/skip_cmds.txt")
-private val inFlightCmds = mutableSetOf<String>()
-private val inFlightFiles = mutableSetOf<String>()
-
-@Synchronized
-private fun markSkipped(cmdId: String): Boolean {
-    if (inFlightCmds.contains(cmdId)) return true
-    try {
-        if (skipFile.exists() && skipFile.readText().split(",").filter { it.isNotEmpty() }.contains(cmdId)) {
-            inFlightCmds.add(cmdId); return true
+    /** 更新前景通知文字 */
+    private fun updateNotification(text: String) {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            val notification = mkNotification(text)
+            nm.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "updateNotification failed: ${e.message}")
         }
-    } catch (e: Exception) {}
-    inFlightCmds.add(cmdId)
-    try {
-        val parts = (if (skipFile.exists()) skipFile.readText() else "").split(",").filter { it.isNotEmpty() }.toMutableList()
-        parts.add(cmdId); skipFile.writeText(parts.takeLast(20).joinToString(","))
-    } catch (e: Exception) {}
-    return false
+    }
+
+    private val skipFile: File get() = File("/data/data/com.deviceagent/files/skip_cmds.txt")
+    private val inFlightCmds = mutableSetOf<String>()
+    private val inFlightFiles = mutableSetOf<String>()
+
+    /** 等待安装结果的任务映射：sessionId → {batchId, fileId} */
+    private data class PendingInstall(val batchId: String, val fileId: String)
+    private val pendingInstalls = mutableMapOf<Int, PendingInstall>()
+
+    /** 处理 InstallEventBus 推送的安装结果 */
+    private fun handleInstallEvent(event: InstallEvent) {
+        val info = synchronized(pendingInstalls) { pendingInstalls.remove(event.sessionId) } ?: return
+        when (event) {
+            is InstallEvent.Succeeded -> {
+                val pkg = event.packageName ?: "unknown"
+                android.util.Log.i(TAG, "Install SUCCESS: session=${event.sessionId} batch=${info.batchId} file=${info.fileId}")
+                updateNotification("✅ 安装成功: $pkg")
+                RestartReceiver.cancelRestart(this)  // 进程没被杀→取消闹钟；进程被杀→这行不执行
+                File(filesDir, "pending_upgrade").delete()
+                reportCommandStatus(info.fileId, "completed", "Installed via ${installer.mode}")
+                if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "installed")
+                UpgradingMark.clear(this)
+                removeSkip(info.fileId)
+                try { File(filesDir, "downloads/${info.fileId}.apk").delete() } catch (_: Exception) {}
+            }
+            is InstallEvent.PendingUser -> {
+                // Normal 模式等用户确认
+                android.util.Log.i(TAG, "Install pending user confirm: session=${event.sessionId} file=${info.fileId}")
+                updateNotification("⏳ 等待确认安装...")
+            }
+            is InstallEvent.Failed -> {
+                android.util.Log.e(TAG, "Install FAILED: session=${event.sessionId} batch=${info.batchId} file=${info.fileId} err=${event.error}")
+                updateNotification("❌ 安装失败: ${event.error}")
+                RestartReceiver.cancelRestart(this)  // 失败了不需要重启
+                File(filesDir, "pending_upgrade").delete()
+                reportCommandStatus(info.fileId, "failed", event.error)
+                if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "install_failed")
+                UpgradingMark.clear(this)
+                removeSkip(info.fileId)
+            }
+        }
+    }
+
+    // ── skip/retry helpers ──
+
+    @Synchronized
+    private fun markSkipped(cmdId: String): Boolean {
+        if (inFlightCmds.contains(cmdId)) return true
+        try {
+            if (skipFile.exists() && skipFile.readText().split(",").filter { it.isNotEmpty() }.contains(cmdId)) {
+                inFlightCmds.add(cmdId); return true
+            }
+        } catch (e: Exception) {}
+        inFlightCmds.add(cmdId)
+        try {
+            val parts = (if (skipFile.exists()) skipFile.readText() else "").split(",").filter { it.isNotEmpty() }.toMutableList()
+            parts.add(cmdId); skipFile.writeText(parts.takeLast(20).joinToString(","))
+        } catch (e: Exception) {}
+        return false
+    }
+
+    @Synchronized
+    private fun removeSkip(cmdId: String) {
+        inFlightCmds.remove(cmdId)
+        try {
+            val parts = (if (skipFile.exists()) skipFile.readText() else "").split(",").filter { it.isNotEmpty() }.toMutableList()
+            parts.remove(cmdId); skipFile.writeText(parts.joinToString(","))
+        } catch (e: Exception) {}
+    }
 }
-
-@Synchronized
-private fun removeSkip(cmdId: String) {
-    inFlightCmds.remove(cmdId)
-    try {
-        val parts = (if (skipFile.exists()) skipFile.readText() else "").split(",").filter { it.isNotEmpty() }.toMutableList()
-        parts.remove(cmdId); skipFile.writeText(parts.joinToString(","))
-    } catch (e: Exception) {}
-}
-
-
-fun runPmInstall(apkPath: String): String {
-    return try {
-        val p = Runtime.getRuntime().exec(arrayOf("pm", "install", "-r", apkPath))
-        val out = p.inputStream.bufferedReader().readText().trim()
-        val err = p.errorStream.bufferedReader().readText().trim()
-        val code = p.waitFor()
-        android.util.Log.i("DeviceAgentService", "pm install exitCode=$code out=$out err=$err")
-        if (code == 0 || out.startsWith("Success")) "SUCCESS" else if (err.isNotEmpty()) err else out
-    } catch (e: Exception) { android.util.Log.e("DeviceAgentService", "pm install exception: ${e.message}"); "Exception: ${e.message}" }
-}
-

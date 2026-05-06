@@ -35,3 +35,5 @@ gen/
 
 # gRPC prebuilt libraries (committed to git, persistent)
 # android/grpc-android-prebuilt/<ABI>/
+build-verify/
+tools/protoc-*

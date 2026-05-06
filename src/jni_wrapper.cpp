@@ -34,6 +34,7 @@
 // JNI native 方法实现
 static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort);
 static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(JNIEnv* env, jclass clazz);
+static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jStatus, jlong jDownloadedBytes, jstring jErrorCode, jstring jErrorMessage);
 
 // ─── 全局变量（跨函数共享）────────────────────────────
 // g_jvm / g_java_service 在 jni_bridge.h 声明为 extern（由 android_executor.cc 定义）
@@ -59,6 +60,11 @@ static JNINativeMethod g_methods[] = {
         const_cast<char*>("nativeStop"),
         const_cast<char*>("()V"),
         reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeStop_impl)
+    },
+    {
+        const_cast<char*>("nativeReportReleaseStatus"),
+        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;)Z"),
+        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl)
     }
 };
 
@@ -229,6 +235,60 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
         g_java_service = nullptr;
     }
     g_jvm = nullptr;
+}
+
+// ─── nativeReportReleaseStatus 实现 ──────────────────────
+// Kotlin签名: nativeReportReleaseStatus(batchId, fileId, status, downloadedBytes, errorCode, errorMessage): Boolean
+static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(
+    JNIEnv* env,
+    jclass,
+    jstring jBatchId,
+    jstring jFileId,
+    jstring jStatus,
+    jlong jDownloadedBytes,
+    jstring jErrorCode,
+    jstring jErrorMessage) {
+
+    if (g_client == nullptr) {
+        LOGI("nativeReportReleaseStatus: g_client is null, skipping");
+        return JNI_FALSE;
+    }
+
+    terminal_agent::v1::ReleaseStatusRequest req;
+
+    const char* str = env->GetStringUTFChars(jBatchId, nullptr);
+    req.set_batch_id(str);
+    env->ReleaseStringUTFChars(jBatchId, str);
+
+    str = env->GetStringUTFChars(jFileId, nullptr);
+    req.set_file_id(str);
+    env->ReleaseStringUTFChars(jFileId, str);
+
+    str = env->GetStringUTFChars(jStatus, nullptr);
+    req.set_status(str);
+    env->ReleaseStringUTFChars(jStatus, str);
+
+    req.set_downloaded_bytes(jDownloadedBytes);
+
+    if (jErrorCode != nullptr) {
+        str = env->GetStringUTFChars(jErrorCode, nullptr);
+        req.set_error_code(str);
+        env->ReleaseStringUTFChars(jErrorCode, str);
+    }
+    if (jErrorMessage != nullptr) {
+        str = env->GetStringUTFChars(jErrorMessage, nullptr);
+        req.set_error_message(str);
+        env->ReleaseStringUTFChars(jErrorMessage, str);
+    }
+
+    req.set_timestamp(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count()
+    );
+
+    bool ok = g_client->report_release_status(req);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 // ─── onUpgradeApp 实现 ─────────────────────────────────

@@ -54,9 +54,11 @@ void AndroidDownloadManager::download(
         CompleteCallback on_complete) {
 
     std::lock_guard<std::mutex> lock(mu_);
+    // 不再阻止重复下载：Kotlin 层已有 inFlightFiles 去重，
+    // C++ 层阻拦会导致 downloading_ 标志卡死，后续所有下发均被拦截。
     if (downloading_.load()) {
-        if (on_complete) on_complete(false, "already downloading");
-        return;
+        LOG_INFO("AndroidDownloadManager: downloading flag was stuck, resetting");
+        downloading_.store(false);
     }
 
     JNIEnv* env = getEnv();

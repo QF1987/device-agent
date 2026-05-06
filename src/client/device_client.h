@@ -79,6 +79,10 @@ public:
     // 回报指令执行结果
     bool report_command_result(const terminal_agent::v1::CommandResult& result);
 
+    // 回报 Release 状态（下载/安装进度）
+    // gen-android/gen-desktop 均含此 RPC，由 scripts/gen-proto.sh 统一生成
+    bool report_release_status(const terminal_agent::v1::ReleaseStatusRequest& status);
+
     // 连接状态（用于监控）
     bool is_connected() const { return connected_.load(); }
 

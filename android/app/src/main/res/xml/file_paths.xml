@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- App's private files dir (filesDir) -->
+    <files-path name="apk" path="apk/" />
+    <!-- App's private downloads dir -->
+    <files-path name="downloads" path="downloads/" />
+    <!-- App's private external storage: /sdcard/Android/data/<pkg>/files/DeviceAgent/Apk/ -->
+    <external-files-path name="device_agent_apk" path="DeviceAgent/Apk/" />
+    <!-- /data/local/tmp/ -->
+    <path name="apk_files" path="local/tmp/" />
+    <!-- External storage -->
+    <external-path name="external_files" path="Download/" />
+</paths>
