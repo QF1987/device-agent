@@ -56,13 +56,21 @@ service DeviceService {
   // 注意：command_id 必须与收到的 Command.command_id 一致
   rpc ReportCommandResult(CommandResult) returns (CommandResultResponse);
 
-  // Release 状态上报
-  // 设备在 download_ready 指令执行过程中上报下载/安装进度
+  // 下载/安装状态上报
+  // 设备在 download_ready 指令执行过程中（downloading/downloaded/installing/installed/download_failed/install_failed）
+  // 实时上报进度给服务端，用于看板展示
   //
-  // 调用频率：进度驱动（下载中 / 下载完成 / 安装中 / 安装完成 / 失败）
+  // 调用频率：下载开始、下载进度（每 256KB）、下载完成、安装完成、失败时
   // 超时建议：10 秒
-  // 失败处理：记录日志，继续执行（不影响下载/安装本身）
+  // 失败处理：写入本地持久化队列，网络恢复后重试
   rpc ReportReleaseStatus(ReleaseStatusRequest) returns (ReleaseStatusResponse);
+
+  // PushCommand：CLI / 管理端向设备推送指令
+  // 内部通过 ConnectionManager 发送到设备的 CommandStream
+  //
+  // 使用场景：CLI 执行 batch reboot / batch config 等命令时调用
+  // 注意：device_id 从 Command.device_id 字段获取
+  rpc PushCommand(Command) returns (CommandResultResponse);
 }
 
 // ─── CommandService ──────────────────────────────────────

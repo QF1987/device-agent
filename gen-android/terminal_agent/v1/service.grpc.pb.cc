@@ -28,6 +28,7 @@ static const char* DeviceService_method_names[] = {
   "/terminal_agent.v1.DeviceService/ReportEvent",
   "/terminal_agent.v1.DeviceService/ReportCommandResult",
   "/terminal_agent.v1.DeviceService/ReportReleaseStatus",
+  "/terminal_agent.v1.DeviceService/PushCommand",
 };
 
 std::unique_ptr< DeviceService::Stub> DeviceService::NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options) {
@@ -42,6 +43,7 @@ DeviceService::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& chan
   , rpcmethod_ReportEvent_(DeviceService_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   , rpcmethod_ReportCommandResult_(DeviceService_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   , rpcmethod_ReportReleaseStatus_(DeviceService_method_names[4], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_PushCommand_(DeviceService_method_names[5], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
 
 ::grpc::Status DeviceService::Stub::Heartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::terminal_agent::v1::HeartbeatResponse* response) {
@@ -159,6 +161,29 @@ void DeviceService::Stub::async::ReportReleaseStatus(::grpc::ClientContext* cont
   return result;
 }
 
+::grpc::Status DeviceService::Stub::PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::terminal_agent::v1::CommandResultResponse* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_PushCommand_, context, request, response);
+}
+
+void DeviceService::Stub::async::PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_PushCommand_, context, request, response, std::move(f));
+}
+
+void DeviceService::Stub::async::PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, ::grpc::ClientUnaryReactor* reactor) {
+  ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_PushCommand_, context, request, response, reactor);
+}
+
+::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* DeviceService::Stub::PrepareAsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::terminal_agent::v1::CommandResultResponse, ::terminal_agent::v1::Command, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_PushCommand_, context, request);
+}
+
+::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* DeviceService::Stub::AsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+  auto* result =
+    this->PrepareAsyncPushCommandRaw(context, request, cq);
+  result->StartCall();
+  return result;
+}
+
 DeviceService::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       DeviceService_method_names[0],
@@ -210,6 +235,16 @@ DeviceService::Service::Service() {
              ::terminal_agent::v1::ReleaseStatusResponse* resp) {
                return service->ReportReleaseStatus(ctx, req, resp);
              }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      DeviceService_method_names[5],
+      ::grpc::internal::RpcMethod::NORMAL_RPC,
+      new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+          [](DeviceService::Service* service,
+             ::grpc::ServerContext* ctx,
+             const ::terminal_agent::v1::Command* req,
+             ::terminal_agent::v1::CommandResultResponse* resp) {
+               return service->PushCommand(ctx, req, resp);
+             }, this)));
 }
 
 DeviceService::Service::~Service() {
@@ -244,6 +279,13 @@ DeviceService::Service::~Service() {
 }
 
 ::grpc::Status DeviceService::Service::ReportReleaseStatus(::grpc::ServerContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response) {
+  (void) context;
+  (void) request;
+  (void) response;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+}
+
+::grpc::Status DeviceService::Service::PushCommand(::grpc::ServerContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response) {
   (void) context;
   (void) request;
   (void) response;

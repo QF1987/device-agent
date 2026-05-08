@@ -86,7 +86,7 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fservice_2eproto[] A
     "\n\037terminal_agent/v1/service.proto\022\021termi"
     "nal_agent.v1\032\036terminal_agent/v1/device.p"
     "roto\":\n\025CommandResultResponse\022\020\n\010accepte"
-    "d\030\001 \001(\010\022\017\n\007message\030\002 \001(\t2\345\003\n\rDeviceServi"
+    "d\030\001 \001(\010\022\017\n\007message\030\002 \001(\t2\272\004\n\rDeviceServi"
     "ce\022V\n\tHeartbeat\022#.terminal_agent.v1.Hear"
     "tbeatRequest\032$.terminal_agent.v1.Heartbe"
     "atResponse\022X\n\014ReportStatus\022\037.terminal_ag"
@@ -98,12 +98,14 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fservice_2eproto[] A
     "sult\032(.terminal_agent.v1.CommandResultRe"
     "sponse\022h\n\023ReportReleaseStatus\022\'.terminal"
     "_agent.v1.ReleaseStatusRequest\032(.termina"
-    "l_agent.v1.ReleaseStatusResponse2h\n\016Comm"
-    "andService\022V\n\rCommandStream\022\'.terminal_a"
-    "gent.v1.CommandStreamRequest\032\032.terminal_"
-    "agent.v1.Command0\001B;Z9github.com/QF1987/"
-    "terminal-agent-go/gen/terminal_agent/v1b"
-    "\006proto3"
+    "l_agent.v1.ReleaseStatusResponse\022S\n\013Push"
+    "Command\022\032.terminal_agent.v1.Command\032(.te"
+    "rminal_agent.v1.CommandResultResponse2h\n"
+    "\016CommandService\022V\n\rCommandStream\022\'.termi"
+    "nal_agent.v1.CommandStreamRequest\032\032.term"
+    "inal_agent.v1.Command0\001B;Z9github.com/QF"
+    "1987/terminal-agent-go/gen/terminal_agen"
+    "t/v1b\006proto3"
 };
 static const ::_pbi::DescriptorTable* PROTOBUF_NONNULL const
     descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto_deps[1] = {
@@ -113,7 +115,7 @@ static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fservice_2eprot
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto = {
     false,
     false,
-    807,
+    892,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fservice_2eproto,
     "terminal_agent/v1/service.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto_once,

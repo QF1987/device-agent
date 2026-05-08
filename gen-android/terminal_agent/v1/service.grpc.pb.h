@@ -105,18 +105,31 @@ class DeviceService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>> PrepareAsyncReportCommandResult(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>>(PrepareAsyncReportCommandResultRaw(context, request, cq));
     }
-    // Release 状态上报
-    // 设备在 download_ready 指令执行过程中上报下载/安装进度
+    // 下载/安装状态上报
+    // 设备在 download_ready 指令执行过程中（downloading/downloaded/installing/installed/download_failed/install_failed）
+    // 实时上报进度给服务端，用于看板展示
     //
-    // 调用频率：进度驱动（下载中 / 下载完成 / 安装中 / 安装完成 / 失败）
+    // 调用频率：下载开始、下载进度（每 256KB）、下载完成、安装完成、失败时
     // 超时建议：10 秒
-    // 失败处理：记录日志，继续执行（不影响下载/安装本身）
+    // 失败处理：写入本地持久化队列，网络恢复后重试
     virtual ::grpc::Status ReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::terminal_agent::v1::ReleaseStatusResponse* response) = 0;
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>> AsyncReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>>(AsyncReportReleaseStatusRaw(context, request, cq));
     }
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>> PrepareAsyncReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>>(PrepareAsyncReportReleaseStatusRaw(context, request, cq));
+    }
+    // PushCommand：CLI / 管理端向设备推送指令
+    // 内部通过 ConnectionManager 发送到设备的 CommandStream
+    //
+    // 使用场景：CLI 执行 batch reboot / batch config 等命令时调用
+    // 注意：device_id 从 Command.device_id 字段获取
+    virtual ::grpc::Status PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::terminal_agent::v1::CommandResultResponse* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>> AsyncPushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>>(AsyncPushCommandRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>> PrepareAsyncPushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>>(PrepareAsyncPushCommandRaw(context, request, cq));
     }
     class async_interface {
      public:
@@ -156,14 +169,22 @@ class DeviceService final {
       // 注意：command_id 必须与收到的 Command.command_id 一致
       virtual void ReportCommandResult(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult* request, ::terminal_agent::v1::CommandResultResponse* response, std::function<void(::grpc::Status)>) = 0;
       virtual void ReportCommandResult(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult* request, ::terminal_agent::v1::CommandResultResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
-      // Release 状态上报
-      // 设备在 download_ready 指令执行过程中上报下载/安装进度
+      // 下载/安装状态上报
+      // 设备在 download_ready 指令执行过程中（downloading/downloaded/installing/installed/download_failed/install_failed）
+      // 实时上报进度给服务端，用于看板展示
       //
-      // 调用频率：进度驱动（下载中 / 下载完成 / 安装中 / 安装完成 / 失败）
+      // 调用频率：下载开始、下载进度（每 256KB）、下载完成、安装完成、失败时
       // 超时建议：10 秒
-      // 失败处理：记录日志，继续执行（不影响下载/安装本身）
+      // 失败处理：写入本地持久化队列，网络恢复后重试
       virtual void ReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response, std::function<void(::grpc::Status)>) = 0;
       virtual void ReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      // PushCommand：CLI / 管理端向设备推送指令
+      // 内部通过 ConnectionManager 发送到设备的 CommandStream
+      //
+      // 使用场景：CLI 执行 batch reboot / batch config 等命令时调用
+      // 注意：device_id 从 Command.device_id 字段获取
+      virtual void PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
     };
     typedef class async_interface experimental_async_interface;
     virtual class async_interface* async() { return nullptr; }
@@ -179,6 +200,8 @@ class DeviceService final {
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>* PrepareAsyncReportCommandResultRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>* AsyncReportReleaseStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::ReleaseStatusResponse>* PrepareAsyncReportReleaseStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>* AsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::CommandResultResponse>* PrepareAsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) = 0;
   };
   class Stub final : public StubInterface {
    public:
@@ -218,6 +241,13 @@ class DeviceService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::ReleaseStatusResponse>> PrepareAsyncReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::ReleaseStatusResponse>>(PrepareAsyncReportReleaseStatusRaw(context, request, cq));
     }
+    ::grpc::Status PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::terminal_agent::v1::CommandResultResponse* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>> AsyncPushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>>(AsyncPushCommandRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>> PrepareAsyncPushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>>(PrepareAsyncPushCommandRaw(context, request, cq));
+    }
     class async final :
       public StubInterface::async_interface {
      public:
@@ -231,6 +261,8 @@ class DeviceService final {
       void ReportCommandResult(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult* request, ::terminal_agent::v1::CommandResultResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
       void ReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response, std::function<void(::grpc::Status)>) override;
       void ReportReleaseStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, std::function<void(::grpc::Status)>) override;
+      void PushCommand(::grpc::ClientContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
      private:
       friend class Stub;
       explicit async(Stub* stub): stub_(stub) { }
@@ -252,11 +284,14 @@ class DeviceService final {
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* PrepareAsyncReportCommandResultRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::CommandResult& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::ReleaseStatusResponse>* AsyncReportReleaseStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::ReleaseStatusResponse>* PrepareAsyncReportReleaseStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* AsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* PrepareAsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_Heartbeat_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportStatus_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportEvent_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportCommandResult_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportReleaseStatus_;
+    const ::grpc::internal::RpcMethod rpcmethod_PushCommand_;
   };
   static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
 
@@ -295,13 +330,20 @@ class DeviceService final {
     // 失败处理：写入本地持久化队列，网络恢复后重试
     // 注意：command_id 必须与收到的 Command.command_id 一致
     virtual ::grpc::Status ReportCommandResult(::grpc::ServerContext* context, const ::terminal_agent::v1::CommandResult* request, ::terminal_agent::v1::CommandResultResponse* response);
-    // Release 状态上报
-    // 设备在 download_ready 指令执行过程中上报下载/安装进度
+    // 下载/安装状态上报
+    // 设备在 download_ready 指令执行过程中（downloading/downloaded/installing/installed/download_failed/install_failed）
+    // 实时上报进度给服务端，用于看板展示
     //
-    // 调用频率：进度驱动（下载中 / 下载完成 / 安装中 / 安装完成 / 失败）
+    // 调用频率：下载开始、下载进度（每 256KB）、下载完成、安装完成、失败时
     // 超时建议：10 秒
-    // 失败处理：记录日志，继续执行（不影响下载/安装本身）
+    // 失败处理：写入本地持久化队列，网络恢复后重试
     virtual ::grpc::Status ReportReleaseStatus(::grpc::ServerContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response);
+    // PushCommand：CLI / 管理端向设备推送指令
+    // 内部通过 ConnectionManager 发送到设备的 CommandStream
+    //
+    // 使用场景：CLI 执行 batch reboot / batch config 等命令时调用
+    // 注意：device_id 从 Command.device_id 字段获取
+    virtual ::grpc::Status PushCommand(::grpc::ServerContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response);
   };
   template <class BaseClass>
   class WithAsyncMethod_Heartbeat : public BaseClass {
@@ -403,7 +445,27 @@ class DeviceService final {
       ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_Heartbeat<WithAsyncMethod_ReportStatus<WithAsyncMethod_ReportEvent<WithAsyncMethod_ReportCommandResult<WithAsyncMethod_ReportReleaseStatus<Service > > > > > AsyncService;
+  template <class BaseClass>
+  class WithAsyncMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_PushCommand() {
+      ::grpc::Service::MarkMethodAsync(5);
+    }
+    ~WithAsyncMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestPushCommand(::grpc::ServerContext* context, ::terminal_agent::v1::Command* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::CommandResultResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Heartbeat<WithAsyncMethod_ReportStatus<WithAsyncMethod_ReportEvent<WithAsyncMethod_ReportCommandResult<WithAsyncMethod_ReportReleaseStatus<WithAsyncMethod_PushCommand<Service > > > > > > AsyncService;
   template <class BaseClass>
   class WithCallbackMethod_Heartbeat : public BaseClass {
    private:
@@ -539,7 +601,34 @@ class DeviceService final {
     virtual ::grpc::ServerUnaryReactor* ReportReleaseStatus(
       ::grpc::CallbackServerContext* /*context*/, const ::terminal_agent::v1::ReleaseStatusRequest* /*request*/, ::terminal_agent::v1::ReleaseStatusResponse* /*response*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_Heartbeat<WithCallbackMethod_ReportStatus<WithCallbackMethod_ReportEvent<WithCallbackMethod_ReportCommandResult<WithCallbackMethod_ReportReleaseStatus<Service > > > > > CallbackService;
+  template <class BaseClass>
+  class WithCallbackMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_PushCommand() {
+      ::grpc::Service::MarkMethodCallback(5,
+          new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response) { return this->PushCommand(context, request, response); }));}
+    void SetMessageAllocatorFor_PushCommand(
+        ::grpc::MessageAllocator< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(5);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* PushCommand(
+      ::grpc::CallbackServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Heartbeat<WithCallbackMethod_ReportStatus<WithCallbackMethod_ReportEvent<WithCallbackMethod_ReportCommandResult<WithCallbackMethod_ReportReleaseStatus<WithCallbackMethod_PushCommand<Service > > > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
   template <class BaseClass>
   class WithGenericMethod_Heartbeat : public BaseClass {
@@ -622,6 +711,23 @@ class DeviceService final {
     }
     // disable synchronous version of this method
     ::grpc::Status ReportReleaseStatus(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::ReleaseStatusRequest* /*request*/, ::terminal_agent::v1::ReleaseStatusResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_PushCommand() {
+      ::grpc::Service::MarkMethodGeneric(5);
+    }
+    ~WithGenericMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -724,6 +830,26 @@ class DeviceService final {
     }
     void RequestReportReleaseStatus(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_PushCommand() {
+      ::grpc::Service::MarkMethodRaw(5);
+    }
+    ~WithRawMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestPushCommand(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -834,6 +960,28 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     virtual ::grpc::ServerUnaryReactor* ReportReleaseStatus(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_PushCommand() {
+      ::grpc::Service::MarkMethodRawCallback(5,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->PushCommand(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* PushCommand(
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
@@ -971,9 +1119,36 @@ class DeviceService final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status StreamedReportReleaseStatus(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::terminal_agent::v1::ReleaseStatusRequest,::terminal_agent::v1::ReleaseStatusResponse>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<Service > > > > > StreamedUnaryService;
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_PushCommand : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_PushCommand() {
+      ::grpc::Service::MarkMethodStreamed(5,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>* streamer) {
+                       return this->StreamedPushCommand(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_PushCommand() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status PushCommand(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedPushCommand(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::terminal_agent::v1::Command,::terminal_agent::v1::CommandResultResponse>* server_unary_streamer) = 0;
+  };
+  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > StreamedUnaryService;
   typedef Service SplitStreamedService;
-  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<Service > > > > > StreamedService;
+  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > StreamedService;
 };
 
 // ─── CommandService ──────────────────────────────────────
