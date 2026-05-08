@@ -250,12 +250,21 @@ bool DeviceClient::report_command_result(
 
 bool DeviceClient::report_release_status(
         const terminal_agent::v1::ReleaseStatusRequest& status) {
+    terminal_agent::v1::ReleaseStatusRequest request(status);
+    if (request.device_id().empty()) {
+        request.set_device_id(config_.auth.device_id);
+    }
+    if (request.device_id().empty()) {
+        LOG_ERROR("ReportReleaseStatus skipped: device_id is empty");
+        return false;
+    }
+
     terminal_agent::v1::ReleaseStatusResponse resp;
     grpc::ClientContext ctx;
     ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(10));
     set_auth_metadata(ctx);
 
-    grpc::Status st = device_stub_->ReportReleaseStatus(&ctx, status, &resp);
+    grpc::Status st = device_stub_->ReportReleaseStatus(&ctx, request, &resp);
     if (!st.ok()) {
         LOG_ERROR("ReportReleaseStatus failed: " + st.error_message());
         return false;
