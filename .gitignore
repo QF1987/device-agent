@@ -37,3 +37,5 @@ gen/
 # android/grpc-android-prebuilt/<ABI>/
 build-verify/
 tools/protoc-*
+.gitnexus
+.grpc-build/
