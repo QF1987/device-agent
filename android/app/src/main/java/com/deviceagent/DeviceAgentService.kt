@@ -10,6 +10,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.widget.Toast
 import com.deviceagent.install.IAppInstaller
 import com.deviceagent.install.InstallEvent
@@ -22,6 +23,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.lang.ref.WeakReference
+import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
 
@@ -29,9 +31,317 @@ import org.json.JSONObject
 private const val PREFS_NAME = "device_agent_config"
 private const val KEY_SERVER_URL = "server_url"
 private const val KEY_DEVICE_ID = "device_id"
+private const val PENDING_INSTALL_FILE = "pending_release_install.json"
 private var cfgServerUrl: String = ""
 private var cfgDeviceId: String = ""
 private var mainServiceRef: WeakReference<DeviceAgentService>? = null
+
+private const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
+private const val PROGRESS_MIN_BYTES = 1L * 1024 * 1024
+private const val ACTION_VIEW_INSTALL_TIMEOUT_MS = 2 * 60 * 1000L
+private const val TRANSIENT_NOTIFICATION_MS = 10_000L
+private const val IDLE_NOTIFICATION_TEXT = "device-agent running"
+
+internal fun shouldReportProgress(
+    lastReportTimeMs: Long,
+    lastReportBytes: Long,
+    nowMs: Long,
+    absBytes: Long,
+    totalBytes: Long
+): Boolean {
+    if (lastReportTimeMs == 0L) return true
+    if (nowMs - lastReportTimeMs >= PROGRESS_REPORT_INTERVAL_MS) return true
+    if (totalBytes > 0) {
+        val threshold = maxOf(totalBytes / 20, PROGRESS_MIN_BYTES)
+        if (absBytes - lastReportBytes >= threshold) return true
+    }
+    return false
+}
+
+internal fun buildDownloadText(absBytes: Long, totalBytes: Long): String {
+    val absMb = maxOf(absBytes, 0L) / (1024 * 1024)
+    if (totalBytes <= 0) return "⏬ 下载 ${absMb}MB"
+    val totalMb = maxOf(totalBytes, 0L) / (1024 * 1024)
+    val pct = ((absBytes * 100) / totalBytes).coerceIn(0, 100)
+    return "⏬ 下载 ${pct}% (${absMb}/${totalMb}MB)"
+}
+
+internal data class OrphanPartCleanupResult(val scanned: Int, val deleted: Int, val kept: Int)
+
+internal fun cleanupOrphanPartFiles(downloadDir: File, nowMs: Long = System.currentTimeMillis()): OrphanPartCleanupResult {
+    var scanned = 0
+    var deleted = 0
+    var kept = 0
+    try {
+        val staleAfterMs = TimeUnit.DAYS.toMillis(7)
+        val parts = downloadDir.listFiles { _, name -> name.endsWith(".part") } ?: emptyArray()
+        for (part in parts) {
+            scanned += 1
+            val ageMs = nowMs - part.lastModified()
+            if (ageMs > staleAfterMs) {
+                val size = part.length()
+                if (part.delete()) {
+                    deleted += 1
+                    android.util.Log.i("DeviceAgentService", "delete orphan: name=${part.name}, age=${TimeUnit.MILLISECONDS.toDays(ageMs)}d, size=$size")
+                } else {
+                    kept += 1
+                    android.util.Log.w("DeviceAgentService", "delete orphan failed: name=${part.name}, age=${TimeUnit.MILLISECONDS.toDays(ageMs)}d, size=$size")
+                }
+            } else {
+                kept += 1
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("DeviceAgentService", "orphan .part cleanup failed: ${e.message}")
+    }
+    android.util.Log.i("DeviceAgentService", "orphan .part cleanup: scanned=$scanned, deleted=$deleted, kept=$kept")
+    return OrphanPartCleanupResult(scanned, deleted, kept)
+}
+
+private fun resumableDownload(
+    url: String,
+    dest: File,
+    expectedDigest: String,
+    digestAlgo: String,
+    enableHeadProbe: Boolean,
+    progress: ((Long, Long) -> Unit)? = null
+): Boolean {
+    val partFile = File(dest.absolutePath + ".part")
+
+    fun safeUrlLabel(raw: String): String {
+        return try {
+            val u = URL(raw)
+            (u.host + u.path).take(64)
+        } catch (_: Exception) {
+            "<invalid-url>"
+        }
+    }
+
+    fun parseContentRangeStart(contentRange: String?): Long? {
+        if (contentRange.isNullOrBlank()) return null
+        val match = Regex("""bytes\s+(\d+)-\d+/\d+|\*""").find(contentRange) ?: return null
+        return match.groupValues.getOrNull(1)?.toLongOrNull()
+    }
+
+    fun parseContentRangeTotal(contentRange: String?): Long {
+        if (contentRange.isNullOrBlank()) return -1L
+        return contentRange.substringAfterLast('/', "").toLongOrNull() ?: -1L
+    }
+
+    fun notifyProgress(absBytes: Long, totalBytes: Long) {
+        try {
+            progress?.invoke(absBytes, totalBytes)
+        } catch (e: Exception) {
+            android.util.Log.w("DeviceAgentService", "progress callback threw: ${e.message}")
+        }
+    }
+
+    fun seedDigestFromPart(digest: MessageDigest, existingSize: Long): Boolean {
+        val startedAt = System.currentTimeMillis()
+        var seeded = 0L
+        return try {
+            java.io.FileInputStream(partFile).use { input ->
+                val buf = ByteArray(8192)
+                var n: Int
+                while (input.read(buf).also { n = it } != -1) {
+                    digest.update(buf, 0, n)
+                    seeded += n.toLong()
+                }
+            }
+            val took = System.currentTimeMillis() - startedAt
+            android.util.Log.i("DeviceAgentService", "seed digest from .part: bytes=$seeded, took=${took}ms")
+            seeded == existingSize
+        } catch (e: Exception) {
+            android.util.Log.w("DeviceAgentService", "seed digest from .part failed: ${e.message}")
+            false
+        }
+    }
+
+    fun movePartToDest(): Boolean {
+        try { if (dest.exists()) dest.delete() } catch (_: Exception) {}
+        val renamed = partFile.renameTo(dest)
+        android.util.Log.i("DeviceAgentService", "rename .part -> ${dest.name}: ok=$renamed")
+        if (renamed) return true
+
+        android.util.Log.e("DeviceAgentService", "rename .part -> ${dest.name}: ok=false, falling back to copy")
+        return try {
+            java.io.FileInputStream(partFile).use { input ->
+                java.io.FileOutputStream(dest, false).use { output ->
+                    val buf = ByteArray(8192)
+                    var n: Int
+                    while (input.read(buf).also { n = it } != -1) {
+                        output.write(buf, 0, n)
+                    }
+                }
+            }
+            partFile.delete()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceAgentService", "copy .part -> ${dest.name} failed: ${e.message}")
+            try { dest.delete() } catch (_: Exception) {}
+            false
+        }
+    }
+
+    fun verifyCompletePart(existingSize: Long): Boolean {
+        val digest = MessageDigest.getInstance(digestAlgo)
+        if (!seedDigestFromPart(digest, existingSize)) {
+            partFile.delete()
+            return false
+        }
+        notifyProgress(existingSize, existingSize)
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        val ok = expectedDigest.isEmpty() || actual.equals(expectedDigest, true)
+        android.util.Log.i("DeviceAgentService", "$digestAlgo ${if (ok) "ok" else "MISMATCH"}: expected=$expectedDigest actual=$actual")
+        if (!ok) {
+            partFile.delete()
+            try { dest.delete() } catch (_: Exception) {}
+            return false
+        }
+        return movePartToDest()
+    }
+
+    var existingSize = if (partFile.exists()) partFile.length() else 0L
+    android.util.Log.i("DeviceAgentService", "resumableDownload: algo=$digestAlgo, headProbe=$enableHeadProbe, existingSize=$existingSize")
+    while (true) {
+        var conn: HttpURLConnection? = null
+        try {
+            if (enableHeadProbe && existingSize > 0) {
+                var headConn: HttpURLConnection? = null
+                val startedAt = System.currentTimeMillis()
+                try {
+                    headConn = URL(url).openConnection() as HttpURLConnection
+                    headConn.requestMethod = "HEAD"
+                    headConn.connectTimeout = 3000
+                    headConn.readTimeout = 5000
+                    val code = headConn.responseCode
+                    val serverSize = headConn.getHeaderField("X-File-Size")?.toLongOrNull()
+                    val serverSha = headConn.getHeaderField("X-File-SHA256")
+                    val took = System.currentTimeMillis() - startedAt
+                    android.util.Log.i("DeviceAgentService", "HEAD probe: code=$code, X-File-Size=$serverSize, X-File-SHA256=$serverSha, took=${took}ms")
+                    if (code != HttpURLConnection.HTTP_OK) {
+                        android.util.Log.w("DeviceAgentService", "HEAD failed (code=$code), falling back to GET with Range")
+                    } else if (!serverSha.isNullOrBlank() && expectedDigest.isNotEmpty() && !serverSha.equals(expectedDigest, true)) {
+                        android.util.Log.w("DeviceAgentService", "HEAD SHA mismatch: expected=$expectedDigest, server=$serverSha, dropping .part")
+                        partFile.delete()
+                        existingSize = 0L
+                    } else if (serverSize != null && existingSize >= serverSize) {
+                        android.util.Log.i("DeviceAgentService", "HEAD says download already complete, verifying .part directly")
+                        return if (verifyCompletePart(existingSize)) {
+                            true
+                        } else {
+                            existingSize = 0L
+                            continue
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("DeviceAgentService", "HEAD failed (${e.message}), falling back to GET with Range")
+                } finally {
+                    headConn?.disconnect()
+                }
+            }
+            val useRange = existingSize > 0
+            android.util.Log.i("DeviceAgentService", "download ${safeUrlLabel(url)} existingSize=$existingSize, useRange=$useRange")
+            conn = URL(url).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
+            conn.setRequestProperty("Accept", "application/octet-stream")
+            if (useRange) conn.setRequestProperty("Range", "bytes=${existingSize}-")
+
+            val code = conn.responseCode
+            val contentRange = conn.getHeaderField("Content-Range")
+            android.util.Log.i("DeviceAgentService", "HTTP code=$code, Content-Range=$contentRange")
+
+            when (code) {
+                HttpURLConnection.HTTP_NOT_FOUND -> {
+                    partFile.delete()
+                    return false
+                }
+                416 -> {
+                    android.util.Log.w("DeviceAgentService", "416 detected, dropping .part and retrying full download")
+                    partFile.delete()
+                    existingSize = 0L
+                    conn.disconnect()
+                    continue
+                }
+                HttpURLConnection.HTTP_OK -> {
+                    if (useRange) android.util.Log.w("DeviceAgentService", "200 OK ignoring Range, restarting from 0")
+                    existingSize = 0L
+                }
+                HttpURLConnection.HTTP_PARTIAL -> {
+                    val start = parseContentRangeStart(contentRange)
+                    if (start != existingSize) {
+                        android.util.Log.w("DeviceAgentService", "Content-Range mismatch: start=$start existingSize=$existingSize, restarting")
+                        partFile.delete()
+                        existingSize = 0L
+                        conn.disconnect()
+                        continue
+                    }
+                }
+                else -> {
+                    return false
+                }
+            }
+
+            val totalBytes = when (code) {
+                HttpURLConnection.HTTP_PARTIAL -> {
+                    val total = parseContentRangeTotal(contentRange)
+                    if (total > 0) total else {
+                        val contentLength = conn.contentLengthLong
+                        if (contentLength >= 0) existingSize + contentLength else -1L
+                    }
+                }
+                HttpURLConnection.HTTP_OK -> {
+                    val contentLength = conn.contentLengthLong
+                    if (contentLength >= 0) contentLength else -1L
+                }
+                else -> -1L
+            }
+            val digest = MessageDigest.getInstance(digestAlgo)
+            val append = code == HttpURLConnection.HTTP_PARTIAL && existingSize > 0
+            if (append && !seedDigestFromPart(digest, existingSize)) {
+                partFile.delete()
+                existingSize = 0L
+                conn.disconnect()
+                continue
+            }
+
+            var downloadedBytes = existingSize
+            java.io.FileOutputStream(partFile, append).use { fos ->
+                conn.inputStream.use { inp ->
+                    val buf = ByteArray(8192)
+                    var n: Int
+                    while (inp.read(buf).also { n = it } != -1) {
+                        digest.update(buf, 0, n)
+                        fos.write(buf, 0, n)
+                        downloadedBytes += n.toLong()
+                        notifyProgress(downloadedBytes, totalBytes)
+                    }
+                }
+            }
+            conn.disconnect()
+
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            val ok = expectedDigest.isEmpty() || actual.equals(expectedDigest, true)
+            android.util.Log.i("DeviceAgentService", "$digestAlgo ${if (ok) "ok" else "MISMATCH"}: expected=$expectedDigest actual=$actual")
+            if (!ok) {
+                partFile.delete()
+                try { dest.delete() } catch (_: Exception) {}
+                return false
+            }
+            return movePartToDest()
+        } catch (e: java.io.IOException) {
+            android.util.Log.e("DeviceAgentService", "download error: ${e.message}")
+            conn?.disconnect()
+            return false
+        } catch (e: Exception) {
+            android.util.Log.e("DeviceAgentService", "download error: ${e.message}")
+            conn?.disconnect()
+            return false
+        } finally {
+            conn?.disconnect()
+        }
+    }
+}
 
 object UpgradingMark {
     private const val MARK_FILE = "upgrading"
@@ -74,7 +384,7 @@ class DeviceAgentService : Service() {
         }
 
         @JvmStatic
-        external fun nativeStart(service: Any, host: String, port: Int): Int
+        external fun nativeStart(service: Any, host: String, port: Int, deviceId: String): Int
         @JvmStatic
         external fun nativeStop()
         @JvmStatic
@@ -107,7 +417,7 @@ class DeviceAgentService : Service() {
         try { File(filesDir, "upgrading").delete(); File(filesDir, "upgrading.tmp").delete(); File(filesDir, "skip_cmds.txt").delete(); File(filesDir, "pending_upgrade").delete() } catch (e: Exception) {}
         // 取消可能残留的重启闹钟（上次启动成功，不需要了）
         RestartReceiver.cancelRestart(this)
-        mkChannel(); startForeground(NOTIFICATION_ID, mkNotification("device-agent running"))
+        mkChannel(); startForeground(NOTIFICATION_ID, mkNotification(IDLE_NOTIFICATION_TEXT))
         // 方案 B: gRPC streaming 替代 HTTP polling
         // gRPC 端口固定 9090，HTTP API 端口 8080
         val (parsedHost, _) = try {
@@ -119,8 +429,11 @@ class DeviceAgentService : Service() {
         }
         val grpcPort = 9090
         android.util.Log.i(TAG, "Starting native gRPC: host=$parsedHost port=$grpcPort")
-        val ret = nativeStart(this, parsedHost, grpcPort)
+        val ret = nativeStart(this, parsedHost, grpcPort, cfgDeviceId)
         android.util.Log.i(TAG, "nativeStart returned: $ret")
+        android.os.Handler(mainLooper).postDelayed({
+            completeRecoveredInstallIfNeeded()
+        }, 3_000)
         // 15秒后检查本地 download 目录，如有 APK 则自升级
         android.os.Handler(mainLooper).postDelayed({
             android.util.Log.i(TAG, "Checking for local APK to self-upgrade...")
@@ -166,6 +479,7 @@ class DeviceAgentService : Service() {
                 android.util.Log.i(TAG, "No local APK found in ${downloadDir.absolutePath}")
             }
         }, 15_000)
+        cleanupOrphanPartFiles(File(filesDir, "downloads"))
     }
     override fun onStartCommand(i: Intent?, f: Int, s: Int): Int {
         val urlExtra = i?.getStringExtra("server_url")
@@ -263,7 +577,20 @@ class DeviceAgentService : Service() {
         val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fileId.apk")
         reportReleaseStatus(batchId, fileId, "downloading")
         updateNotification("⏬ 正在下载...")
-        if (!downloadFile(url, dest, sha)) {
+        var lastReportTimeMs = 0L
+        var lastReportBytes = 0L
+        if (!downloadFile(url, dest, sha) { absBytes, totalBytes ->
+            val nowMs = SystemClock.elapsedRealtime()
+            if (shouldReportProgress(lastReportTimeMs, lastReportBytes, nowMs, absBytes, totalBytes)) {
+                reportReleaseStatus(batchId, fileId, "downloading", absBytes)
+                updateNotification(buildDownloadText(absBytes, totalBytes))
+                val intervalMs = if (lastReportTimeMs == 0L) 0L else nowMs - lastReportTimeMs
+                val pct = if (totalBytes > 0) ((absBytes * 100) / totalBytes).coerceIn(0, 100) else -1
+                android.util.Log.i(TAG, "progress reported: abs=$absBytes total=$totalBytes pct=${pct}% intervalMs=$intervalMs")
+                lastReportTimeMs = nowMs
+                lastReportBytes = absBytes
+            }
+        }) {
             synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
             reportCommandStatus(fileId, "failed", "Download failed")
             reportReleaseStatus(batchId, fileId, "download_failed")
@@ -280,6 +607,7 @@ class DeviceAgentService : Service() {
         RestartReceiver.scheduleRestart(this)
         // 记录当前版本号，RestartReceiver 用于判断升级是否完成
         try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
+        writePendingInstall(batchId, fileId)
         installer.install(dest) { result ->
             if (result.success) {
                 // 记录 sessionId → (batchId, fileId)，等 InstallEventBus 推送最终结果
@@ -287,6 +615,8 @@ class DeviceAgentService : Service() {
                     synchronized(pendingInstalls) {
                         pendingInstalls[result.sessionId] = PendingInstall(batchId, fileId)
                     }
+                } else {
+                    scheduleActionViewInstallTimeout(batchId, fileId, dest)
                 }
                 // Silent mode: install 是同步的，可能已经完成
                 if (installer.mode == "silent") {
@@ -299,6 +629,7 @@ class DeviceAgentService : Service() {
                 android.util.Log.e(TAG, "${installer.mode} install failed: ${result.message}")
                 reportCommandStatus(fileId, "failed", result.message)
                 reportReleaseStatus(batchId, fileId, "install_failed")
+                clearPendingInstall()
                 UpgradingMark.clear(svc)
                 removeSkip(fileId)
                 try { dest.delete() } catch (_: Exception) {}
@@ -310,7 +641,7 @@ class DeviceAgentService : Service() {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) return
         if (url.isEmpty()) return
-        val fid = "upgrade_${System.currentTimeMillis()}"
+        val fid = stableUpgradeFileId(url, md5)
         val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
         if (!downloadFileMD5(url, dest, md5)) {
             reportCommandStatus(fid, "failed", "Download failed"); return
@@ -320,19 +651,38 @@ class DeviceAgentService : Service() {
         RestartReceiver.scheduleRestart(this)
         // 记录当前版本号，RestartReceiver 用于判断升级是否完成
         try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
+        writePendingInstall("", fid)
         installer.install(dest) { result ->
             if (result.success) {
                 if (result.sessionId > 0) {
                     synchronized(pendingInstalls) {
                         pendingInstalls[result.sessionId] = PendingInstall("", fid)
                     }
+                } else {
+                    scheduleActionViewInstallTimeout("", fid, dest)
                 }
             } else {
                 reportCommandStatus(fid, "failed", result.message)
+                clearPendingInstall()
                 UpgradingMark.clear(svc); removeSkip(fid)
+                try { dest.delete() } catch (_: Exception) {}
             }
-            try { dest.delete() } catch (_: Exception) {}
         }
+    }
+
+    private fun scheduleActionViewInstallTimeout(batchId: String, fileId: String, apkFile: File) {
+        android.util.Log.i(TAG, "schedule action-view install timeout: file=$fileId timeoutMs=$ACTION_VIEW_INSTALL_TIMEOUT_MS")
+        android.os.Handler(mainLooper).postDelayed({
+            failPendingActionViewInstallIfUnchanged(batchId, fileId, apkFile)
+        }, ACTION_VIEW_INSTALL_TIMEOUT_MS)
+    }
+
+    private fun stableUpgradeFileId(url: String, md5: String): String {
+        val key = "$url\n$md5"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "upgrade_${digest.take(16)}"
     }
 
     // ─── Reporting helpers ──────────────────────────────────────
@@ -359,44 +709,15 @@ class DeviceAgentService : Service() {
         }.start()
     }
 
-    private fun downloadFile(url: String, dest: File, sha: String): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
-            val d = java.security.MessageDigest.getInstance("SHA-256")
-            java.io.FileOutputStream(dest).use { fos ->
-                conn.inputStream.use { inp ->
-                    val buf = ByteArray(8192); var n: Int
-                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
-                }
-            }; conn.disconnect()
-            val actual = d.digest().joinToString("") { "%02x".format(it) }
-            if (sha.isNotEmpty() && !actual.equals(sha, true)) { android.util.Log.e(TAG, "SHA256 mismatch"); dest.delete(); return false }
-            android.util.Log.i(TAG, "SHA256 OK: $actual"); true
-        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
-    }
+    private fun downloadFile(
+        url: String,
+        dest: File,
+        sha: String,
+        progress: ((absBytes: Long, totalBytes: Long) -> Unit)? = null
+    ): Boolean = resumableDownload(url, dest, sha, "SHA-256", enableHeadProbe = true, progress)
 
     private fun downloadFileMD5(url: String, dest: File, md5: String): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            if (conn.responseCode != 200 && conn.responseCode != 206) { conn.disconnect(); return false }
-            val d = java.security.MessageDigest.getInstance("MD5")
-            java.io.FileOutputStream(dest).use { fos ->
-                conn.inputStream.use { inp ->
-                    val buf = ByteArray(8192); var n: Int
-                    while (inp.read(buf).also { n = it } != -1) { d.update(buf, 0, n); fos.write(buf, 0, n) }
-                }
-            }; conn.disconnect()
-            val actual = d.digest().joinToString("") { "%02x".format(it) }
-            if (md5.isNotEmpty() && !actual.equals(md5, true)) { android.util.Log.e(TAG, "MD5 mismatch"); dest.delete(); return false }
-            android.util.Log.i(TAG, "MD5 OK: $actual"); true
-        } catch (e: Exception) { android.util.Log.e(TAG, "download error: ${e.message}"); conn?.disconnect(); false }
+        return resumableDownload(url, dest, md5, "MD5", enableHeadProbe = false, progress = null)
     }
 
     private fun mkNotification(text: String): Notification {
@@ -420,6 +741,15 @@ class DeviceAgentService : Service() {
         }
     }
 
+    private fun updateNotificationTemporarily(text: String) {
+        updateNotification(text)
+        android.os.Handler(mainLooper).postDelayed({
+            if (!UpgradingMark.isUpgrading(this)) {
+                updateNotification(IDLE_NOTIFICATION_TEXT)
+            }
+        }, TRANSIENT_NOTIFICATION_MS)
+    }
+
     private val skipFile: File get() = File("/data/data/com.deviceagent/files/skip_cmds.txt")
     private val inFlightCmds = mutableSetOf<String>()
     private val inFlightFiles = mutableSetOf<String>()
@@ -427,6 +757,90 @@ class DeviceAgentService : Service() {
     /** 等待安装结果的任务映射：sessionId → {batchId, fileId} */
     private data class PendingInstall(val batchId: String, val fileId: String)
     private val pendingInstalls = mutableMapOf<Int, PendingInstall>()
+
+    private fun pendingInstallFile(): File = File(filesDir, PENDING_INSTALL_FILE)
+
+    private fun writePendingInstall(batchId: String, fileId: String) {
+        try {
+            val curVersion = packageManager.getPackageInfo(packageName, 0).longVersionCode
+            val marker = JSONObject().apply {
+                put("batch_id", batchId)
+                put("file_id", fileId)
+                put("started_at", System.currentTimeMillis())
+                put("version_code", curVersion)
+            }
+            pendingInstallFile().writeText(marker.toString())
+            android.util.Log.i(TAG, "pending install marker written: batch=$batchId file=$fileId version=$curVersion")
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "write pending install marker failed: ${e.message}")
+        }
+    }
+
+    private fun clearPendingInstall() {
+        try { pendingInstallFile().delete() } catch (_: Exception) {}
+    }
+
+    private fun failPendingActionViewInstallIfUnchanged(batchId: String, fileId: String, apkFile: File) {
+        val markerFile = pendingInstallFile()
+        if (!markerFile.exists()) return
+        try {
+            val marker = JSONObject(markerFile.readText())
+            val markerFileId = marker.optString("file_id", "")
+            if (markerFileId != fileId) return
+
+            val startedAt = marker.optLong("started_at", 0L)
+            val oldVersion = marker.optLong("version_code", 0L)
+            val info = packageManager.getPackageInfo(packageName, 0)
+            val installChanged = info.lastUpdateTime >= startedAt || info.longVersionCode != oldVersion
+            if (installChanged) {
+                android.util.Log.i(TAG, "action-view install timeout saw completed install: file=$fileId lastUpdate=${info.lastUpdateTime}")
+                completeRecoveredInstallIfNeeded()
+                return
+            }
+
+            android.util.Log.w(TAG, "action-view install timed out/cancelled: batch=$batchId file=$fileId")
+            updateNotificationTemporarily("❌ 安装未完成")
+            Thread { reportCommandStatus(fileId, "failed", "Install cancelled or timed out") }.start()
+            if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "install_failed")
+            clearPendingInstall()
+            RestartReceiver.cancelRestart(this)
+            try { File(filesDir, "pending_upgrade").delete() } catch (_: Exception) {}
+            UpgradingMark.clear(this)
+            removeSkip(fileId)
+            try { apkFile.delete() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "action-view install timeout check failed: ${e.message}")
+        }
+    }
+
+    private fun completeRecoveredInstallIfNeeded() {
+        val markerFile = pendingInstallFile()
+        if (!markerFile.exists()) return
+        try {
+            val marker = JSONObject(markerFile.readText())
+            val batchId = marker.optString("batch_id", "")
+            val fileId = marker.optString("file_id", "")
+            val startedAt = marker.optLong("started_at", 0L)
+            val oldVersion = marker.optLong("version_code", 0L)
+            val info = packageManager.getPackageInfo(packageName, 0)
+            val installChanged = info.lastUpdateTime >= startedAt || info.longVersionCode != oldVersion
+            if (!installChanged || fileId.isEmpty()) {
+                android.util.Log.i(TAG, "pending install not completed yet: file=$fileId started=$startedAt lastUpdate=${info.lastUpdateTime}")
+                return
+            }
+            android.util.Log.i(TAG, "Recovered install completion: batch=$batchId file=$fileId version=${info.longVersionCode} lastUpdate=${info.lastUpdateTime}")
+            reportCommandStatus(fileId, "completed", "Installed after package restart")
+            if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "installed")
+            clearPendingInstall()
+            RestartReceiver.cancelRestart(this)
+            try { File(filesDir, "pending_upgrade").delete() } catch (_: Exception) {}
+            UpgradingMark.clear(this)
+            removeSkip(fileId)
+            try { File(filesDir, "downloads/$fileId.apk").delete() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "complete recovered install failed: ${e.message}")
+        }
+    }
 
     /** 处理 InstallEventBus 推送的安装结果 */
     private fun handleInstallEvent(event: InstallEvent) {
@@ -440,6 +854,7 @@ class DeviceAgentService : Service() {
                 File(filesDir, "pending_upgrade").delete()
                 reportCommandStatus(info.fileId, "completed", "Installed via ${installer.mode}")
                 if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "installed")
+                clearPendingInstall()
                 UpgradingMark.clear(this)
                 removeSkip(info.fileId)
                 try { File(filesDir, "downloads/${info.fileId}.apk").delete() } catch (_: Exception) {}
@@ -456,6 +871,7 @@ class DeviceAgentService : Service() {
                 File(filesDir, "pending_upgrade").delete()
                 reportCommandStatus(info.fileId, "failed", event.error)
                 if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "install_failed")
+                clearPendingInstall()
                 UpgradingMark.clear(this)
                 removeSkip(info.fileId)
             }

@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import org.json.JSONObject
 
 /**
  * 升级后自动重启 Service（AlarmManager + 双重闹钟方案）
@@ -26,7 +27,7 @@ class RestartReceiver : BroadcastReceiver() {
             try {
                 val oldVersion = pendingFile.readText().trim().toLongOrNull() ?: 0
                 val curVersion = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
-                if (curVersion != oldVersion) {
+                if (curVersion != oldVersion || installPackageWasReplaced(context)) {
                     // 升级完成 → 设 1 秒闹钟，AlarmManager 直接发 FgService intent
                     android.util.Log.i(TAG, "Upgrade detected: $oldVersion → $curVersion, scheduling fg-launch alarm")
                     pendingFile.delete()
@@ -52,6 +53,20 @@ class RestartReceiver : BroadcastReceiver() {
         const val TAG = "RestartReceiver"
         const val ACTION_RESTART = "com.deviceagent.action.RESTART"
         private const val CHECK_REQUEST_CODE = 9001
+
+        private fun installPackageWasReplaced(context: Context): Boolean {
+            return try {
+                val marker = java.io.File(context.filesDir, "pending_release_install.json")
+                if (!marker.exists()) return false
+                val json = JSONObject(marker.readText())
+                val startedAt = json.optLong("started_at", 0L)
+                val lastUpdate = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+                lastUpdate >= startedAt
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Failed to check pending install marker: ${e.message}")
+                false
+            }
+        }
 
         // ─── 给 handleDownloadAndInstall / self-upgrade 调用 ───
 

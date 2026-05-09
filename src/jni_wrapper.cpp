@@ -32,7 +32,7 @@
 // ─── 前向声明 ─────────────────────────────────────────
 
 // JNI native 方法实现
-static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort);
+static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort, jstring jDeviceId);
 static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(JNIEnv* env, jclass clazz);
 static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jStatus, jlong jDownloadedBytes, jstring jErrorCode, jstring jErrorMessage);
 
@@ -53,7 +53,7 @@ static std::mutex g_client_mutex;
 static JNINativeMethod g_methods[] = {
     {
         const_cast<char*>("nativeStart"),
-        const_cast<char*>("(Ljava/lang/Object;Ljava/lang/String;I)I"),
+        const_cast<char*>("(Ljava/lang/Object;Ljava/lang/String;ILjava/lang/String;)I"),
         reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeStart_impl)
     },
     {
@@ -137,14 +137,15 @@ static bool report_command_resultJNI(const terminal_agent::v1::CommandResult& re
 }
 
 // ─── nativeStart 实现 ───────────────────────────────────
-// Kotlin 签名: nativeStart(Any, String, Int): Int
-// C++ 签名:   (JNIEnv*, jclass, jobject(service), jstring(host), jint(port)) -> jint
+// Kotlin 签名: nativeStart(Any, String, Int, String): Int
+// C++ 签名:   (JNIEnv*, jclass, jobject(service), jstring(host), jint(port), jstring(deviceId)) -> jint
 static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     JNIEnv* env,
     jclass clazz,      // DeviceAgentService class (static method)
     jobject serviceObj, // passed Service instance (Any)
     jstring jServerHost,
-    jint jServerPort) {
+    jint jServerPort,
+    jstring jDeviceId) {
 
     (void)clazz;
 
@@ -159,6 +160,13 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     std::string host = serverHost;
     env->ReleaseStringUTFChars(jServerHost, serverHost);
 
+    std::string deviceId;
+    if (jDeviceId != nullptr) {
+        const char* rawDeviceId = env->GetStringUTFChars(jDeviceId, nullptr);
+        deviceId = rawDeviceId;
+        env->ReleaseStringUTFChars(jDeviceId, rawDeviceId);
+    }
+
     device_agent::Config config;
     config = device_agent::Config::load_from_env();
 
@@ -166,7 +174,9 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     config.server.port = jServerPort;
     config.server.use_tls = false;
 
-    if (config.auth.device_id.empty()) {
+    if (!deviceId.empty()) {
+        config.auth.device_id = deviceId;
+    } else if (config.auth.device_id.empty()) {
         config.auth.device_id = "ANDROID-001";
     }
     if (config.auth.token.empty()) {

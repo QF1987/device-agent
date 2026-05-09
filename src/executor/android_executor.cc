@@ -76,6 +76,62 @@ static bool hasElevatedPrivileges() {
     return false;
 }
 
+static void showToast(const std::string& message);
+
+static bool isRemoteUrl(const std::string& value) {
+    return value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0;
+}
+
+static bool forwardUpgradeUrlToJava(const std::string& apkUrl, const std::string& md5, std::string& err) {
+    if (g_jvm == nullptr || g_java_service == nullptr) {
+        err = "JNI service not available for remote app upgrade";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return false;
+    }
+
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        err = "Cannot get JNIEnv for remote app upgrade";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return false;
+    }
+
+    jclass cls = env->GetObjectClass(g_java_service);
+    if (cls == nullptr) {
+        err = "Cannot get service class for remote app upgrade";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return false;
+    }
+
+    jmethodID method = env->GetMethodID(
+        cls, "onUpgradeApp", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (method == nullptr) {
+        err = "onUpgradeApp method not found in Kotlin service";
+        LOG_ERROR("AndroidExecutor: " + err);
+        env->DeleteLocalRef(cls);
+        return false;
+    }
+
+    jstring jUrl = env->NewStringUTF(apkUrl.c_str());
+    jstring jMd5 = env->NewStringUTF(md5.c_str());
+    env->CallVoidMethod(g_java_service, method, jUrl, jMd5);
+    env->DeleteLocalRef(jUrl);
+    env->DeleteLocalRef(jMd5);
+    env->DeleteLocalRef(cls);
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        err = "JNI call to onUpgradeApp failed";
+        LOG_ERROR("AndroidExecutor: " + err);
+        return false;
+    }
+
+    LOG_INFO("AndroidExecutor: remote upgrade forwarded to Kotlin onUpgradeApp");
+    showToast("App upgrade download started...");
+    return true;
+}
+
 // ─── UI 辅助 ─────────────────────────────────────────────
 
 // 通过 JNI 调用 Java UIHelper.showToast()
@@ -304,6 +360,11 @@ void AndroidExecutor::upgradeApp(const std::string& apkPath, const std::string& 
 
     if (apkPath.empty()) {
         err = "apk path is empty";
+        return;
+    }
+
+    if (isRemoteUrl(apkPath)) {
+        forwardUpgradeUrlToJava(apkPath, md5, err);
         return;
     }
 
