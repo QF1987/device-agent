@@ -82,7 +82,7 @@ static bool isRemoteUrl(const std::string& value) {
     return value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0;
 }
 
-static bool forwardUpgradeUrlToJava(const std::string& apkUrl, const std::string& md5, std::string& err) {
+static bool forwardUpgradeUrlToJava(const std::string& apkUrl, const std::string& md5, const std::string& command_id, std::string& err) {
     if (g_jvm == nullptr || g_java_service == nullptr) {
         err = "JNI service not available for remote app upgrade";
         LOG_ERROR("AndroidExecutor: " + err);
@@ -104,7 +104,7 @@ static bool forwardUpgradeUrlToJava(const std::string& apkUrl, const std::string
     }
 
     jmethodID method = env->GetMethodID(
-        cls, "onUpgradeApp", "(Ljava/lang/String;Ljava/lang/String;)V");
+        cls, "onUpgradeApp", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (method == nullptr) {
         err = "onUpgradeApp method not found in Kotlin service";
         LOG_ERROR("AndroidExecutor: " + err);
@@ -114,9 +114,11 @@ static bool forwardUpgradeUrlToJava(const std::string& apkUrl, const std::string
 
     jstring jUrl = env->NewStringUTF(apkUrl.c_str());
     jstring jMd5 = env->NewStringUTF(md5.c_str());
-    env->CallVoidMethod(g_java_service, method, jUrl, jMd5);
+    jstring jCmdId = env->NewStringUTF(command_id.c_str());
+    env->CallVoidMethod(g_java_service, method, jUrl, jMd5, jCmdId);
     env->DeleteLocalRef(jUrl);
     env->DeleteLocalRef(jMd5);
+    env->DeleteLocalRef(jCmdId);
     env->DeleteLocalRef(cls);
 
     if (env->ExceptionCheck()) {
@@ -355,8 +357,8 @@ void AndroidExecutor::upgradeFirmware(const std::string& url, const std::string&
 
 // ─── upgradeApp ───────────────────────────────────────────
 
-void AndroidExecutor::upgradeApp(const std::string& apkPath, const std::string& md5, std::string& err) {
-    LOG_INFO("AndroidExecutor: upgradeApp apk=" + apkPath + " md5=" + md5);
+void AndroidExecutor::upgradeApp(const std::string& apkPath, const std::string& md5, const std::string& command_id, std::string& err) {
+    LOG_INFO("AndroidExecutor: upgradeApp cmd_id=" + command_id);
 
     if (apkPath.empty()) {
         err = "apk path is empty";
@@ -364,7 +366,7 @@ void AndroidExecutor::upgradeApp(const std::string& apkPath, const std::string& 
     }
 
     if (isRemoteUrl(apkPath)) {
-        forwardUpgradeUrlToJava(apkPath, md5, err);
+        forwardUpgradeUrlToJava(apkPath, md5, command_id, err);
         return;
     }
 

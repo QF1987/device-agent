@@ -176,7 +176,7 @@ void LinuxExecutor::upgradeFirmware(const std::string& url, const std::string& m
 
 // ─── upgradeApp ───────────────────────────────────────────
 
-void LinuxExecutor::upgradeApp(const std::string&, const std::string&, std::string& err) {
+void LinuxExecutor::upgradeApp(const std::string&, const std::string&, const std::string&, std::string& err) {
     err = "upgradeApp is only supported on Android";
 }
 

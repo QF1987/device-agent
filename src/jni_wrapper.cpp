@@ -302,8 +302,9 @@ static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatu
 }
 
 // ─── onUpgradeApp 实现 ─────────────────────────────────
-// Kotlin: onUpgradeApp(apkUrl: String, md5: String)
-// JNI:    (JNIEnv*, jclass, jstring(url), jstring(md5)) → void
+// Kotlin: onUpgradeApp(apkUrl: String, md5: String, commandId: String)
+// JNI:    (JNIEnv*, jclass, jstring(url), jstring(md5), jstring(commandId)) → void
 // ─── onDownloadReady 实现 ────────────────────────────────
-// Kotlin: onDownloadReady(batchId, fileId, fileType, downloadUrl, sha256, fileSize)
+// Kotlin: onDownloadReady(batchId, fileId, fileType, downloadUrl, sha256, fileSize, commandId)
+// JNI:    (JNIEnv*, jclass, jstring x7, jlong(fileSize)) → void
 // JNI:    (JNIEnv*, jclass, jstring x6) → void

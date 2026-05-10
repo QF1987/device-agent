@@ -161,7 +161,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         std::string apkPath, md5;
         extract_json_string(payload, "apk_path", apkPath);
         extract_json_string(payload, "md5", md5);
-        executor->upgradeApp(apkPath, md5, err_msg);
+        LOG_INFO("CommandHandler: dispatching upgrade_app cmd_id=" + cmd.command_id());
+        executor->upgradeApp(apkPath, md5, cmd.command_id(), err_msg);
         result.set_status(err_msg.empty() ? "success" : "failed");
         result.set_message(err_msg.empty() ? "app upgrade scheduled" : err_msg);
 
@@ -202,7 +203,11 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             req.file_size = file_size;
             req.batch_id = batch_id;
             req.file_id = file_id;
+            req.command_id = cmd.command_id();
             req.file_type = file_type;
+
+            LOG_INFO("CommandHandler: dispatching download_ready cmd_id=" + cmd.command_id() +
+                     " batch=" + batch_id + " file=" + file_id);
 
             dl_mgr->download(req, nullptr, [](bool ok, const std::string& err) {
                 if (!ok) {

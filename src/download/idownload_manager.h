@@ -36,6 +36,7 @@ struct DownloadRequest {
     // 业务上下文（用于进度上报和任务追踪）
     std::string batch_id;       // 批次 ID
     std::string file_id;        // 文件 ID
+    std::string command_id;     // 指令 UUID（透传给 Kotlin 用于 reportCommandStatus）
     std::string file_type;      // 文件类型（apk / firmware / config）
 };
 

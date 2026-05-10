@@ -554,20 +554,20 @@ class DeviceAgentService : Service() {
         }.start()
     }
 
-    fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long) {
-        android.util.Log.i(TAG, "onDownloadReady: batch=$batchId file=$fileId type=$fileType url=$downloadUrl size=$fileSize")
+    fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long, commandId: String) {
+        android.util.Log.i(TAG, "onDownloadReady: cmd=$commandId batch=$batchId file=$fileId type=$fileType size=$fileSize")
         synchronized(inFlightCmds) { if (inFlightCmds.contains(fileId)) { android.util.Log.i(TAG, "Skip already in-flight: $fileId"); return } }
-        Thread { handleDownloadAndInstall(batchId, fileId, downloadUrl, sha256) }.start()
+        Thread { handleDownloadAndInstall(batchId, fileId, commandId, downloadUrl, sha256) }.start()
     }
 
-    fun onUpgradeApp(apkUrl: String, md5: String) {
-        android.util.Log.i(TAG, "onUpgradeApp: url=$apkUrl md5=$md5")
-        Thread { handleUpgradeInstall(apkUrl, md5) }.start()
+    fun onUpgradeApp(apkUrl: String, md5: String, commandId: String) {
+        android.util.Log.i(TAG, "onUpgradeApp: cmd=$commandId md5=$md5")
+        Thread { handleUpgradeInstall(apkUrl, md5, commandId) }.start()
     }
 
     // ─── Download + Install helpers ─────────────────────────────
 
-    private fun handleDownloadAndInstall(batchId: String, fileId: String, url: String, sha: String) {
+    private fun handleDownloadAndInstall(batchId: String, fileId: String, commandId: String, url: String, sha: String) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) {
             android.util.Log.i(TAG, "Already upgrading, skip download_ready")
@@ -592,31 +592,31 @@ class DeviceAgentService : Service() {
             }
         }) {
             synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
-            reportCommandStatus(fileId, "failed", "Download failed")
+            reportCommandStatus(commandId, "failed", "Download failed")
             reportReleaseStatus(batchId, fileId, "download_failed")
             return
         }
         synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
         reportReleaseStatus(batchId, fileId, "downloaded", dest.length())
-        android.util.Log.i(TAG, "Download OK, installing via ${installer.mode}")
+        android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId, installing via ${installer.mode}")
         UpgradingMark.write(svc, fileId)
-        reportCommandStatus(fileId, "installing", "Running ${installer.mode} installer")
+        reportCommandStatus(commandId, "installing", "Running ${installer.mode} installer")
         reportReleaseStatus(batchId, fileId, "installing")
         updateNotification("📦 正在安装...")
 
         RestartReceiver.scheduleRestart(this)
         // 记录当前版本号，RestartReceiver 用于判断升级是否完成
         try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
-        writePendingInstall(batchId, fileId)
+        writePendingInstall(batchId, fileId, commandId)
         installer.install(dest) { result ->
             if (result.success) {
-                // 记录 sessionId → (batchId, fileId)，等 InstallEventBus 推送最终结果
+                // 记录 sessionId → (batchId, fileId, commandId)，等 InstallEventBus 推送最终结果
                 if (result.sessionId > 0) {
                     synchronized(pendingInstalls) {
-                        pendingInstalls[result.sessionId] = PendingInstall(batchId, fileId)
+                        pendingInstalls[result.sessionId] = PendingInstall(batchId, fileId, commandId)
                     }
                 } else {
-                    scheduleActionViewInstallTimeout(batchId, fileId, dest)
+                    scheduleActionViewInstallTimeout(batchId, fileId, commandId, dest)
                 }
                 // Silent mode: install 是同步的，可能已经完成
                 if (installer.mode == "silent") {
@@ -627,7 +627,7 @@ class DeviceAgentService : Service() {
                 }
             } else {
                 android.util.Log.e(TAG, "${installer.mode} install failed: ${result.message}")
-                reportCommandStatus(fileId, "failed", result.message)
+                reportCommandStatus(commandId, "failed", result.message)
                 reportReleaseStatus(batchId, fileId, "install_failed")
                 clearPendingInstall()
                 UpgradingMark.clear(svc)
@@ -637,32 +637,32 @@ class DeviceAgentService : Service() {
         }
     }
 
-    private fun handleUpgradeInstall(url: String, md5: String) {
+    private fun handleUpgradeInstall(url: String, md5: String, commandId: String) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) return
         if (url.isEmpty()) return
         val fid = stableUpgradeFileId(url, md5)
         val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fid.apk")
         if (!downloadFileMD5(url, dest, md5)) {
-            reportCommandStatus(fid, "failed", "Download failed"); return
+            reportCommandStatus(commandId, "failed", "Download failed"); return
         }
         UpgradingMark.write(svc, fid)
-        reportCommandStatus(fid, "installing", "Running ${installer.mode} installer")
+        reportCommandStatus(commandId, "installing", "Running ${installer.mode} installer")
         RestartReceiver.scheduleRestart(this)
         // 记录当前版本号，RestartReceiver 用于判断升级是否完成
         try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
-        writePendingInstall("", fid)
+        writePendingInstall("", fid, commandId)
         installer.install(dest) { result ->
             if (result.success) {
                 if (result.sessionId > 0) {
                     synchronized(pendingInstalls) {
-                        pendingInstalls[result.sessionId] = PendingInstall("", fid)
+                        pendingInstalls[result.sessionId] = PendingInstall("", fid, commandId)
                     }
                 } else {
-                    scheduleActionViewInstallTimeout("", fid, dest)
+                    scheduleActionViewInstallTimeout("", fid, commandId, dest)
                 }
             } else {
-                reportCommandStatus(fid, "failed", result.message)
+                reportCommandStatus(commandId, "failed", result.message)
                 clearPendingInstall()
                 UpgradingMark.clear(svc); removeSkip(fid)
                 try { dest.delete() } catch (_: Exception) {}
@@ -670,10 +670,10 @@ class DeviceAgentService : Service() {
         }
     }
 
-    private fun scheduleActionViewInstallTimeout(batchId: String, fileId: String, apkFile: File) {
-        android.util.Log.i(TAG, "schedule action-view install timeout: file=$fileId timeoutMs=$ACTION_VIEW_INSTALL_TIMEOUT_MS")
+    private fun scheduleActionViewInstallTimeout(batchId: String, fileId: String, commandId: String, apkFile: File) {
+        android.util.Log.i(TAG, "schedule action-view install timeout: cmd=$commandId file=$fileId timeoutMs=$ACTION_VIEW_INSTALL_TIMEOUT_MS")
         android.os.Handler(mainLooper).postDelayed({
-            failPendingActionViewInstallIfUnchanged(batchId, fileId, apkFile)
+            failPendingActionViewInstallIfUnchanged(batchId, fileId, commandId, apkFile)
         }, ACTION_VIEW_INSTALL_TIMEOUT_MS)
     }
 
@@ -754,23 +754,24 @@ class DeviceAgentService : Service() {
     private val inFlightCmds = mutableSetOf<String>()
     private val inFlightFiles = mutableSetOf<String>()
 
-    /** 等待安装结果的任务映射：sessionId → {batchId, fileId} */
-    private data class PendingInstall(val batchId: String, val fileId: String)
+    /** 等待安装结果的任务映射：sessionId → {batchId, fileId, commandId} */
+    internal data class PendingInstall(val batchId: String, val fileId: String, val commandId: String)
     private val pendingInstalls = mutableMapOf<Int, PendingInstall>()
 
     private fun pendingInstallFile(): File = File(filesDir, PENDING_INSTALL_FILE)
 
-    private fun writePendingInstall(batchId: String, fileId: String) {
+    private fun writePendingInstall(batchId: String, fileId: String, commandId: String) {
         try {
             val curVersion = packageManager.getPackageInfo(packageName, 0).longVersionCode
             val marker = JSONObject().apply {
                 put("batch_id", batchId)
                 put("file_id", fileId)
+                put("command_id", commandId)
                 put("started_at", System.currentTimeMillis())
                 put("version_code", curVersion)
             }
             pendingInstallFile().writeText(marker.toString())
-            android.util.Log.i(TAG, "pending install marker written: batch=$batchId file=$fileId version=$curVersion")
+            android.util.Log.i(TAG, "pending install marker written: cmd=$commandId batch=$batchId file=$fileId version=$curVersion")
         } catch (e: Exception) {
             android.util.Log.w(TAG, "write pending install marker failed: ${e.message}")
         }
@@ -780,7 +781,7 @@ class DeviceAgentService : Service() {
         try { pendingInstallFile().delete() } catch (_: Exception) {}
     }
 
-    private fun failPendingActionViewInstallIfUnchanged(batchId: String, fileId: String, apkFile: File) {
+    private fun failPendingActionViewInstallIfUnchanged(batchId: String, fileId: String, commandId: String, apkFile: File) {
         val markerFile = pendingInstallFile()
         if (!markerFile.exists()) return
         try {
@@ -793,14 +794,14 @@ class DeviceAgentService : Service() {
             val info = packageManager.getPackageInfo(packageName, 0)
             val installChanged = info.lastUpdateTime >= startedAt || info.longVersionCode != oldVersion
             if (installChanged) {
-                android.util.Log.i(TAG, "action-view install timeout saw completed install: file=$fileId lastUpdate=${info.lastUpdateTime}")
+                android.util.Log.i(TAG, "action-view install timeout saw completed install: cmd=$commandId file=$fileId lastUpdate=${info.lastUpdateTime}")
                 completeRecoveredInstallIfNeeded()
                 return
             }
 
-            android.util.Log.w(TAG, "action-view install timed out/cancelled: batch=$batchId file=$fileId")
+            android.util.Log.w(TAG, "action-view install timed out/cancelled: cmd=$commandId batch=$batchId file=$fileId")
             updateNotificationTemporarily("❌ 安装未完成")
-            Thread { reportCommandStatus(fileId, "failed", "Install cancelled or timed out") }.start()
+            Thread { reportCommandStatus(commandId, "failed", "Install cancelled or timed out") }.start()
             if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "install_failed")
             clearPendingInstall()
             RestartReceiver.cancelRestart(this)
@@ -820,6 +821,7 @@ class DeviceAgentService : Service() {
             val marker = JSONObject(markerFile.readText())
             val batchId = marker.optString("batch_id", "")
             val fileId = marker.optString("file_id", "")
+            val commandId = marker.optString("command_id", "")
             val startedAt = marker.optLong("started_at", 0L)
             val oldVersion = marker.optLong("version_code", 0L)
             val info = packageManager.getPackageInfo(packageName, 0)
@@ -828,8 +830,11 @@ class DeviceAgentService : Service() {
                 android.util.Log.i(TAG, "pending install not completed yet: file=$fileId started=$startedAt lastUpdate=${info.lastUpdateTime}")
                 return
             }
-            android.util.Log.i(TAG, "Recovered install completion: batch=$batchId file=$fileId version=${info.longVersionCode} lastUpdate=${info.lastUpdateTime}")
-            reportCommandStatus(fileId, "completed", "Installed after package restart")
+            android.util.Log.i(TAG, "Recovered install completion: cmd=$commandId batch=$batchId file=$fileId version=${info.longVersionCode} lastUpdate=${info.lastUpdateTime}")
+            // 旧格式 JSON 可能无 command_id，此时仅上报 release 状态（不依赖 command_id）
+            if (commandId.isNotEmpty()) {
+                reportCommandStatus(commandId, "completed", "Installed after package restart")
+            }
             if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "installed")
             clearPendingInstall()
             RestartReceiver.cancelRestart(this)
@@ -848,11 +853,11 @@ class DeviceAgentService : Service() {
         when (event) {
             is InstallEvent.Succeeded -> {
                 val pkg = event.packageName ?: "unknown"
-                android.util.Log.i(TAG, "Install SUCCESS: session=${event.sessionId} batch=${info.batchId} file=${info.fileId}")
+                android.util.Log.i(TAG, "Install SUCCESS: session=${event.sessionId} cmd=${info.commandId} batch=${info.batchId} file=${info.fileId}")
                 updateNotification("✅ 安装成功: $pkg")
                 RestartReceiver.cancelRestart(this)  // 进程没被杀→取消闹钟；进程被杀→这行不执行
                 File(filesDir, "pending_upgrade").delete()
-                reportCommandStatus(info.fileId, "completed", "Installed via ${installer.mode}")
+                reportCommandStatus(info.commandId, "completed", "Installed via ${installer.mode}")
                 if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "installed")
                 clearPendingInstall()
                 UpgradingMark.clear(this)
@@ -861,15 +866,15 @@ class DeviceAgentService : Service() {
             }
             is InstallEvent.PendingUser -> {
                 // Normal 模式等用户确认
-                android.util.Log.i(TAG, "Install pending user confirm: session=${event.sessionId} file=${info.fileId}")
+                android.util.Log.i(TAG, "Install pending user confirm: session=${event.sessionId} cmd=${info.commandId} file=${info.fileId}")
                 updateNotification("⏳ 等待确认安装...")
             }
             is InstallEvent.Failed -> {
-                android.util.Log.e(TAG, "Install FAILED: session=${event.sessionId} batch=${info.batchId} file=${info.fileId} err=${event.error}")
+                android.util.Log.e(TAG, "Install FAILED: session=${event.sessionId} cmd=${info.commandId} batch=${info.batchId} file=${info.fileId} err=${event.error}")
                 updateNotification("❌ 安装失败: ${event.error}")
                 RestartReceiver.cancelRestart(this)  // 失败了不需要重启
                 File(filesDir, "pending_upgrade").delete()
-                reportCommandStatus(info.fileId, "failed", event.error)
+                reportCommandStatus(info.commandId, "failed", event.error)
                 if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "install_failed")
                 clearPendingInstall()
                 UpgradingMark.clear(this)

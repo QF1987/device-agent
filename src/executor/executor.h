@@ -49,9 +49,10 @@ public:
     // upgradeApp：升级 Android 应用
     //   apkUrl：APK 下载地址
     //   md5：APK MD5 校验值（可选，空字符串表示不校验）
+    //   command_id：指令 UUID（透传给 Kotlin 用于 reportCommandStatus）
     //   err：失败时填充错误描述
     // 注意：LinuxExecutor 此方法永远返回 "not supported"
-    virtual void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) = 0;
+    virtual void upgradeApp(const std::string& apkUrl, const std::string& md5, const std::string& command_id, std::string& err) = 0;
 };
 
 // ─── LinuxExecutor：Linux/macOS 实现 ─────────────────────
@@ -61,7 +62,7 @@ public:
     std::string reboot(bool force, const std::string& command_id, std::string& err) override;
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
-    void upgradeApp(const std::string& apkUrl, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& apkUrl, const std::string& md5, const std::string& command_id, std::string& err) override;
 };
 
 // ─── MacOSExecutor：macOS 专用执行器 ─────────────────────
@@ -73,7 +74,7 @@ public:
     std::string reboot(bool force, const std::string& command_id, std::string& err) override;
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
-    void upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) override;
 };
 
 // ─── AndroidExecutor：Android 专用执行器 ─────────────────
@@ -87,7 +88,7 @@ public:
     std::string reboot(bool force, const std::string& command_id, std::string& err) override;
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
-    void upgradeApp(const std::string& apkPath, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& apkPath, const std::string& md5, const std::string& command_id, std::string& err) override;
 
 private:
     // JNI fallback reboot：父进程中通过 JNI 回调 Kotlin 层执行 reboot

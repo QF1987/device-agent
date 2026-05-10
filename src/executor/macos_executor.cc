@@ -137,7 +137,7 @@ void MacOSExecutor::upgradeFirmware(const std::string& url, const std::string& m
 
 // ─── upgradeApp ───────────────────────────────────────────
 
-void MacOSExecutor::upgradeApp(const std::string& appPath, const std::string& md5, std::string& err) {
+void MacOSExecutor::upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) {
     LOG_INFO("MacOSExecutor: upgradeApp path=" + appPath + " md5=" + md5);
 
     if (appPath.empty()) {
