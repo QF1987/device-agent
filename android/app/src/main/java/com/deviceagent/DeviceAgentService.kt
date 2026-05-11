@@ -593,14 +593,13 @@ class DeviceAgentService : Service() {
         }) {
             synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
             reportCommandStatus(commandId, "failed", "Download failed")
-            reportReleaseStatus(batchId, fileId, "download_failed")
+            reportReleaseStatus(batchId, fileId, "download_failed", errorCode = "NETWORK_ERROR", errorMessage = "Download failed")
             return
         }
         synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
         reportReleaseStatus(batchId, fileId, "downloaded", dest.length())
         android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId, installing via ${installer.mode}")
         UpgradingMark.write(svc, fileId)
-        reportCommandStatus(commandId, "installing", "Running ${installer.mode} installer")
         reportReleaseStatus(batchId, fileId, "installing")
         updateNotification("📦 正在安装...")
 
@@ -628,7 +627,7 @@ class DeviceAgentService : Service() {
             } else {
                 android.util.Log.e(TAG, "${installer.mode} install failed: ${result.message}")
                 reportCommandStatus(commandId, "failed", result.message)
-                reportReleaseStatus(batchId, fileId, "install_failed")
+                reportReleaseStatus(batchId, fileId, "install_failed", errorCode = "INSTALL_ERROR", errorMessage = result.message)
                 clearPendingInstall()
                 UpgradingMark.clear(svc)
                 removeSkip(fileId)
@@ -647,7 +646,6 @@ class DeviceAgentService : Service() {
             reportCommandStatus(commandId, "failed", "Download failed"); return
         }
         UpgradingMark.write(svc, fid)
-        reportCommandStatus(commandId, "installing", "Running ${installer.mode} installer")
         RestartReceiver.scheduleRestart(this)
         // 记录当前版本号，RestartReceiver 用于判断升级是否完成
         try { File(filesDir, "pending_upgrade").writeText(packageManager.getPackageInfo(packageName, 0).longVersionCode.toString()) } catch (_: Exception) {}
@@ -699,10 +697,17 @@ class DeviceAgentService : Service() {
         } catch (e: Exception) { android.util.Log.e(TAG, "Report failed: ${e.message}") }
     }
 
-    private fun reportReleaseStatus(batchId: String, fileId: String, status: String, bytes: Long = 0) {
+    private fun reportReleaseStatus(
+        batchId: String,
+        fileId: String,
+        status: String,
+        bytes: Long = 0,
+        errorCode: String = "",
+        errorMessage: String = ""
+    ) {
         if (batchId.isEmpty()) return
         Thread {
-            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, "", "") }
+            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, errorCode, errorMessage) }
             catch (e: Exception) {
                 android.util.Log.e(TAG, "reportReleaseStatus native: ${e.message}")
             }
@@ -802,7 +807,15 @@ class DeviceAgentService : Service() {
             android.util.Log.w(TAG, "action-view install timed out/cancelled: cmd=$commandId batch=$batchId file=$fileId")
             updateNotificationTemporarily("❌ 安装未完成")
             Thread { reportCommandStatus(commandId, "failed", "Install cancelled or timed out") }.start()
-            if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "install_failed")
+            if (batchId.isNotEmpty()) {
+                reportReleaseStatus(
+                    batchId,
+                    fileId,
+                    "cancelled",
+                    errorCode = "BUSINESS_ERROR",
+                    errorMessage = "Install cancelled or timed out"
+                )
+            }
             clearPendingInstall()
             RestartReceiver.cancelRestart(this)
             try { File(filesDir, "pending_upgrade").delete() } catch (_: Exception) {}
@@ -875,7 +888,15 @@ class DeviceAgentService : Service() {
                 RestartReceiver.cancelRestart(this)  // 失败了不需要重启
                 File(filesDir, "pending_upgrade").delete()
                 reportCommandStatus(info.commandId, "failed", event.error)
-                if (info.batchId.isNotEmpty()) reportReleaseStatus(info.batchId, info.fileId, "install_failed")
+                if (info.batchId.isNotEmpty()) {
+                    reportReleaseStatus(
+                        info.batchId,
+                        info.fileId,
+                        "install_failed",
+                        errorCode = "INSTALL_ERROR",
+                        errorMessage = event.error
+                    )
+                }
                 clearPendingInstall()
                 UpgradingMark.clear(this)
                 removeSkip(info.fileId)

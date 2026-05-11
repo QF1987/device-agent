@@ -29,6 +29,7 @@
 #include "google/protobuf/message_lite.h"
 #include "google/protobuf/repeated_field.h"  // IWYU pragma: export
 #include "google/protobuf/extension_set.h"  // IWYU pragma: export
+#include "google/protobuf/generated_enum_reflection.h"
 #include "google/protobuf/unknown_field_set.h"
 // @@protoc_insertion_point(includes)
 
@@ -55,6 +56,10 @@ extern const ::google::protobuf::internal::DescriptorTable descriptor_table_term
 }  // extern "C"
 namespace terminal_agent {
 namespace v1 {
+enum ReleaseDeviceStatus : int;
+extern const uint32_t ReleaseDeviceStatus_internal_data_[];
+enum ReleaseErrorCode : int;
+extern const uint32_t ReleaseErrorCode_internal_data_[];
 class AuthContext;
 struct AuthContextDefaultTypeInternal;
 extern AuthContextDefaultTypeInternal _AuthContext_default_instance_;
@@ -123,11 +128,111 @@ extern const ::google::protobuf::internal::ClassDataFull StatusReportResponse_cl
 }  // namespace terminal_agent
 namespace google {
 namespace protobuf {
+template <>
+internal::EnumTraitsT<::terminal_agent::v1::ReleaseDeviceStatus_internal_data_>
+    internal::EnumTraitsImpl::value<::terminal_agent::v1::ReleaseDeviceStatus>;
+template <>
+internal::EnumTraitsT<::terminal_agent::v1::ReleaseErrorCode_internal_data_>
+    internal::EnumTraitsImpl::value<::terminal_agent::v1::ReleaseErrorCode>;
 }  // namespace protobuf
 }  // namespace google
 
 namespace terminal_agent {
 namespace v1 {
+enum ReleaseDeviceStatus : int {
+  RELEASE_DEVICE_STATUS_UNSPECIFIED = 0,
+  RELEASE_DEVICE_STATUS_PENDING = 1,
+  RELEASE_DEVICE_STATUS_READY = 2,
+  RELEASE_DEVICE_STATUS_DOWNLOADING = 3,
+  RELEASE_DEVICE_STATUS_DOWNLOADED = 4,
+  RELEASE_DEVICE_STATUS_INSTALLING = 5,
+  RELEASE_DEVICE_STATUS_INSTALLED = 6,
+  RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED = 7,
+  RELEASE_DEVICE_STATUS_INSTALL_FAILED = 8,
+  RELEASE_DEVICE_STATUS_CANCELLED = 9,
+  RELEASE_DEVICE_STATUS_RETRYING = 10,
+  ReleaseDeviceStatus_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::min(),
+  ReleaseDeviceStatus_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::max(),
+};
+
+extern const uint32_t ReleaseDeviceStatus_internal_data_[];
+inline constexpr ReleaseDeviceStatus ReleaseDeviceStatus_MIN =
+    static_cast<ReleaseDeviceStatus>(0);
+inline constexpr ReleaseDeviceStatus ReleaseDeviceStatus_MAX =
+    static_cast<ReleaseDeviceStatus>(10);
+[[nodiscard]] inline bool ReleaseDeviceStatus_IsValid(int value) {
+  return 0 <= value && value <= 10;
+}
+inline constexpr int ReleaseDeviceStatus_ARRAYSIZE = 10 + 1;
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+ReleaseDeviceStatus_descriptor();
+[[nodiscard]] inline auto ProtobufInternalGetEnumDescriptor(ReleaseDeviceStatus) {
+  return ReleaseDeviceStatus_descriptor();
+}
+template <typename T>
+[[nodiscard]] const ::std::string& ReleaseDeviceStatus_Name(T value) {
+  static_assert(::std::is_same<T, ReleaseDeviceStatus>::value ||
+                    ::std::is_integral<T>::value,
+                "Incorrect type passed to ReleaseDeviceStatus_Name().");
+  return ReleaseDeviceStatus_Name(static_cast<ReleaseDeviceStatus>(value));
+}
+template <>
+[[nodiscard]] inline const ::std::string& ReleaseDeviceStatus_Name(ReleaseDeviceStatus value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<ReleaseDeviceStatus_descriptor, 0, 10>(
+      static_cast<int>(value));
+}
+[[nodiscard]] inline bool ReleaseDeviceStatus_Parse(
+    ::absl::string_view name, ReleaseDeviceStatus* PROTOBUF_NONNULL value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ReleaseDeviceStatus>(ReleaseDeviceStatus_descriptor(), name,
+                                           value);
+}
+enum ReleaseErrorCode : int {
+  RELEASE_ERROR_CODE_UNSPECIFIED = 0,
+  RELEASE_ERROR_CODE_NETWORK_ERROR = 1,
+  RELEASE_ERROR_CODE_SERVER_ERROR = 2,
+  RELEASE_ERROR_CODE_STORAGE_ERROR = 3,
+  RELEASE_ERROR_CODE_CHECKSUM_FAILED = 4,
+  RELEASE_ERROR_CODE_INSTALL_ERROR = 5,
+  RELEASE_ERROR_CODE_BUSINESS_ERROR = 6,
+  ReleaseErrorCode_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::min(),
+  ReleaseErrorCode_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::max(),
+};
+
+extern const uint32_t ReleaseErrorCode_internal_data_[];
+inline constexpr ReleaseErrorCode ReleaseErrorCode_MIN =
+    static_cast<ReleaseErrorCode>(0);
+inline constexpr ReleaseErrorCode ReleaseErrorCode_MAX =
+    static_cast<ReleaseErrorCode>(6);
+[[nodiscard]] inline bool ReleaseErrorCode_IsValid(int value) {
+  return 0 <= value && value <= 6;
+}
+inline constexpr int ReleaseErrorCode_ARRAYSIZE = 6 + 1;
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+ReleaseErrorCode_descriptor();
+[[nodiscard]] inline auto ProtobufInternalGetEnumDescriptor(ReleaseErrorCode) {
+  return ReleaseErrorCode_descriptor();
+}
+template <typename T>
+[[nodiscard]] const ::std::string& ReleaseErrorCode_Name(T value) {
+  static_assert(::std::is_same<T, ReleaseErrorCode>::value ||
+                    ::std::is_integral<T>::value,
+                "Incorrect type passed to ReleaseErrorCode_Name().");
+  return ReleaseErrorCode_Name(static_cast<ReleaseErrorCode>(value));
+}
+template <>
+[[nodiscard]] inline const ::std::string& ReleaseErrorCode_Name(ReleaseErrorCode value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<ReleaseErrorCode_descriptor, 0, 6>(
+      static_cast<int>(value));
+}
+[[nodiscard]] inline bool ReleaseErrorCode_Parse(
+    ::absl::string_view name, ReleaseErrorCode* PROTOBUF_NONNULL value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ReleaseErrorCode>(ReleaseErrorCode_descriptor(), name,
+                                           value);
+}
 
 // ===================================================================
 
@@ -709,10 +814,10 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
     kDeviceIdFieldNumber = 1,
     kBatchIdFieldNumber = 2,
     kFileIdFieldNumber = 3,
-    kStatusFieldNumber = 4,
-    kErrorCodeFieldNumber = 6,
     kErrorMessageFieldNumber = 7,
     kDownloadedBytesFieldNumber = 5,
+    kStatusFieldNumber = 4,
+    kErrorCodeFieldNumber = 6,
     kTimestampFieldNumber = 8,
   };
   // string device_id = 1;
@@ -760,36 +865,6 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   ::std::string* PROTOBUF_NONNULL _internal_mutable_file_id();
 
   public:
-  // string status = 4;
-  void clear_status() ;
-  [[nodiscard]] const ::std::string& status() const;
-  template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_status(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_status();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_status();
-  void set_allocated_status(::std::string* PROTOBUF_NULLABLE value);
-
-  private:
-  const ::std::string& _internal_status() const;
-  PROTOBUF_ALWAYS_INLINE void _internal_set_status(const ::std::string& value);
-  ::std::string* PROTOBUF_NONNULL _internal_mutable_status();
-
-  public:
-  // string error_code = 6;
-  void clear_error_code() ;
-  [[nodiscard]] const ::std::string& error_code() const;
-  template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_error_code(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_error_code();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_error_code();
-  void set_allocated_error_code(::std::string* PROTOBUF_NULLABLE value);
-
-  private:
-  const ::std::string& _internal_error_code() const;
-  PROTOBUF_ALWAYS_INLINE void _internal_set_error_code(const ::std::string& value);
-  ::std::string* PROTOBUF_NONNULL _internal_mutable_error_code();
-
-  public:
   // string error_message = 7;
   void clear_error_message() ;
   [[nodiscard]] const ::std::string& error_message() const;
@@ -815,6 +890,26 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   void _internal_set_downloaded_bytes(::int64_t value);
 
   public:
+  // .terminal_agent.v1.ReleaseDeviceStatus status = 4;
+  void clear_status() ;
+  [[nodiscard]] ::terminal_agent::v1::ReleaseDeviceStatus status() const;
+  void set_status(::terminal_agent::v1::ReleaseDeviceStatus value);
+
+  private:
+  ::terminal_agent::v1::ReleaseDeviceStatus _internal_status() const;
+  void _internal_set_status(::terminal_agent::v1::ReleaseDeviceStatus value);
+
+  public:
+  // .terminal_agent.v1.ReleaseErrorCode error_code = 6;
+  void clear_error_code() ;
+  [[nodiscard]] ::terminal_agent::v1::ReleaseErrorCode error_code() const;
+  void set_error_code(::terminal_agent::v1::ReleaseErrorCode value);
+
+  private:
+  ::terminal_agent::v1::ReleaseErrorCode _internal_error_code() const;
+  void _internal_set_error_code(::terminal_agent::v1::ReleaseErrorCode value);
+
+  public:
   // int64 timestamp = 8;
   void clear_timestamp() ;
   [[nodiscard]] ::int64_t timestamp() const;
@@ -830,7 +925,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
   static const ::google::protobuf::internal::TcParseTable<3, 8,
-                                   0, 108,
+                                   0, 92,
                                    2>
       _table_;
 
@@ -856,10 +951,10 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
     ::google::protobuf::internal::ArenaStringPtr device_id_;
     ::google::protobuf::internal::ArenaStringPtr batch_id_;
     ::google::protobuf::internal::ArenaStringPtr file_id_;
-    ::google::protobuf::internal::ArenaStringPtr status_;
-    ::google::protobuf::internal::ArenaStringPtr error_code_;
     ::google::protobuf::internal::ArenaStringPtr error_message_;
     ::int64_t downloaded_bytes_;
+    int status_;
+    int error_code_;
     ::int64_t timestamp_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -7334,69 +7429,29 @@ inline void ReleaseStatusRequest::set_allocated_file_id(::std::string* PROTOBUF_
   // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.file_id)
 }
 
-// string status = 4;
+// .terminal_agent.v1.ReleaseDeviceStatus status = 4;
 inline void ReleaseStatusRequest::clear_status() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.status_.ClearToEmpty();
+  _impl_.status_ = 0;
   ClearHasBit(_impl_._has_bits_[0],
-                  0x00000008U);
+                  0x00000020U);
 }
-inline const ::std::string& ReleaseStatusRequest::status() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+inline ::terminal_agent::v1::ReleaseDeviceStatus ReleaseStatusRequest::status() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.status)
   return _internal_status();
 }
-template <typename Arg_, typename... Args_>
-PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_status(Arg_&& arg, Args_... args) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
-  _impl_.status_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+inline void ReleaseStatusRequest::set_status(::terminal_agent::v1::ReleaseDeviceStatus value) {
+  _internal_set_status(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.status)
 }
-inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::mutable_status()
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
-  ::std::string* _s = _internal_mutable_status();
-  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.status)
-  return _s;
-}
-inline const ::std::string& ReleaseStatusRequest::_internal_status() const {
+inline ::terminal_agent::v1::ReleaseDeviceStatus ReleaseStatusRequest::_internal_status() const {
   ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.status_.Get();
+  return static_cast<::terminal_agent::v1::ReleaseDeviceStatus>(_impl_.status_);
 }
-inline void ReleaseStatusRequest::_internal_set_status(const ::std::string& value) {
+inline void ReleaseStatusRequest::_internal_set_status(::terminal_agent::v1::ReleaseDeviceStatus value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.status_.Set(value, GetArena());
-}
-inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::_internal_mutable_status() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  return _impl_.status_.Mutable( GetArena());
-}
-inline ::std::string* PROTOBUF_NULLABLE ReleaseStatusRequest::release_status() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.status)
-  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000008U)) {
-    return nullptr;
-  }
-  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
-  auto* released = _impl_.status_.Release();
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
-    _impl_.status_.Set("", GetArena());
-  }
-  return released;
-}
-inline void ReleaseStatusRequest::set_allocated_status(::std::string* PROTOBUF_NULLABLE value) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000008U);
-  } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
-  }
-  _impl_.status_.SetAllocated(value, GetArena());
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.status_.IsDefault()) {
-    _impl_.status_.Set("", GetArena());
-  }
-  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.status)
+  _impl_.status_ = value;
 }
 
 // int64 downloaded_bytes = 5;
@@ -7404,7 +7459,7 @@ inline void ReleaseStatusRequest::clear_downloaded_bytes() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.downloaded_bytes_ = ::int64_t{0};
   ClearHasBit(_impl_._has_bits_[0],
-                  0x00000040U);
+                  0x00000010U);
 }
 inline ::int64_t ReleaseStatusRequest::downloaded_bytes() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.downloaded_bytes)
@@ -7412,7 +7467,7 @@ inline ::int64_t ReleaseStatusRequest::downloaded_bytes() const {
 }
 inline void ReleaseStatusRequest::set_downloaded_bytes(::int64_t value) {
   _internal_set_downloaded_bytes(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.downloaded_bytes)
 }
 inline ::int64_t ReleaseStatusRequest::_internal_downloaded_bytes() const {
@@ -7424,69 +7479,29 @@ inline void ReleaseStatusRequest::_internal_set_downloaded_bytes(::int64_t value
   _impl_.downloaded_bytes_ = value;
 }
 
-// string error_code = 6;
+// .terminal_agent.v1.ReleaseErrorCode error_code = 6;
 inline void ReleaseStatusRequest::clear_error_code() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.error_code_.ClearToEmpty();
+  _impl_.error_code_ = 0;
   ClearHasBit(_impl_._has_bits_[0],
-                  0x00000010U);
+                  0x00000040U);
 }
-inline const ::std::string& ReleaseStatusRequest::error_code() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+inline ::terminal_agent::v1::ReleaseErrorCode ReleaseStatusRequest::error_code() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.error_code)
   return _internal_error_code();
 }
-template <typename Arg_, typename... Args_>
-PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_error_code(Arg_&& arg, Args_... args) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
-  _impl_.error_code_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+inline void ReleaseStatusRequest::set_error_code(::terminal_agent::v1::ReleaseErrorCode value) {
+  _internal_set_error_code(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.error_code)
 }
-inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::mutable_error_code()
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
-  ::std::string* _s = _internal_mutable_error_code();
-  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.error_code)
-  return _s;
-}
-inline const ::std::string& ReleaseStatusRequest::_internal_error_code() const {
+inline ::terminal_agent::v1::ReleaseErrorCode ReleaseStatusRequest::_internal_error_code() const {
   ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.error_code_.Get();
+  return static_cast<::terminal_agent::v1::ReleaseErrorCode>(_impl_.error_code_);
 }
-inline void ReleaseStatusRequest::_internal_set_error_code(const ::std::string& value) {
+inline void ReleaseStatusRequest::_internal_set_error_code(::terminal_agent::v1::ReleaseErrorCode value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.error_code_.Set(value, GetArena());
-}
-inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::_internal_mutable_error_code() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  return _impl_.error_code_.Mutable( GetArena());
-}
-inline ::std::string* PROTOBUF_NULLABLE ReleaseStatusRequest::release_error_code() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.error_code)
-  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000010U)) {
-    return nullptr;
-  }
-  ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
-  auto* released = _impl_.error_code_.Release();
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
-    _impl_.error_code_.Set("", GetArena());
-  }
-  return released;
-}
-inline void ReleaseStatusRequest::set_allocated_error_code(::std::string* PROTOBUF_NULLABLE value) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000010U);
-  } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
-  }
-  _impl_.error_code_.SetAllocated(value, GetArena());
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.error_code_.IsDefault()) {
-    _impl_.error_code_.Set("", GetArena());
-  }
-  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.ReleaseStatusRequest.error_code)
+  _impl_.error_code_ = value;
 }
 
 // string error_message = 7;
@@ -7494,7 +7509,7 @@ inline void ReleaseStatusRequest::clear_error_message() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.error_message_.ClearToEmpty();
   ClearHasBit(_impl_._has_bits_[0],
-                  0x00000020U);
+                  0x00000008U);
 }
 inline const ::std::string& ReleaseStatusRequest::error_message() const
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
@@ -7504,13 +7519,13 @@ inline const ::std::string& ReleaseStatusRequest::error_message() const
 template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void ReleaseStatusRequest::set_error_message(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
   _impl_.error_message_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.error_message)
 }
 inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::mutable_error_message()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
   ::std::string* _s = _internal_mutable_error_message();
   // @@protoc_insertion_point(field_mutable:terminal_agent.v1.ReleaseStatusRequest.error_message)
   return _s;
@@ -7530,10 +7545,10 @@ inline ::std::string* PROTOBUF_NONNULL ReleaseStatusRequest::_internal_mutable_e
 inline ::std::string* PROTOBUF_NULLABLE ReleaseStatusRequest::release_error_message() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   // @@protoc_insertion_point(field_release:terminal_agent.v1.ReleaseStatusRequest.error_message)
-  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000020U)) {
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000008U)) {
     return nullptr;
   }
-  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
   auto* released = _impl_.error_message_.Release();
   if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
     _impl_.error_message_.Set("", GetArena());
@@ -7543,9 +7558,9 @@ inline ::std::string* PROTOBUF_NULLABLE ReleaseStatusRequest::release_error_mess
 inline void ReleaseStatusRequest::set_allocated_error_message(::std::string* PROTOBUF_NULLABLE value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000008U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
   }
   _impl_.error_message_.SetAllocated(value, GetArena());
   if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.error_message_.IsDefault()) {
@@ -7681,6 +7696,25 @@ inline void ReleaseStatusResponse::set_allocated_message(::std::string* PROTOBUF
 }  // namespace v1
 }  // namespace terminal_agent
 
+
+namespace google {
+namespace protobuf {
+
+template <>
+struct is_proto_enum<::terminal_agent::v1::ReleaseDeviceStatus> : std::true_type {};
+template <>
+inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::terminal_agent::v1::ReleaseDeviceStatus>() {
+  return ::terminal_agent::v1::ReleaseDeviceStatus_descriptor();
+}
+template <>
+struct is_proto_enum<::terminal_agent::v1::ReleaseErrorCode> : std::true_type {};
+template <>
+inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::terminal_agent::v1::ReleaseErrorCode>() {
+  return ::terminal_agent::v1::ReleaseErrorCode_descriptor();
+}
+
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
 

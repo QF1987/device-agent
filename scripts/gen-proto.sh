@@ -14,23 +14,46 @@
 set -e
 cd "$(dirname "$0")/.."
 
-echo "=== 1/2 生成 gen-desktop（protoc v34.1, Homebrew）==="
-protoc \
+PROTOC_DESKTOP="${PROTOC_DESKTOP:-${PROTOC:-$(command -v protoc || true)}}"
+PROTOC_ANDROID="${PROTOC_ANDROID:-tools/protoc-31.1}"
+
+if [ ! -x "$PROTOC_DESKTOP" ]; then
+  echo "missing desktop protoc; set PROTOC_DESKTOP to protoc v34.1" >&2
+  exit 1
+fi
+
+if [ ! -x "$PROTOC_ANDROID" ]; then
+  echo "missing Android protoc; set PROTOC_ANDROID to protoc v31.1" >&2
+  exit 1
+fi
+
+GRPC_CPP_PLUGIN="${GRPC_CPP_PLUGIN:-$(command -v grpc_cpp_plugin || true)}"
+if [ -z "$GRPC_CPP_PLUGIN" ]; then
+  GRPC_CPP_PLUGIN="android/grpc-android-prebuilt/host-tools/grpc_cpp_plugin"
+fi
+
+if [ ! -x "$GRPC_CPP_PLUGIN" ]; then
+  echo "missing grpc_cpp_plugin; set GRPC_CPP_PLUGIN or install grpc_cpp_plugin" >&2
+  exit 1
+fi
+
+echo "=== 1/2 生成 gen-desktop（protoc, $("$PROTOC_DESKTOP" --version)) ==="
+"$PROTOC_DESKTOP" \
   -I proto \
   -I /opt/homebrew/include \
   --cpp_out=gen-desktop \
   --grpc_out=gen-desktop \
-  --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) \
+  --plugin=protoc-gen-grpc="$GRPC_CPP_PLUGIN" \
   proto/terminal_agent/v1/service.proto \
   proto/terminal_agent/v1/device.proto
 
-echo "=== 2/2 生成 gen-android（protoc v31.1, 自编译）==="
-tools/protoc-31.1 \
+echo "=== 2/2 生成 gen-android（protoc, $("$PROTOC_ANDROID" --version)) ==="
+"$PROTOC_ANDROID" \
   -I proto \
   -I android/grpc-android-prebuilt/arm64-v8a/include \
   --cpp_out=gen-android \
   --grpc_out=gen-android \
-  --plugin=protoc-gen-grpc=android/grpc-android-prebuilt/host-tools/grpc_cpp_plugin \
+  --plugin=protoc-gen-grpc="$GRPC_CPP_PLUGIN" \
   proto/terminal_agent/v1/service.proto \
   proto/terminal_agent/v1/device.proto
 

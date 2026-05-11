@@ -99,16 +99,12 @@ inline constexpr ReleaseStatusRequest::Impl_::Impl_(
         file_id_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        status_(
-            &::google::protobuf::internal::fixed_address_empty_string,
-            ::_pbi::ConstantInitialized()),
-        error_code_(
-            &::google::protobuf::internal::fixed_address_empty_string,
-            ::_pbi::ConstantInitialized()),
         error_message_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
         downloaded_bytes_{::int64_t{0}},
+        status_{static_cast< ::terminal_agent::v1::ReleaseDeviceStatus >(0)},
+        error_code_{static_cast< ::terminal_agent::v1::ReleaseErrorCode >(0)},
         timestamp_{::int64_t{0}} {}
 
 template <typename>
@@ -580,8 +576,8 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 HeartbeatRequestDefaultTypeInternal _HeartbeatRequest_default_instance_;
 }  // namespace v1
 }  // namespace terminal_agent
-static constexpr const ::_pb::EnumDescriptor* PROTOBUF_NONNULL* PROTOBUF_NULLABLE
-    file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto = nullptr;
+static const ::_pb::EnumDescriptor* PROTOBUF_NONNULL
+    file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[2];
 static constexpr const ::_pb::ServiceDescriptor* PROTOBUF_NONNULL* PROTOBUF_NULLABLE
     file_level_service_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto = nullptr;
 const ::uint32_t
@@ -761,10 +757,10 @@ const ::uint32_t
         0,
         1,
         2,
-        3,
-        6,
-        4,
         5,
+        4,
+        6,
+        3,
         7,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusResponse, _impl_._has_bits_),
@@ -855,21 +851,41 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "Request\022\021\n\tdevice_id\030\001 \001(\t\"l\n\rCommandRes"
     "ult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 \001"
     "(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013e"
-    "xecuted_at\030\005 \001(\003\"\264\001\n\024ReleaseStatusReques"
+    "xecuted_at\030\005 \001(\003\"\201\002\n\024ReleaseStatusReques"
     "t\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022\017"
-    "\n\007file_id\030\003 \001(\t\022\016\n\006status\030\004 \001(\t\022\030\n\020downl"
-    "oaded_bytes\030\005 \001(\003\022\022\n\nerror_code\030\006 \001(\t\022\025\n"
-    "\rerror_message\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\""
-    ":\n\025ReleaseStatusResponse\022\020\n\010accepted\030\001 \001"
-    "(\010\022\017\n\007message\030\002 \001(\tB;Z9github.com/QF1987"
-    "/terminal-agent-go/gen/terminal_agent/v1"
-    "b\006proto3"
+    "\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.termin"
+    "al_agent.v1.ReleaseDeviceStatus\022\030\n\020downl"
+    "oaded_bytes\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#."
+    "terminal_agent.v1.ReleaseErrorCode\022\025\n\rer"
+    "ror_message\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\":\n\025"
+    "ReleaseStatusResponse\022\020\n\010accepted\030\001 \001(\010\022"
+    "\017\n\007message\030\002 \001(\t*\266\003\n\023ReleaseDeviceStatus"
+    "\022%\n!RELEASE_DEVICE_STATUS_UNSPECIFIED\020\000\022"
+    "!\n\035RELEASE_DEVICE_STATUS_PENDING\020\001\022\037\n\033RE"
+    "LEASE_DEVICE_STATUS_READY\020\002\022%\n!RELEASE_D"
+    "EVICE_STATUS_DOWNLOADING\020\003\022$\n RELEASE_DE"
+    "VICE_STATUS_DOWNLOADED\020\004\022$\n RELEASE_DEVI"
+    "CE_STATUS_INSTALLING\020\005\022#\n\037RELEASE_DEVICE"
+    "_STATUS_INSTALLED\020\006\022)\n%RELEASE_DEVICE_ST"
+    "ATUS_DOWNLOAD_FAILED\020\007\022(\n$RELEASE_DEVICE"
+    "_STATUS_INSTALL_FAILED\020\010\022#\n\037RELEASE_DEVI"
+    "CE_STATUS_CANCELLED\020\t\022\"\n\036RELEASE_DEVICE_"
+    "STATUS_RETRYING\020\n*\234\002\n\020ReleaseErrorCode\022\""
+    "\n\036RELEASE_ERROR_CODE_UNSPECIFIED\020\000\022$\n RE"
+    "LEASE_ERROR_CODE_NETWORK_ERROR\020\001\022#\n\037RELE"
+    "ASE_ERROR_CODE_SERVER_ERROR\020\002\022$\n RELEASE"
+    "_ERROR_CODE_STORAGE_ERROR\020\003\022&\n\"RELEASE_E"
+    "RROR_CODE_CHECKSUM_FAILED\020\004\022$\n RELEASE_E"
+    "RROR_CODE_INSTALL_ERROR\020\005\022%\n!RELEASE_ERR"
+    "OR_CODE_BUSINESS_ERROR\020\006B;Z9github.com/Q"
+    "F1987/terminal-agent-go/gen/terminal_age"
+    "nt/v1b\006proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    1968,
+    2773,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
@@ -884,6 +900,20 @@ PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fage
 };
 namespace terminal_agent {
 namespace v1 {
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+ReleaseDeviceStatus_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[0];
+}
+PROTOBUF_CONSTINIT const uint32_t ReleaseDeviceStatus_internal_data_[] = {
+    720896u, 0u, };
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+ReleaseErrorCode_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[1];
+}
+PROTOBUF_CONSTINIT const uint32_t ReleaseErrorCode_internal_data_[] = {
+    458752u, 0u, };
 // ===================================================================
 
 class AuthContext::_Internal {
@@ -6424,8 +6454,6 @@ PROTOBUF_NDEBUG_INLINE ReleaseStatusRequest::Impl_::Impl_(
         device_id_(arena, from.device_id_),
         batch_id_(arena, from.batch_id_),
         file_id_(arena, from.file_id_),
-        status_(arena, from.status_),
-        error_code_(arena, from.error_code_),
         error_message_(arena, from.error_message_) {}
 
 ReleaseStatusRequest::ReleaseStatusRequest(
@@ -6458,8 +6486,6 @@ PROTOBUF_NDEBUG_INLINE ReleaseStatusRequest::Impl_::Impl_(
         device_id_(arena),
         batch_id_(arena),
         file_id_(arena),
-        status_(arena),
-        error_code_(arena),
         error_message_(arena) {}
 
 inline void ReleaseStatusRequest::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
@@ -6485,8 +6511,6 @@ inline void ReleaseStatusRequest::SharedDtor(MessageLite& self) {
   this_._impl_.device_id_.Destroy();
   this_._impl_.batch_id_.Destroy();
   this_._impl_.file_id_.Destroy();
-  this_._impl_.status_.Destroy();
-  this_._impl_.error_code_.Destroy();
   this_._impl_.error_message_.Destroy();
   this_._impl_.~Impl_();
 }
@@ -6533,7 +6557,7 @@ ReleaseStatusRequest::GetClassData() const {
   return ReleaseStatusRequest_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 8, 0, 108, 2>
+const ::_pbi::TcParseTable<3, 8, 0, 92, 2>
 ReleaseStatusRequest::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_._has_bits_),
@@ -6568,21 +6592,21 @@ ReleaseStatusRequest::_table_ = {
     {::_pbi::TcParser::FastUS1,
      {26, 2, 0,
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.file_id_)}},
-    // string status = 4;
-    {::_pbi::TcParser::FastUS1,
-     {34, 3, 0,
+    // .terminal_agent.v1.ReleaseDeviceStatus status = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(ReleaseStatusRequest, _impl_.status_), 5>(),
+     {32, 5, 0,
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.status_)}},
     // int64 downloaded_bytes = 5;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(ReleaseStatusRequest, _impl_.downloaded_bytes_), 6>(),
-     {40, 6, 0,
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(ReleaseStatusRequest, _impl_.downloaded_bytes_), 4>(),
+     {40, 4, 0,
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.downloaded_bytes_)}},
-    // string error_code = 6;
-    {::_pbi::TcParser::FastUS1,
-     {50, 4, 0,
+    // .terminal_agent.v1.ReleaseErrorCode error_code = 6;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(ReleaseStatusRequest, _impl_.error_code_), 6>(),
+     {48, 6, 0,
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_code_)}},
     // string error_message = 7;
     {::_pbi::TcParser::FastUS1,
-     {58, 5, 0,
+     {58, 3, 0,
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_message_)}},
   }}, {{
     65535, 65535
@@ -6593,26 +6617,24 @@ ReleaseStatusRequest::_table_ = {
     {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.batch_id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // string file_id = 3;
     {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.file_id_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-    // string status = 4;
-    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.status_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // .terminal_agent.v1.ReleaseDeviceStatus status = 4;
+    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.status_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
     // int64 downloaded_bytes = 5;
-    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.downloaded_bytes_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
-    // string error_code = 6;
-    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_code_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.downloaded_bytes_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+    // .terminal_agent.v1.ReleaseErrorCode error_code = 6;
+    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_code_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
     // string error_message = 7;
-    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_message_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.error_message_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // int64 timestamp = 8;
     {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.timestamp_), _Internal::kHasBitsOffset + 7, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
   }},
   // no aux_entries
   {{
-    "\46\11\10\7\6\0\12\15\0\0\0\0\0\0\0\0"
+    "\46\11\10\7\0\0\0\15\0\0\0\0\0\0\0\0"
     "terminal_agent.v1.ReleaseStatusRequest"
     "device_id"
     "batch_id"
     "file_id"
-    "status"
-    "error_code"
     "error_message"
   }},
 };
@@ -6624,7 +6646,7 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       _impl_.device_id_.ClearNonDefaultToEmpty();
     }
@@ -6635,16 +6657,10 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
       _impl_.file_id_.ClearNonDefaultToEmpty();
     }
     if (CheckHasBit(cached_has_bits, 0x00000008U)) {
-      _impl_.status_.ClearNonDefaultToEmpty();
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
-      _impl_.error_code_.ClearNonDefaultToEmpty();
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
       _impl_.error_message_.ClearNonDefaultToEmpty();
     }
   }
-  if (BatchCheckHasBit(cached_has_bits, 0x000000c0U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x000000f0U)) {
     ::memset(&_impl_.downloaded_bytes_, 0, static_cast<::size_t>(
         reinterpret_cast<char*>(&_impl_.timestamp_) -
         reinterpret_cast<char*>(&_impl_.downloaded_bytes_)) + sizeof(_impl_.timestamp_));
@@ -6702,18 +6718,17 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
     }
   }
 
-  // string status = 4;
-  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
-    if (!this_._internal_status().empty()) {
-      const ::std::string& _s = this_._internal_status();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.ReleaseStatusRequest.status");
-      target = stream->WriteStringMaybeAliased(4, _s, target);
+  // .terminal_agent.v1.ReleaseDeviceStatus status = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (this_._internal_status() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          4, this_._internal_status(), target);
     }
   }
 
   // int64 downloaded_bytes = 5;
-  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000010U)) {
     if (this_._internal_downloaded_bytes() != 0) {
       target =
           ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<5>(
@@ -6721,18 +6736,17 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
     }
   }
 
-  // string error_code = 6;
-  if (CheckHasBit(cached_has_bits, 0x00000010U)) {
-    if (!this_._internal_error_code().empty()) {
-      const ::std::string& _s = this_._internal_error_code();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.ReleaseStatusRequest.error_code");
-      target = stream->WriteStringMaybeAliased(6, _s, target);
+  // .terminal_agent.v1.ReleaseErrorCode error_code = 6;
+  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+    if (this_._internal_error_code() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          6, this_._internal_error_code(), target);
     }
   }
 
   // string error_message = 7;
-  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
     if (!this_._internal_error_message().empty()) {
       const ::std::string& _s = this_._internal_error_message();
       ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
@@ -6797,32 +6811,32 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
                                         this_._internal_file_id());
       }
     }
-    // string status = 4;
-    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
-      if (!this_._internal_status().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                        this_._internal_status());
-      }
-    }
-    // string error_code = 6;
-    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
-      if (!this_._internal_error_code().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                        this_._internal_error_code());
-      }
-    }
     // string error_message = 7;
-    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
       if (!this_._internal_error_message().empty()) {
         total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
                                         this_._internal_error_message());
       }
     }
     // int64 downloaded_bytes = 5;
-    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
       if (this_._internal_downloaded_bytes() != 0) {
         total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
             this_._internal_downloaded_bytes());
+      }
+    }
+    // .terminal_agent.v1.ReleaseDeviceStatus status = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (this_._internal_status() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_status());
+      }
+    }
+    // .terminal_agent.v1.ReleaseErrorCode error_code = 6;
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (this_._internal_error_code() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_error_code());
       }
     }
     // int64 timestamp = 8;
@@ -6880,24 +6894,6 @@ void ReleaseStatusRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
       }
     }
     if (CheckHasBit(cached_has_bits, 0x00000008U)) {
-      if (!from._internal_status().empty()) {
-        _this->_internal_set_status(from._internal_status());
-      } else {
-        if (_this->_impl_.status_.IsDefault()) {
-          _this->_internal_set_status("");
-        }
-      }
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
-      if (!from._internal_error_code().empty()) {
-        _this->_internal_set_error_code(from._internal_error_code());
-      } else {
-        if (_this->_impl_.error_code_.IsDefault()) {
-          _this->_internal_set_error_code("");
-        }
-      }
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
       if (!from._internal_error_message().empty()) {
         _this->_internal_set_error_message(from._internal_error_message());
       } else {
@@ -6906,9 +6902,19 @@ void ReleaseStatusRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
         }
       }
     }
-    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
       if (from._internal_downloaded_bytes() != 0) {
         _this->_impl_.downloaded_bytes_ = from._impl_.downloaded_bytes_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (from._internal_status() != 0) {
+        _this->_impl_.status_ = from._impl_.status_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (from._internal_error_code() != 0) {
+        _this->_impl_.error_code_ = from._impl_.error_code_;
       }
     }
     if (CheckHasBit(cached_has_bits, 0x00000080U)) {
@@ -6939,8 +6945,6 @@ void ReleaseStatusRequest::InternalSwap(ReleaseStatusRequest* PROTOBUF_RESTRICT 
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.device_id_, &other->_impl_.device_id_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.batch_id_, &other->_impl_.batch_id_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.file_id_, &other->_impl_.file_id_, arena);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.status_, &other->_impl_.status_, arena);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.error_code_, &other->_impl_.error_code_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.error_message_, &other->_impl_.error_message_, arena);
   ::google::protobuf::internal::memswap<
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.timestamp_)

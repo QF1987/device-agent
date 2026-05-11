@@ -13,6 +13,7 @@
 
 #include <jni.h>
 #include <string>
+#include <string_view>
 #include <memory>
 #include <mutex>
 #include <android/log.h>
@@ -43,6 +44,30 @@ static std::shared_ptr<device_agent::DeviceClient> g_client;
 static std::shared_ptr<device_agent::Executor> g_executor;
 static std::unique_ptr<device_agent::CommandHandler> g_handler;
 static std::mutex g_client_mutex;
+
+static terminal_agent::v1::ReleaseDeviceStatus parseReleaseDeviceStatus(std::string_view status) {
+    if (status == "pending") return terminal_agent::v1::RELEASE_DEVICE_STATUS_PENDING;
+    if (status == "ready") return terminal_agent::v1::RELEASE_DEVICE_STATUS_READY;
+    if (status == "downloading") return terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADING;
+    if (status == "downloaded") return terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED;
+    if (status == "installing") return terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING;
+    if (status == "installed") return terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED;
+    if (status == "download_failed") return terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED;
+    if (status == "install_failed") return terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED;
+    if (status == "cancelled") return terminal_agent::v1::RELEASE_DEVICE_STATUS_CANCELLED;
+    if (status == "retrying") return terminal_agent::v1::RELEASE_DEVICE_STATUS_RETRYING;
+    return terminal_agent::v1::RELEASE_DEVICE_STATUS_UNSPECIFIED;
+}
+
+static terminal_agent::v1::ReleaseErrorCode parseReleaseErrorCode(std::string_view code) {
+    if (code == "NETWORK_ERROR") return terminal_agent::v1::RELEASE_ERROR_CODE_NETWORK_ERROR;
+    if (code == "SERVER_ERROR") return terminal_agent::v1::RELEASE_ERROR_CODE_SERVER_ERROR;
+    if (code == "STORAGE_ERROR") return terminal_agent::v1::RELEASE_ERROR_CODE_STORAGE_ERROR;
+    if (code == "CHECKSUM_FAILED") return terminal_agent::v1::RELEASE_ERROR_CODE_CHECKSUM_FAILED;
+    if (code == "INSTALL_ERROR") return terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR;
+    if (code == "BUSINESS_ERROR") return terminal_agent::v1::RELEASE_ERROR_CODE_BUSINESS_ERROR;
+    return terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED;
+}
 
 // ─── JNI_OnLoad（库加载时保存 JVM + 注册所有 native 方法）──
 
@@ -275,14 +300,14 @@ static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatu
     env->ReleaseStringUTFChars(jFileId, str);
 
     str = env->GetStringUTFChars(jStatus, nullptr);
-    req.set_status(str);
+    req.set_status(parseReleaseDeviceStatus(str));
     env->ReleaseStringUTFChars(jStatus, str);
 
     req.set_downloaded_bytes(jDownloadedBytes);
 
     if (jErrorCode != nullptr) {
         str = env->GetStringUTFChars(jErrorCode, nullptr);
-        req.set_error_code(str);
+        req.set_error_code(parseReleaseErrorCode(str));
         env->ReleaseStringUTFChars(jErrorCode, str);
     }
     if (jErrorMessage != nullptr) {

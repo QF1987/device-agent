@@ -427,6 +427,32 @@ message CommandResult {
 
 // ─── 状态上报消息 ────────────────────────────────────────
 
+// ReleaseDeviceStatus: release batch 中单设备的生命周期状态。
+enum ReleaseDeviceStatus {
+    RELEASE_DEVICE_STATUS_UNSPECIFIED = 0;
+    RELEASE_DEVICE_STATUS_PENDING = 1;         // [server-managed] batch 创建，设备尚未开始
+    RELEASE_DEVICE_STATUS_READY = 2;           // [server-managed] 后端已就绪，等待设备拉取
+    RELEASE_DEVICE_STATUS_DOWNLOADING = 3;     // [client-reports] 下载进行中
+    RELEASE_DEVICE_STATUS_DOWNLOADED = 4;      // [client-reports] 下载完成（仅下载型 release 的 terminal 态）
+    RELEASE_DEVICE_STATUS_INSTALLING = 5;      // [client-reports] 安装进行中
+    RELEASE_DEVICE_STATUS_INSTALLED = 6;       // [client-reports] 安装成功（terminal + success）
+    RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED = 7; // [client-reports] 下载失败（terminal + failure）
+    RELEASE_DEVICE_STATUS_INSTALL_FAILED = 8;  // [client-reports] 安装失败（terminal + failure）
+    RELEASE_DEVICE_STATUS_CANCELLED = 9;       // [client-reports] 主动取消或超时（terminal，非 failure）
+    RELEASE_DEVICE_STATUS_RETRYING = 10;       // [server-managed] 服务端触发重试中
+}
+
+// ReleaseErrorCode: release 失败/取消原因分类。
+enum ReleaseErrorCode {
+    RELEASE_ERROR_CODE_UNSPECIFIED = 0;      // 非失败态，或原因未知
+    RELEASE_ERROR_CODE_NETWORK_ERROR = 1;    // 网络故障（下载中断、连接超时、DNS 失败）
+    RELEASE_ERROR_CODE_SERVER_ERROR = 2;     // 服务端异常（HTTP 4xx/5xx、gRPC 非 OK）
+    RELEASE_ERROR_CODE_STORAGE_ERROR = 3;    // 存储不足或读写失败
+    RELEASE_ERROR_CODE_CHECKSUM_FAILED = 4;  // 文件校验和不匹配
+    RELEASE_ERROR_CODE_INSTALL_ERROR = 5;    // 安装器报错（PackageInstaller failure）
+    RELEASE_ERROR_CODE_BUSINESS_ERROR = 6;   // 业务拒绝（INVALID_FILE_TYPE / 版本降级拒绝 / 用户取消）
+}
+
 // ReleaseStatusRequest：下载/安装状态上报
 // 设备在 download_ready 指令执行过程中主动上报
 message ReleaseStatusRequest {
@@ -440,28 +466,13 @@ message ReleaseStatusRequest {
     string file_id = 3;
 
     // 当前状态
-    // 可选值：
-    //   "downloading"     - 下载进行中
-    //   "downloaded"      - 下载完成（校验通过）
-    //   "installing"      - 安装进行中
-    //   "installed"       - 安装完成
-    //   "download_failed" - 下载失败
-    //   "install_failed"  - 安装失败
-    string status = 4;
+    ReleaseDeviceStatus status = 4;
 
     // 已下载字节数（download_progress 时使用）
     int64 downloaded_bytes = 5;
 
-    // 错误码（失败时使用）
-    // 可选值：
-    //   "NETWORK_ERROR"     - 网络错误（连接失败、DNS 失败等）
-    //   "CHECKSUM_FAILED"   - SHA256 校验失败
-    //   "STORAGE_ERROR"     - 存储空间不足或文件写入失败
-    //   "SERVER_ERROR"      - 服务器返回错误（404/500 等）
-    //   "INSTALL_ERROR"     - APK 安装失败
-    //   "INVALID_FILE_TYPE" - 不支持的文件类型
-    //   "CANCELLED"         - 用户取消下载
-    string error_code = 6;
+    // 错误码（失败或取消时使用；非失败态保持 UNSPECIFIED）
+    ReleaseErrorCode error_code = 6;
 
     // 错误详情（失败时使用，人类可读）
     string error_message = 7;
