@@ -101,6 +101,7 @@ internal fun cleanupOrphanPartFiles(downloadDir: File, nowMs: Long = System.curr
 private fun resumableDownload(
     url: String,
     dest: File,
+    deviceId: String,
     expectedDigest: String,
     digestAlgo: String,
     enableHeadProbe: Boolean,
@@ -212,6 +213,7 @@ private fun resumableDownload(
                 try {
                     headConn = URL(url).openConnection() as HttpURLConnection
                     headConn.requestMethod = "HEAD"
+                    headConn.setRequestProperty("X-Device-ID", deviceId)
                     headConn.connectTimeout = 3000
                     headConn.readTimeout = 5000
                     val code = headConn.responseCode
@@ -245,6 +247,7 @@ private fun resumableDownload(
             conn = URL(url).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"; conn.connectTimeout = 5000; conn.readTimeout = 30000
             conn.setRequestProperty("Accept", "application/octet-stream")
+            conn.setRequestProperty("X-Device-ID", deviceId)
             if (useRange) conn.setRequestProperty("Range", "bytes=${existingSize}-")
 
             val code = conn.responseCode
@@ -719,10 +722,10 @@ class DeviceAgentService : Service() {
         dest: File,
         sha: String,
         progress: ((absBytes: Long, totalBytes: Long) -> Unit)? = null
-    ): Boolean = resumableDownload(url, dest, sha, "SHA-256", enableHeadProbe = true, progress)
+    ): Boolean = resumableDownload(url, dest, cfgDeviceId, sha, "SHA-256", enableHeadProbe = true, progress)
 
     private fun downloadFileMD5(url: String, dest: File, md5: String): Boolean {
-        return resumableDownload(url, dest, md5, "MD5", enableHeadProbe = false, progress = null)
+        return resumableDownload(url, dest, cfgDeviceId, md5, "MD5", enableHeadProbe = false, progress = null)
     }
 
     private fun mkNotification(text: String): Notification {
