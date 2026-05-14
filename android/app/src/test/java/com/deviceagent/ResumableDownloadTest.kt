@@ -17,6 +17,7 @@ class ResumableDownloadTest {
             val body = "fresh-${algo.name}".toByteArray()
             TestHttpServer { request ->
                 assertEquals("GET", request.method)
+                assertEquals("", request.headers["X-Device-ID"])
                 HttpResponse(200, body)
             }.use { server ->
                 val dest = File(tempDir(), "${algo.name}-fresh.apk")
@@ -38,6 +39,7 @@ class ResumableDownloadTest {
             val prefix = full.copyOfRange(0, 7)
             val suffix = full.copyOfRange(7, full.size)
             TestHttpServer { request ->
+                assertEquals("", request.headers["X-Device-ID"])
                 if (request.method == "HEAD") {
                     HttpResponse(500)
                 } else {
@@ -64,6 +66,7 @@ class ResumableDownloadTest {
             val body = "retry-${algo.name}".toByteArray()
             val getCount = AtomicInteger(0)
             TestHttpServer { request ->
+                assertEquals("", request.headers["X-Device-ID"])
                 if (request.method == "HEAD") {
                     HttpResponse(500)
                 } else if (getCount.getAndIncrement() == 0) {
