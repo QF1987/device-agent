@@ -9,6 +9,14 @@ lib/
 *.swp
 *.swo
 
+# Claude Code 本地配置(per-repo agent collaboration tooling)
+.claude/
+# 协作文档保留在 DeviceOps 伞仓维护;此处 untracked 不入仓
+AGENTS.md
+CLAUDE.md
+# GitNexus 本地 ignore 配置
+.gitnexusignore
+
 # OS
 .DS_Store
 Thumbs.db
