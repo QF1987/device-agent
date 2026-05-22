@@ -9,16 +9,21 @@
 #include <libtorrent/session.hpp>
 #include <libtorrent/session_params.hpp>
 #include <libtorrent/settings_pack.hpp>
+#include <libtorrent/sha256.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/torrent_status.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace device_agent {
@@ -89,7 +94,114 @@ DownloadProgress make_progress(const lt::torrent_status& status,
     };
 }
 
+std::string hex_encode(const std::uint8_t* bytes, std::size_t size) {
+    constexpr char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(size * 2);
+    for (std::size_t i = 0; i < size; ++i) {
+        out.push_back(kHex[(bytes[i] >> 4) & 0x0f]);
+        out.push_back(kHex[bytes[i] & 0x0f]);
+    }
+    return out;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool sha256_file(const std::string& path, std::string& out_hex, std::string& error) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        error = "failed to open downloaded file for sha256: " + path;
+        return false;
+    }
+
+    lt::sha256_ctx ctx;
+    lt::SHA256_init(ctx);
+    std::array<std::uint8_t, 8192> buffer{};
+    while (input.good()) {
+        input.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize n = input.gcount();
+        if (n > 0) {
+            lt::SHA256_update(ctx, buffer.data(), static_cast<int>(n));
+        }
+    }
+    if (input.bad()) {
+        error = "failed to read downloaded file for sha256: " + path;
+        return false;
+    }
+
+    std::array<std::uint8_t, 32> digest{};
+    lt::SHA256_final(digest.data(), ctx);
+    out_hex = hex_encode(digest.data(), digest.size());
+    return true;
+}
+
+std::string primary_file_path(const lt::torrent_info& torrent, const std::string& save_path) {
+    const auto& files = torrent.files();
+    if (files.num_files() != 1) {
+        return std::string();
+    }
+    return files.file_path(lt::file_index_t{0}, save_path);
+}
+
+double share_ratio(const lt::torrent_status& status) {
+    if (status.total_wanted <= 0) {
+        return 0.0;
+    }
+    return static_cast<double>(status.all_time_upload) /
+           static_cast<double>(status.total_wanted);
+}
+
 }  // namespace
+
+P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
+    return P2PSeedingPolicy{std::chrono::hours(6), 1.0};
+}
+
+P2PSeedingStateMachine::P2PSeedingStateMachine(P2PSeedingPolicy policy)
+    : policy_(policy) {}
+
+P2PDownloadState P2PSeedingStateMachine::state() const {
+    return state_;
+}
+
+void P2PSeedingStateMachine::mark_downloading() {
+    state_ = P2PDownloadState::Downloading;
+}
+
+void P2PSeedingStateMachine::mark_seeding(std::chrono::steady_clock::time_point now) {
+    state_ = P2PDownloadState::Seeding;
+    seeding_started_ = now;
+}
+
+void P2PSeedingStateMachine::mark_stopping() {
+    state_ = P2PDownloadState::Stopping;
+}
+
+void P2PSeedingStateMachine::mark_idle() {
+    state_ = P2PDownloadState::Idle;
+}
+
+bool P2PSeedingStateMachine::should_stop(
+        std::chrono::steady_clock::time_point now,
+        double current_share_ratio) const {
+    if (state_ != P2PDownloadState::Seeding) {
+        return false;
+    }
+    if (policy_.ttl.count() > 0 && now - seeding_started_ >= policy_.ttl) {
+        return true;
+    }
+    return policy_.ratio_limit > 0.0 && current_share_ratio >= policy_.ratio_limit;
+}
+
+P2PDownloadManager::P2PDownloadManager(
+        Callbacks callbacks,
+        P2PSeedingPolicy seeding_policy)
+    : callbacks_(std::move(callbacks)), state_machine_(seeding_policy) {}
 
 P2PDownloadManager::~P2PDownloadManager() {
     cancel();
@@ -115,6 +227,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 
     cancel_requested_.store(false);
     join_worker();
+    set_state_downloading();
 
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -125,13 +238,20 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 
 void P2PDownloadManager::cancel() {
     cancel_requested_.store(true);
+    set_state_stopping();
     join_worker();
     downloading_.store(false);
     cancel_requested_.store(false);
+    set_state_idle();
 }
 
 bool P2PDownloadManager::is_downloading() const {
     return downloading_.load();
+}
+
+P2PDownloadState P2PDownloadManager::state() const {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    return state_machine_.state();
 }
 
 void P2PDownloadManager::join_worker() {
@@ -146,11 +266,38 @@ void P2PDownloadManager::join_worker() {
     worker.join();
 }
 
+void P2PDownloadManager::set_state_downloading() {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    state_machine_.mark_downloading();
+}
+
+void P2PDownloadManager::set_state_seeding() {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    state_machine_.mark_seeding(std::chrono::steady_clock::now());
+}
+
+void P2PDownloadManager::set_state_stopping() {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    state_machine_.mark_stopping();
+}
+
+void P2PDownloadManager::set_state_idle() {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    state_machine_.mark_idle();
+}
+
+bool P2PDownloadManager::should_stop_seeding(double current_share_ratio) const {
+    std::lock_guard<std::mutex> lock(state_mu_);
+    return state_machine_.should_stop(std::chrono::steady_clock::now(), current_share_ratio);
+}
+
 void P2PDownloadManager::run_download(DownloadRequest req,
                                       ProgressCallback on_progress,
                                       CompleteCallback on_complete) {
     bool success = false;
     std::string error;
+    bool complete_sent = false;
+    std::string downloaded_path;
 
     try {
         LOG_INFO("P2PDownloadManager: loading torrent " + req.url);
@@ -163,13 +310,22 @@ void P2PDownloadManager::run_download(DownloadRequest req,
             lt::add_torrent_params params;
             params.ti = torrent;
             params.save_path = resolve_save_path(req);
+            downloaded_path = primary_file_path(*torrent, params.save_path);
+            if (downloaded_path.empty()) {
+                error = "p2p alpha supports single-file torrents only";
+            } else if (callbacks_.on_started) {
+                callbacks_.on_started(req, downloaded_path);
+            }
 
             lt::session_proxy proxy;
             lt::session session = make_session();
-            lt::torrent_handle handle = session.add_torrent(std::move(params), ec);
+            lt::torrent_handle handle;
+            if (error.empty()) {
+                handle = session.add_torrent(std::move(params), ec);
+            }
             if (ec) {
                 error = "failed to add torrent: " + ec.message();
-            } else {
+            } else if (error.empty()) {
                 LOG_INFO("P2PDownloadManager: torrent added, save_path=" +
                          resolve_save_path(req));
 
@@ -194,8 +350,12 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
 
                     lt::torrent_status status = handle.status();
+                    const auto progress = make_progress(status, req.file_size);
                     if (on_progress) {
-                        on_progress(make_progress(status, req.file_size));
+                        on_progress(progress);
+                    }
+                    if (callbacks_.on_progress) {
+                        callbacks_.on_progress(req, progress);
                     }
                     if (status.is_finished) {
                         success = true;
@@ -207,6 +367,43 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     error = "download cancelled";
                 }
 
+                if (success) {
+                    if (!req.expected_sha256.empty()) {
+                        std::string actual_sha256;
+                        std::string sha_error;
+                        if (!sha256_file(downloaded_path, actual_sha256, sha_error)) {
+                            success = false;
+                            error = sha_error;
+                        } else if (lowercase(actual_sha256) != lowercase(req.expected_sha256)) {
+                            success = false;
+                            error = "sha256 mismatch: expected=" + req.expected_sha256 +
+                                    " actual=" + actual_sha256;
+                        }
+                    }
+                }
+
+                if (success) {
+                    set_state_seeding();
+                    if (on_complete) {
+                        on_complete(true, "");
+                    }
+                    if (callbacks_.on_complete) {
+                        callbacks_.on_complete(req, downloaded_path, true, "");
+                    }
+                    complete_sent = true;
+
+                    while (!cancel_requested_.load()) {
+                        const auto status = handle.status();
+                        if (should_stop_seeding(share_ratio(status))) {
+                            break;
+                        }
+                        session.wait_for_alert(std::chrono::milliseconds(1000));
+                        std::vector<lt::alert*> alerts;
+                        session.pop_alerts(&alerts);
+                    }
+                }
+
+                set_state_stopping();
                 if (handle.is_valid()) {
                     handle.pause();
                     session.remove_torrent(handle);
@@ -221,9 +418,13 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     }
 
     downloading_.store(false);
-    if (on_complete) {
+    if (!complete_sent && on_complete) {
         on_complete(success, success ? std::string() : error);
     }
+    if (!complete_sent && callbacks_.on_complete) {
+        callbacks_.on_complete(req, downloaded_path, success, success ? std::string() : error);
+    }
+    set_state_idle();
 }
 
 }  // namespace device_agent

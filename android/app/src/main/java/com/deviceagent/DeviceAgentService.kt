@@ -403,6 +403,17 @@ class DeviceAgentService : Service() {
 
     // 安装器（策略模式，由 productFlavor 决定具体实现）
     private val installer: IAppInstaller by lazy { createInstaller(this) }
+    internal data class P2PDownloadContext(
+        val batchId: String,
+        val fileId: String,
+        val commandId: String,
+        val sha256: String,
+        val localPath: String,
+        var lastReportTimeMs: Long = 0L,
+        var lastReportBytes: Long = 0L
+    )
+    private val p2pLock = Any()
+    private var activeP2PContext: P2PDownloadContext? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -563,6 +574,72 @@ class DeviceAgentService : Service() {
         Thread { handleDownloadAndInstall(batchId, fileId, commandId, downloadUrl, sha256) }.start()
     }
 
+    fun onP2PStarted(batchId: String, fileId: String, commandId: String, sha256: String, localPath: String) {
+        android.util.Log.i(TAG, "onP2PStarted: cmd=$commandId batch=$batchId file=$fileId path=$localPath")
+        synchronized(p2pLock) {
+            activeP2PContext = P2PDownloadContext(batchId, fileId, commandId, sha256, localPath)
+        }
+        reportReleaseStatus(batchId, fileId, "downloading")
+        updateNotification("⏬ P2P 下载中...")
+    }
+
+    fun onP2PProgress(percent: Int, downloadedBytes: Long, totalBytes: Long) {
+        val ctx = synchronized(p2pLock) { activeP2PContext } ?: return
+        val nowMs = SystemClock.elapsedRealtime()
+        val shouldReport = shouldReportProgress(
+            ctx.lastReportTimeMs,
+            ctx.lastReportBytes,
+            nowMs,
+            downloadedBytes,
+            totalBytes
+        )
+        if (!shouldReport) return
+
+        reportReleaseStatus(ctx.batchId, ctx.fileId, "downloading", downloadedBytes)
+        updateNotification(buildDownloadText(downloadedBytes, totalBytes))
+        android.util.Log.i(TAG, "p2p progress reported: pct=$percent abs=$downloadedBytes total=$totalBytes")
+        synchronized(p2pLock) {
+            activeP2PContext?.let {
+                if (it.fileId == ctx.fileId) {
+                    it.lastReportTimeMs = nowMs
+                    it.lastReportBytes = downloadedBytes
+                }
+            }
+        }
+    }
+
+    fun onP2PComplete(success: Boolean, errorMsg: String) {
+        val ctx = synchronized(p2pLock) {
+            val current = activeP2PContext
+            activeP2PContext = null
+            current
+        }
+        if (ctx == null) {
+            android.util.Log.w(TAG, "onP2PComplete without active context: success=$success err=$errorMsg")
+            return
+        }
+
+        if (!success) {
+            android.util.Log.e(TAG, "P2P download failed: file=${ctx.fileId} err=$errorMsg")
+            reportCommandStatus(ctx.commandId, "failed", "P2P download failed: $errorMsg")
+            val errorCode = if (errorMsg.contains("sha256", ignoreCase = true)) "CHECKSUM_FAILED" else "NETWORK_ERROR"
+            reportReleaseStatus(ctx.batchId, ctx.fileId, "download_failed", errorCode = errorCode, errorMessage = errorMsg)
+            updateNotificationTemporarily("❌ P2P 下载失败")
+            return
+        }
+
+        Thread {
+            handleDownloadAndInstall(
+                ctx.batchId,
+                ctx.fileId,
+                ctx.commandId,
+                ctx.localPath,
+                ctx.sha256,
+                File(ctx.localPath)
+            )
+        }.start()
+    }
+
     fun onUpgradeApp(apkUrl: String, md5: String, commandId: String) {
         android.util.Log.i(TAG, "onUpgradeApp: cmd=$commandId md5=$md5")
         Thread { handleUpgradeInstall(apkUrl, md5, commandId) }.start()
@@ -570,7 +647,14 @@ class DeviceAgentService : Service() {
 
     // ─── Download + Install helpers ─────────────────────────────
 
-    private fun handleDownloadAndInstall(batchId: String, fileId: String, commandId: String, url: String, sha: String) {
+    private fun handleDownloadAndInstall(
+        batchId: String,
+        fileId: String,
+        commandId: String,
+        url: String,
+        sha: String,
+        predownloadedApk: File? = null
+    ) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) {
             android.util.Log.i(TAG, "Already upgrading, skip download_ready")
@@ -582,18 +666,23 @@ class DeviceAgentService : Service() {
         updateNotification("⏬ 正在下载...")
         var lastReportTimeMs = 0L
         var lastReportBytes = 0L
-        if (!downloadFile(url, dest, sha) { absBytes, totalBytes ->
-            val nowMs = SystemClock.elapsedRealtime()
-            if (shouldReportProgress(lastReportTimeMs, lastReportBytes, nowMs, absBytes, totalBytes)) {
-                reportReleaseStatus(batchId, fileId, "downloading", absBytes)
-                updateNotification(buildDownloadText(absBytes, totalBytes))
-                val intervalMs = if (lastReportTimeMs == 0L) 0L else nowMs - lastReportTimeMs
-                val pct = if (totalBytes > 0) ((absBytes * 100) / totalBytes).coerceIn(0, 100) else -1
-                android.util.Log.i(TAG, "progress reported: abs=$absBytes total=$totalBytes pct=${pct}% intervalMs=$intervalMs")
-                lastReportTimeMs = nowMs
-                lastReportBytes = absBytes
+        val downloaded = if (predownloadedApk != null) {
+            usePredownloadedApk(predownloadedApk, dest)
+        } else {
+            downloadFile(url, dest, sha) { absBytes, totalBytes ->
+                val nowMs = SystemClock.elapsedRealtime()
+                if (shouldReportProgress(lastReportTimeMs, lastReportBytes, nowMs, absBytes, totalBytes)) {
+                    reportReleaseStatus(batchId, fileId, "downloading", absBytes)
+                    updateNotification(buildDownloadText(absBytes, totalBytes))
+                    val intervalMs = if (lastReportTimeMs == 0L) 0L else nowMs - lastReportTimeMs
+                    val pct = if (totalBytes > 0) ((absBytes * 100) / totalBytes).coerceIn(0, 100) else -1
+                    android.util.Log.i(TAG, "progress reported: abs=$absBytes total=$totalBytes pct=${pct}% intervalMs=$intervalMs")
+                    lastReportTimeMs = nowMs
+                    lastReportBytes = absBytes
+                }
             }
-        }) {
+        }
+        if (!downloaded) {
             synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
             reportCommandStatus(commandId, "failed", "Download failed")
             reportReleaseStatus(batchId, fileId, "download_failed", errorCode = "NETWORK_ERROR", errorMessage = "Download failed")
@@ -636,6 +725,35 @@ class DeviceAgentService : Service() {
                 removeSkip(fileId)
                 try { dest.delete() } catch (_: Exception) {}
             }
+        }
+    }
+
+    private fun usePredownloadedApk(source: File, dest: File): Boolean {
+        if (!source.exists() || !source.isFile) {
+            android.util.Log.e(TAG, "predownloaded APK missing: ${source.absolutePath}")
+            return false
+        }
+        if (source.absolutePath == dest.absolutePath) {
+            return true
+        }
+        return try {
+            dest.parentFile?.mkdirs()
+            try { if (dest.exists()) dest.delete() } catch (_: Exception) {}
+            if (source.renameTo(dest)) {
+                true
+            } else {
+                source.inputStream().use { input ->
+                    dest.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                try { source.delete() } catch (_: Exception) {}
+                true
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "use predownloaded APK failed: ${e.message}")
+            try { dest.delete() } catch (_: Exception) {}
+            false
         }
     }
 

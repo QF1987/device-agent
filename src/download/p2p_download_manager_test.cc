@@ -64,7 +64,26 @@ bool wait_until_downloading(device_agent::P2PDownloadManager& manager) {
 
 int main() {
     using device_agent::DownloadRequest;
+    using device_agent::P2PDownloadState;
     using device_agent::P2PDownloadManager;
+    using device_agent::P2PSeedingPolicy;
+    using device_agent::P2PSeedingStateMachine;
+
+    P2PSeedingStateMachine state_machine(
+        P2PSeedingPolicy{std::chrono::seconds(1), 1.0});
+    const auto start = std::chrono::steady_clock::now();
+    assert(state_machine.state() == P2PDownloadState::Idle);
+    state_machine.mark_downloading();
+    assert(state_machine.state() == P2PDownloadState::Downloading);
+    state_machine.mark_seeding(start);
+    assert(state_machine.state() == P2PDownloadState::Seeding);
+    assert(!state_machine.should_stop(start + std::chrono::milliseconds(500), 0.5));
+    assert(state_machine.should_stop(start + std::chrono::milliseconds(500), 1.0));
+    assert(state_machine.should_stop(start + std::chrono::seconds(1), 0.5));
+    state_machine.mark_stopping();
+    assert(state_machine.state() == P2PDownloadState::Stopping);
+    state_machine.mark_idle();
+    assert(state_machine.state() == P2PDownloadState::Idle);
 
     P2PDownloadManager empty_url_manager;
     bool empty_complete = false;
@@ -110,8 +129,10 @@ int main() {
         });
 
     assert(wait_until_downloading(manager));
+    assert(manager.state() == P2PDownloadState::Downloading);
     manager.cancel();
     assert(!manager.is_downloading());
+    assert(manager.state() == P2PDownloadState::Idle);
 
     {
         std::unique_lock<std::mutex> lock(mu);

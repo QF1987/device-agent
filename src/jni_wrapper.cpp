@@ -162,6 +162,147 @@ static bool report_command_resultJNI(const terminal_agent::v1::CommandResult& re
     return true;
 }
 
+class ScopedJniEnv {
+public:
+    ScopedJniEnv() = default;
+    ~ScopedJniEnv() {
+        if (attached_ && g_jvm != nullptr) {
+            g_jvm->DetachCurrentThread();
+        }
+    }
+
+    ScopedJniEnv(const ScopedJniEnv&) = delete;
+    ScopedJniEnv& operator=(const ScopedJniEnv&) = delete;
+    ScopedJniEnv(ScopedJniEnv&& other) noexcept
+        : env_(other.env_), attached_(other.attached_) {
+        other.env_ = nullptr;
+        other.attached_ = false;
+    }
+    ScopedJniEnv& operator=(ScopedJniEnv&&) = delete;
+
+    JNIEnv* get() const { return env_; }
+
+    static ScopedJniEnv current() {
+        ScopedJniEnv scoped;
+        if (g_jvm == nullptr) {
+            return scoped;
+        }
+        jint status = g_jvm->GetEnv(reinterpret_cast<void**>(&scoped.env_), JNI_VERSION_1_6);
+        if (status == JNI_EDETACHED) {
+            if (g_jvm->AttachCurrentThread(&scoped.env_, nullptr) == JNI_OK) {
+                scoped.attached_ = true;
+            } else {
+                scoped.env_ = nullptr;
+            }
+        } else if (status != JNI_OK) {
+            scoped.env_ = nullptr;
+        }
+        return scoped;
+    }
+
+private:
+    JNIEnv* env_ = nullptr;
+    bool attached_ = false;
+};
+
+static jclass get_service_class(JNIEnv* env) {
+    if (env == nullptr || g_java_service == nullptr) {
+        return nullptr;
+    }
+    return env->GetObjectClass(g_java_service);
+}
+
+static void clear_jni_exception(JNIEnv* env, const char* label) {
+    if (env != nullptr && env->ExceptionCheck()) {
+        LOGE("%s: Java exception", label);
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+}
+
+static void call_p2p_started(const device_agent::DownloadRequest& req, const std::string& localPath) {
+    ScopedJniEnv scoped = ScopedJniEnv::current();
+    JNIEnv* env = scoped.get();
+    jclass clazz = get_service_class(env);
+    if (clazz == nullptr) {
+        LOGE("P2P callback: service unavailable for onP2PStarted");
+        return;
+    }
+
+    jmethodID method = env->GetMethodID(
+        clazz,
+        "onP2PStarted",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    if (method == nullptr) {
+        clear_jni_exception(env, "onP2PStarted");
+        env->DeleteLocalRef(clazz);
+        return;
+    }
+
+    jstring jBatch = env->NewStringUTF(req.batch_id.c_str());
+    jstring jFile = env->NewStringUTF(req.file_id.c_str());
+    jstring jCmd = env->NewStringUTF(req.command_id.c_str());
+    jstring jSha = env->NewStringUTF(req.expected_sha256.c_str());
+    jstring jPath = env->NewStringUTF(localPath.c_str());
+    env->CallVoidMethod(g_java_service, method, jBatch, jFile, jCmd, jSha, jPath);
+    clear_jni_exception(env, "onP2PStarted");
+    env->DeleteLocalRef(jBatch);
+    env->DeleteLocalRef(jFile);
+    env->DeleteLocalRef(jCmd);
+    env->DeleteLocalRef(jSha);
+    env->DeleteLocalRef(jPath);
+    env->DeleteLocalRef(clazz);
+}
+
+static void call_p2p_progress(const device_agent::DownloadProgress& progress) {
+    ScopedJniEnv scoped = ScopedJniEnv::current();
+    JNIEnv* env = scoped.get();
+    jclass clazz = get_service_class(env);
+    if (clazz == nullptr) {
+        LOGE("P2P callback: service unavailable for onP2PProgress");
+        return;
+    }
+
+    jmethodID method = env->GetMethodID(clazz, "onP2PProgress", "(IJJ)V");
+    if (method == nullptr) {
+        clear_jni_exception(env, "onP2PProgress");
+        env->DeleteLocalRef(clazz);
+        return;
+    }
+
+    env->CallVoidMethod(
+        g_java_service,
+        method,
+        static_cast<jint>(progress.percent),
+        static_cast<jlong>(progress.downloaded_bytes),
+        static_cast<jlong>(progress.total_bytes));
+    clear_jni_exception(env, "onP2PProgress");
+    env->DeleteLocalRef(clazz);
+}
+
+static void call_p2p_complete(bool success, const std::string& error) {
+    ScopedJniEnv scoped = ScopedJniEnv::current();
+    JNIEnv* env = scoped.get();
+    jclass clazz = get_service_class(env);
+    if (clazz == nullptr) {
+        LOGE("P2P callback: service unavailable for onP2PComplete");
+        return;
+    }
+
+    jmethodID method = env->GetMethodID(clazz, "onP2PComplete", "(ZLjava/lang/String;)V");
+    if (method == nullptr) {
+        clear_jni_exception(env, "onP2PComplete");
+        env->DeleteLocalRef(clazz);
+        return;
+    }
+
+    jstring jError = env->NewStringUTF(error.c_str());
+    env->CallVoidMethod(g_java_service, method, success ? JNI_TRUE : JNI_FALSE, jError);
+    clear_jni_exception(env, "onP2PComplete");
+    env->DeleteLocalRef(jError);
+    env->DeleteLocalRef(clazz);
+}
+
 // ─── nativeStart 实现 ───────────────────────────────────
 // Kotlin 签名: nativeStart(Any, String, Int, String): Int
 // C++ 签名:   (JNIEnv*, jclass, jobject(service), jstring(host), jint(port), jstring(deviceId)) -> jint
@@ -229,7 +370,17 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
             return client->report_command_result(result);
         });
     g_handler->set_executor(executor);
-    g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
+    device_agent::P2PDownloadManager::Callbacks p2pCallbacks;
+    p2pCallbacks.on_started = [](const device_agent::DownloadRequest& req, const std::string& localPath) {
+        call_p2p_started(req, localPath);
+    };
+    p2pCallbacks.on_progress = [](const device_agent::DownloadRequest&, const device_agent::DownloadProgress& progress) {
+        call_p2p_progress(progress);
+    };
+    p2pCallbacks.on_complete = [](const device_agent::DownloadRequest&, const std::string&, bool success, const std::string& error) {
+        call_p2p_complete(success, error);
+    };
+    g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>(p2pCallbacks));
     LOGI("nativeStart: handler configured with executor + p2p_download_manager");
 
     client->set_command_callback(
