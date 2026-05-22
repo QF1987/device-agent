@@ -24,6 +24,7 @@
 #include "executor/executor.h"
 #include "download/idownload_manager.h"
 #include "download/android_download_manager.h"
+#include "download/p2p_download_manager.h"
 #include "jni_bridge.h"
 
 #define LOG_TAG "DeviceAgentJNI"
@@ -228,8 +229,8 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
             return client->report_command_result(result);
         });
     g_handler->set_executor(executor);
-    g_handler->set_download_manager(std::make_shared<device_agent::AndroidDownloadManager>());
-    LOGI("nativeStart: handler configured with executor + download_manager");
+    g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
+    LOGI("nativeStart: handler configured with executor + p2p_download_manager");
 
     client->set_command_callback(
         [](const terminal_agent::v1::Command& cmd) {
