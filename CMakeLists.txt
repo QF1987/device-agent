@@ -77,6 +77,44 @@ if(ANDROID OR __ANDROID__)
     endif()
     message(STATUS "gRPC Android install dir: ${GRPC_ANDROID_INSTALL_DIR}")
 
+    # Pre-built libtorrent for Android. Built by:
+    #   bash scripts/build-libtorrent-android.sh
+    set(LIBTORRENT_ANDROID_INSTALL_DIR "$ENV{LIBTORRENT_ANDROID_INSTALL_DIR}")
+    if(NOT LIBTORRENT_ANDROID_INSTALL_DIR)
+        if(ANDROID_ABI STREQUAL "arm64-v8a")
+            set(LIBTORRENT_ANDROID_INSTALL_DIR "${CMAKE_SOURCE_DIR}/android/libtorrent-android-prebuilt/arm64-v8a")
+        elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+            set(LIBTORRENT_ANDROID_INSTALL_DIR "${CMAKE_SOURCE_DIR}/android/libtorrent-android-prebuilt/armeabi-v7a")
+        else()
+            message(FATAL_ERROR "libtorrent prebuilt is only required for M3-A on arm64-v8a and armeabi-v7a; got ${ANDROID_ABI}")
+        endif()
+    endif()
+    message(STATUS "libtorrent Android install dir: ${LIBTORRENT_ANDROID_INSTALL_DIR}")
+
+    if(NOT EXISTS "${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libtorrent-rasterbar.a")
+        message(FATAL_ERROR "Missing libtorrent prebuilt: ${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libtorrent-rasterbar.a. Run scripts/build-libtorrent-android.sh first.")
+    endif()
+    if(NOT EXISTS "${LIBTORRENT_ANDROID_INSTALL_DIR}/include/libtorrent/version.hpp")
+        message(FATAL_ERROR "Missing libtorrent headers in ${LIBTORRENT_ANDROID_INSTALL_DIR}/include")
+    endif()
+
+    file(GLOB LIBTORRENT_BOOST_STATIC_LIBS
+        "${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libboost_*.a"
+    )
+    if(NOT LIBTORRENT_BOOST_STATIC_LIBS)
+        message(FATAL_ERROR "Missing Boost static libraries in ${LIBTORRENT_ANDROID_INSTALL_DIR}/lib")
+    endif()
+
+    set(LIBTORRENT_SYMBOL_CHECK "${CMAKE_BINARY_DIR}/libtorrent_symbol_check.cc")
+    file(WRITE "${LIBTORRENT_SYMBOL_CHECK}" [=[
+#include <libtorrent/version.hpp>
+
+extern "C" const char* device_agent_libtorrent_version() {
+    return lt::version();
+}
+]=])
+    list(APPEND COMMON_SOURCES "${LIBTORRENT_SYMBOL_CHECK}")
+
     # Prepend our install prefix so it takes priority over prefab CMAKE_FIND_ROOT_PATH
     list(PREPEND CMAKE_PREFIX_PATH "${GRPC_ANDROID_INSTALL_DIR}")
     find_package(Threads REQUIRED)
@@ -116,6 +154,8 @@ if(ANDROID OR __ANDROID__)
         ${CMAKE_SOURCE_DIR}/include
         ${GEN_ANDROID_DIR}
         ${GRPC_ANDROID_INSTALL_DIR}/include
+        ${CMAKE_SOURCE_DIR}/android/libtorrent-android-prebuilt/include
+        ${LIBTORRENT_ANDROID_INSTALL_DIR}/include
     )
 
     target_link_libraries(device-agent PRIVATE
@@ -125,6 +165,8 @@ if(ANDROID OR __ANDROID__)
         protobuf::libprotobuf
         gRPC::grpc++
         gRPC::grpc
+        "${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libtorrent-rasterbar.a"
+        ${LIBTORRENT_BOOST_STATIC_LIBS}
     )
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─
