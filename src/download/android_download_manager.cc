@@ -90,6 +90,7 @@ void AndroidDownloadManager::download(
     jstring jUrl   = env->NewStringUTF(req.url.c_str());
     jstring jSha   = env->NewStringUTF(req.expected_sha256.c_str());
     jstring jCmdId = env->NewStringUTF(req.command_id.c_str());
+    // HTTP path does not consume P2P fields; pass empty strings for JNI signature compatibility.
     jstring jTorrent = env->NewStringUTF("");
     jstring jMagnet = env->NewStringUTF("");
 

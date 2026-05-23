@@ -96,6 +96,22 @@ int main() {
     assert(empty_complete);
     assert(!empty_url_manager.is_downloading());
 
+    P2PDownloadManager invalid_magnet_manager;
+    bool invalid_magnet_complete = false;
+    DownloadRequest invalid_magnet_req;
+    invalid_magnet_req.magnet_uri = "magnet:?xt=urn:btih:invalid";
+    invalid_magnet_manager.download(invalid_magnet_req, nullptr,
+        [&](bool ok, const std::string& err) {
+            assert(!ok);
+            assert(err.find("failed to parse magnet URI") != std::string::npos);
+            invalid_magnet_complete = true;
+        });
+    for (int i = 0; i < 40 && !invalid_magnet_complete; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    assert(invalid_magnet_complete);
+    assert(!invalid_magnet_manager.is_downloading());
+
     const std::string dir = make_test_dir();
     const std::string torrent_path = dir + "/fixture.torrent";
     const std::string save_dir = dir + "/save";

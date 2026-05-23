@@ -404,10 +404,11 @@ void P2PDownloadManager::run_download(DownloadRequest req,
             lt::torrent_handle handle;
             if (error.empty()) {
                 handle = session.add_torrent(std::move(params), ec);
+                if (ec) {
+                    error = "failed to add torrent: " + ec.message();
+                }
             }
-            if (ec) {
-                error = "failed to add torrent: " + ec.message();
-            } else if (error.empty()) {
+            if (error.empty()) {
                 LOG_INFO("P2PDownloadManager: torrent added, save_path=" +
                          params.save_path);
 

@@ -568,6 +568,11 @@ class DeviceAgentService : Service() {
         }.start()
     }
 
+    /**
+     * `torrentUrl` and `magnetUri` are accepted only to keep the JNI callback
+     * signature aligned. P2P sources are consumed in C++ P2PDownloadManager; if
+     * Kotlin needs P2P visibility later, remove the suppress and handle them here.
+     */
     @Suppress("UNUSED_PARAMETER")
     fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long, commandId: String, torrentUrl: String, magnetUri: String) {
         android.util.Log.i(TAG, "onDownloadReady: cmd=$commandId batch=$batchId file=$fileId type=$fileType size=$fileSize")
