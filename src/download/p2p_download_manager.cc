@@ -225,12 +225,15 @@ double share_ratio(const lt::torrent_status& status) {
            static_cast<double>(status.total_wanted);
 }
 
-void set_upload_mode(lt::torrent_handle& handle, bool enabled) {
-    if (enabled) {
-        handle.set_flags(lt::torrent_flags::upload_mode,
-                         lt::torrent_flags::upload_mode);
+// ADR-20260523-02 amendment v2 2026-05-24: upload_mode stops downloads,
+// and max_uploads(0) is treated as unlimited by this libtorrent build.
+void set_upload_throttle(lt::torrent_handle& handle, bool stop_upload) {
+    if (stop_upload) {
+        handle.set_max_uploads(1);
+        handle.set_upload_limit(5120);
     } else {
-        handle.unset_flags(lt::torrent_flags::upload_mode);
+        handle.set_max_uploads(-1);
+        handle.set_upload_limit(0);
     }
 }
 
@@ -354,6 +357,32 @@ P2PDownloadState P2PDownloadManager::state() const {
     return state_machine_.state();
 }
 
+#ifdef DEVICE_AGENT_TESTING
+std::vector<int> P2PDownloadManager::active_max_uploads_for_test() const {
+    std::vector<int> values;
+    std::lock_guard<std::mutex> lock(mu_);
+    values.reserve(active_handles_.size());
+    for (const auto& handle : active_handles_) {
+        if (handle.is_valid()) {
+            values.push_back(handle.max_uploads());
+        }
+    }
+    return values;
+}
+
+std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
+    std::vector<int> values;
+    std::lock_guard<std::mutex> lock(mu_);
+    values.reserve(active_handles_.size());
+    for (const auto& handle : active_handles_) {
+        if (handle.is_valid()) {
+            values.push_back(handle.upload_limit());
+        }
+    }
+    return values;
+}
+#endif
+
 void P2PDownloadManager::on_network_changed(NetworkType type) {
     const bool stop_upload = type != NetworkType::WIFI;
     std::lock_guard<std::mutex> lock(mu_);
@@ -362,7 +391,7 @@ void P2PDownloadManager::on_network_changed(NetworkType type) {
                        [](const lt::torrent_handle& handle) { return !handle.is_valid(); }),
         active_handles_.end());
     for (auto& handle : active_handles_) {
-        set_upload_mode(handle, stop_upload);
+        set_upload_throttle(handle, stop_upload);
     }
 }
 
@@ -471,7 +500,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     std::lock_guard<std::mutex> lock(mu_);
                     active_handles_.push_back(handle);
                     if (network_policy_) {
-                        set_upload_mode(handle, !network_policy_->should_seed());
+                        set_upload_throttle(handle, !network_policy_->should_seed());
                     }
                 }
             }

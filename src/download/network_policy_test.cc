@@ -1,6 +1,9 @@
 #include "download/network_policy.h"
 
+#include <atomic>
 #include <cassert>
+#include <chrono>
+#include <future>
 #include <vector>
 
 namespace {
@@ -12,6 +15,21 @@ public:
     }
 
     std::vector<device_agent::NetworkType> events;
+};
+
+class ReentrantListener : public device_agent::NetworkPolicy::Listener {
+public:
+    explicit ReentrantListener(device_agent::NetworkPolicy& policy) : policy_(policy) {}
+
+    void on_network_changed(device_agent::NetworkType) override {
+        (void)policy_.should_seed();
+        calls.fetch_add(1);
+    }
+
+    std::atomic<int> calls{0};
+
+private:
+    device_agent::NetworkPolicy& policy_;
 };
 
 }  // namespace
@@ -40,6 +58,24 @@ int main() {
     policy.remove_listener(&listener);
     policy.on_network_changed(NetworkType::CELLULAR);
     assert(listener.events.size() == 1);
+
+    NetworkPolicy concurrent_policy;
+    ReentrantListener reentrant_listener(concurrent_policy);
+    concurrent_policy.add_listener(&reentrant_listener);
+    auto change_network = [&concurrent_policy](NetworkType first, NetworkType second) {
+        for (int i = 0; i < 100; ++i) {
+            concurrent_policy.on_network_changed((i % 2 == 0) ? first : second);
+        }
+    };
+    auto first = std::async(std::launch::async, change_network,
+                            NetworkType::WIFI, NetworkType::CELLULAR);
+    auto second = std::async(std::launch::async, change_network,
+                             NetworkType::NONE, NetworkType::OTHER);
+    assert(first.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    assert(second.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    first.get();
+    second.get();
+    assert(reentrant_listener.calls.load() == 200);
 
     return 0;
 }

@@ -73,6 +73,10 @@ public:
     bool is_downloading() const override;
     P2PDownloadState state() const;
     void on_network_changed(NetworkType type) override;
+#ifdef DEVICE_AGENT_TESTING
+    std::vector<int> active_max_uploads_for_test() const;
+    std::vector<int> active_upload_limits_for_test() const;
+#endif
 
 private:
     void run_download(DownloadRequest req,

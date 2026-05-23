@@ -14,6 +14,9 @@
 
 namespace {
 
+constexpr int kLibtorrentMaxUploadsUnlimited = 16777215;
+constexpr int kThrottledUploadLimitBytesPerSecond = 5120;
+
 std::string bencoded_string(const std::string& value) {
     return std::to_string(value.size()) + ":" + value;
 }
@@ -53,6 +56,32 @@ void write_seedless_torrent(const std::string& path) {
 bool wait_until_downloading(device_agent::P2PDownloadManager& manager) {
     for (int i = 0; i < 40; ++i) {
         if (manager.is_downloading()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
+
+bool wait_until_active_handle(device_agent::P2PDownloadManager& manager) {
+    for (int i = 0; i < 40; ++i) {
+        if (!manager.active_max_uploads_for_test().empty()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
+
+bool wait_until_upload_throttle(device_agent::P2PDownloadManager& manager,
+                                int expected_max_uploads,
+                                int expected_upload_limit) {
+    for (int i = 0; i < 40; ++i) {
+        const auto max_uploads = manager.active_max_uploads_for_test();
+        const auto upload_limits = manager.active_upload_limits_for_test();
+        if (!max_uploads.empty() && !upload_limits.empty() &&
+                max_uploads.front() == expected_max_uploads &&
+                upload_limits.front() == expected_upload_limit) {
             return true;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -152,7 +181,14 @@ int main() {
         });
 
     assert(wait_until_downloading(manager));
+    assert(wait_until_active_handle(manager));
     assert(manager.state() == P2PDownloadState::Downloading);
+    manager.on_network_changed(NetworkType::CELLULAR);
+    assert(wait_until_upload_throttle(
+        manager, 1, kThrottledUploadLimitBytesPerSecond));
+    manager.on_network_changed(NetworkType::WIFI);
+    assert(wait_until_upload_throttle(
+        manager, kLibtorrentMaxUploadsUnlimited, 0));
     manager.cancel();
     assert(!manager.is_downloading());
     assert(manager.state() == P2PDownloadState::Idle);

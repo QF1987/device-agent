@@ -184,7 +184,10 @@ extern "C" const char* device_agent_libtorrent_version() {
         ${CMAKE_SOURCE_DIR}/android/libtorrent-android-prebuilt/include
         ${LIBTORRENT_ANDROID_INSTALL_DIR}/include
     )
-    target_compile_definitions(p2p_download_manager_test PRIVATE TORRENT_ABI_VERSION=3)
+    target_compile_definitions(p2p_download_manager_test PRIVATE
+        TORRENT_ABI_VERSION=3
+        DEVICE_AGENT_TESTING
+    )
     target_link_libraries(p2p_download_manager_test PRIVATE
         log
         "${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libtorrent-rasterbar.a"

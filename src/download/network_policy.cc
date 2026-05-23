@@ -10,10 +10,14 @@ bool NetworkPolicy::should_seed() const {
 }
 
 void NetworkPolicy::on_network_changed(NetworkType type) {
-    std::lock_guard<std::mutex> lock(mu_);
-    current_type_ = type;
+    std::vector<Listener*> listeners;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        current_type_ = type;
+        listeners = listeners_;
+    }
 
-    for (auto* listener : listeners_) {
+    for (auto* listener : listeners) {
         if (listener != nullptr) {
             listener->on_network_changed(type);
         }
