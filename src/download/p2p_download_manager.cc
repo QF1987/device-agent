@@ -225,6 +225,15 @@ double share_ratio(const lt::torrent_status& status) {
            static_cast<double>(status.total_wanted);
 }
 
+void set_upload_mode(lt::torrent_handle& handle, bool enabled) {
+    if (enabled) {
+        handle.set_flags(lt::torrent_flags::upload_mode,
+                         lt::torrent_flags::upload_mode);
+    } else {
+        handle.unset_flags(lt::torrent_flags::upload_mode);
+    }
+}
+
 }  // namespace
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
@@ -269,11 +278,30 @@ bool P2PSeedingStateMachine::should_stop(
 
 P2PDownloadManager::P2PDownloadManager(
         Callbacks callbacks,
-        P2PSeedingPolicy seeding_policy)
-    : callbacks_(std::move(callbacks)), state_machine_(seeding_policy) {}
+        P2PSeedingPolicy seeding_policy,
+        std::shared_ptr<NetworkPolicy> network_policy)
+    : network_policy_(std::move(network_policy)),
+      callbacks_(std::move(callbacks)),
+      state_machine_(seeding_policy) {
+    if (network_policy_) {
+        network_policy_->add_listener(this);
+    }
+}
 
 P2PDownloadManager::~P2PDownloadManager() {
+    if (network_policy_) {
+        network_policy_->remove_listener(this);
+    }
     cancel();
+    lt::session_proxy proxy;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        active_handles_.clear();
+        if (session_) {
+            proxy = session_->abort();
+            session_.reset();
+        }
+    }
 }
 
 void P2PDownloadManager::download(const DownloadRequest& req,
@@ -302,6 +330,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 
     {
         std::lock_guard<std::mutex> lock(mu_);
+        ensure_session_locked();
         worker_ = std::thread(&P2PDownloadManager::run_download, this, req,
                               std::move(on_progress), std::move(on_complete));
     }
@@ -323,6 +352,18 @@ bool P2PDownloadManager::is_downloading() const {
 P2PDownloadState P2PDownloadManager::state() const {
     std::lock_guard<std::mutex> lock(state_mu_);
     return state_machine_.state();
+}
+
+void P2PDownloadManager::on_network_changed(NetworkType type) {
+    const bool stop_upload = type != NetworkType::WIFI;
+    std::lock_guard<std::mutex> lock(mu_);
+    active_handles_.erase(
+        std::remove_if(active_handles_.begin(), active_handles_.end(),
+                       [](const lt::torrent_handle& handle) { return !handle.is_valid(); }),
+        active_handles_.end());
+    for (auto& handle : active_handles_) {
+        set_upload_mode(handle, stop_upload);
+    }
 }
 
 void P2PDownloadManager::join_worker() {
@@ -362,6 +403,22 @@ bool P2PDownloadManager::should_stop_seeding(double current_share_ratio) const {
     return state_machine_.should_stop(std::chrono::steady_clock::now(), current_share_ratio);
 }
 
+void P2PDownloadManager::ensure_session_locked() {
+    if (!session_) {
+        session_ = std::make_unique<lt::session>(make_session());
+    }
+}
+
+void P2PDownloadManager::remove_active_handle_locked(const lt::torrent_handle& handle) {
+    active_handles_.erase(
+        std::remove_if(active_handles_.begin(), active_handles_.end(),
+                       [&](const lt::torrent_handle& candidate) {
+                           return !candidate.is_valid() ||
+                                  (handle.is_valid() && candidate == handle);
+                       }),
+        active_handles_.end());
+}
+
 void P2PDownloadManager::run_download(DownloadRequest req,
                                       ProgressCallback on_progress,
                                       CompleteCallback on_complete) {
@@ -399,13 +456,23 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 }
             }
 
-            lt::session_proxy proxy;
-            lt::session session = make_session();
             lt::torrent_handle handle;
+            lt::session* session = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                ensure_session_locked();
+                session = session_.get();
+            }
             if (error.empty()) {
-                handle = session.add_torrent(std::move(params), ec);
+                handle = session->add_torrent(std::move(params), ec);
                 if (ec) {
                     error = "failed to add torrent: " + ec.message();
+                } else {
+                    std::lock_guard<std::mutex> lock(mu_);
+                    active_handles_.push_back(handle);
+                    if (network_policy_) {
+                        set_upload_mode(handle, !network_policy_->should_seed());
+                    }
                 }
             }
             if (error.empty()) {
@@ -413,9 +480,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                          params.save_path);
 
                 while (!cancel_requested_.load()) {
-                    if (auto* alert = session.wait_for_alert(std::chrono::milliseconds(250))) {
+                    if (auto* alert = session->wait_for_alert(std::chrono::milliseconds(250))) {
                         std::vector<lt::alert*> alerts;
-                        session.pop_alerts(&alerts);
+                        session->pop_alerts(&alerts);
                         for (const auto* item : alerts) {
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 success = true;
@@ -503,18 +570,21 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         if (should_stop_seeding(share_ratio(status))) {
                             break;
                         }
-                        session.wait_for_alert(std::chrono::milliseconds(1000));
+                        session->wait_for_alert(std::chrono::milliseconds(1000));
                         std::vector<lt::alert*> alerts;
-                        session.pop_alerts(&alerts);
+                        session->pop_alerts(&alerts);
                     }
                 }
 
                 set_state_stopping();
                 if (handle.is_valid()) {
                     handle.pause();
-                    session.remove_torrent(handle);
+                    {
+                        std::lock_guard<std::mutex> lock(mu_);
+                        remove_active_handle_locked(handle);
+                    }
+                    session->remove_torrent(handle);
                 }
-                proxy = session.abort();
             }
         }
     } catch (const std::exception& ex) {

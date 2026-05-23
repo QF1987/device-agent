@@ -7,7 +7,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
@@ -391,6 +395,8 @@ class DeviceAgentService : Service() {
         @JvmStatic
         external fun nativeStop()
         @JvmStatic
+        external fun nativeOnNetworkChanged(isCellular: Boolean, isWifi: Boolean)
+        @JvmStatic
         external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String): Boolean
 
         /** 根据 BuildConfig flavor 创建对应的安装器 */
@@ -414,6 +420,19 @@ class DeviceAgentService : Service() {
     )
     private val p2pLock = Any()
     private var activeP2PContext: P2PDownloadContext? = null
+    private lateinit var connectivityManager: ConnectivityManager
+    private var networkCallbackRegistered = false
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            val isCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+            val isWifi = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            nativeOnNetworkChanged(isCellular, isWifi)
+        }
+
+        override fun onLost(network: Network) {
+            nativeOnNetworkChanged(false, false)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -445,6 +464,13 @@ class DeviceAgentService : Service() {
         android.util.Log.i(TAG, "Starting native gRPC: host=$parsedHost port=$grpcPort")
         val ret = nativeStart(this, parsedHost, grpcPort, cfgDeviceId)
         android.util.Log.i(TAG, "nativeStart returned: $ret")
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        try {
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            networkCallbackRegistered = true
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "register network callback failed: ${e.message}")
+        }
         android.os.Handler(mainLooper).postDelayed({
             completeRecoveredInstallIfNeeded()
         }, 3_000)
@@ -512,6 +538,14 @@ class DeviceAgentService : Service() {
     }
     override fun onBind(i: Intent?): IBinder? = null
     override fun onDestroy() {
+        if (::connectivityManager.isInitialized && networkCallbackRegistered) {
+            try {
+                connectivityManager.unregisterNetworkCallback(networkCallback)
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "unregister network callback failed: ${e.message}")
+            }
+            networkCallbackRegistered = false
+        }
         nativeStop()
         mainServiceRef = null
         super.onDestroy()

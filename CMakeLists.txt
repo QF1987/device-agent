@@ -20,6 +20,7 @@ set(COMMON_SOURCES
     src/executor/macos_executor.cc
     src/reboot_state/reboot_state.cc
     src/download/android_download_manager.cc
+    src/download/network_policy.cc
 )
 
 set(COMMON_HEADERS
@@ -30,6 +31,7 @@ set(COMMON_HEADERS
     src/executor/executor.h
     src/download/idownload_manager.h
     src/download/android_download_manager.h
+    src/download/network_policy.h
     src/reboot_state/reboot_state.h
     src/jni_bridge.h
 )
@@ -174,6 +176,7 @@ extern "C" const char* device_agent_libtorrent_version() {
     add_executable(p2p_download_manager_test
         src/download/p2p_download_manager_test.cc
         src/download/p2p_download_manager.cc
+        src/download/network_policy.cc
         src/logger/logger.cc
     )
     target_include_directories(p2p_download_manager_test PRIVATE
@@ -186,6 +189,14 @@ extern "C" const char* device_agent_libtorrent_version() {
         log
         "${LIBTORRENT_ANDROID_INSTALL_DIR}/lib/libtorrent-rasterbar.a"
         ${LIBTORRENT_BOOST_STATIC_LIBS}
+    )
+
+    add_executable(network_policy_test
+        src/download/network_policy_test.cc
+        src/download/network_policy.cc
+    )
+    target_include_directories(network_policy_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
     )
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─

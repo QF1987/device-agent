@@ -24,6 +24,7 @@
 #include "executor/executor.h"
 #include "download/idownload_manager.h"
 #include "download/android_download_manager.h"
+#include "download/network_policy.h"
 #include "download/p2p_download_manager.h"
 #include "jni_bridge.h"
 
@@ -37,12 +38,14 @@
 static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort, jstring jDeviceId);
 static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(JNIEnv* env, jclass clazz);
 static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jStatus, jlong jDownloadedBytes, jstring jErrorCode, jstring jErrorMessage);
+static void Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl(JNIEnv* env, jclass clazz, jboolean isCellular, jboolean isWifi);
 
 // ─── 全局变量（跨函数共享）────────────────────────────
 // g_jvm / g_java_service 在 jni_bridge.h 声明为 extern（由 android_executor.cc 定义）
 // g_client / g_client_mutex 仅在此文件使用
 static std::shared_ptr<device_agent::DeviceClient> g_client;
 static std::shared_ptr<device_agent::Executor> g_executor;
+static std::shared_ptr<device_agent::NetworkPolicy> g_network_policy;
 static std::unique_ptr<device_agent::CommandHandler> g_handler;
 static std::mutex g_client_mutex;
 
@@ -91,6 +94,11 @@ static JNINativeMethod g_methods[] = {
         const_cast<char*>("nativeReportReleaseStatus"),
         const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;)Z"),
         reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl)
+    },
+    {
+        const_cast<char*>("nativeOnNetworkChanged"),
+        const_cast<char*>("(ZZ)V"),
+        reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl)
     }
 };
 
@@ -370,6 +378,7 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
             return client->report_command_result(result);
         });
     g_handler->set_executor(executor);
+    g_network_policy = std::make_shared<device_agent::NetworkPolicy>();
     device_agent::P2PDownloadManager::Callbacks p2pCallbacks;
     p2pCallbacks.on_started = [](const device_agent::DownloadRequest& req, const std::string& localPath) {
         call_p2p_started(req, localPath);
@@ -380,7 +389,10 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     p2pCallbacks.on_complete = [](const device_agent::DownloadRequest&, const std::string&, bool success, const std::string& error) {
         call_p2p_complete(success, error);
     };
-    g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>(p2pCallbacks));
+    g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>(
+        p2pCallbacks,
+        device_agent::P2PSeedingPolicy::alpha_defaults(),
+        g_network_policy));
     LOGI("nativeStart: handler configured with executor + p2p_download_manager");
 
     client->set_command_callback(
@@ -412,6 +424,7 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
             g_client.reset();
         }
         g_handler.reset();
+        g_network_policy.reset();
         g_executor.reset();
     }
     if (g_java_service != nullptr) {
@@ -422,6 +435,36 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
         g_java_service = nullptr;
     }
     g_jvm = nullptr;
+}
+
+// ─── nativeOnNetworkChanged 实现 ────────────────────────
+// Kotlin签名: nativeOnNetworkChanged(isCellular, isWifi): Unit
+static void Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl(
+    JNIEnv* env,
+    jclass clazz,
+    jboolean isCellular,
+    jboolean isWifi) {
+
+    (void)env;
+    (void)clazz;
+
+    device_agent::NetworkType type = device_agent::NetworkType::NONE;
+    if (isWifi == JNI_TRUE) {
+        type = device_agent::NetworkType::WIFI;
+    } else if (isCellular == JNI_TRUE) {
+        type = device_agent::NetworkType::CELLULAR;
+    } else {
+        type = device_agent::NetworkType::NONE;
+    }
+
+    std::shared_ptr<device_agent::NetworkPolicy> policy;
+    {
+        std::lock_guard<std::mutex> lock(g_client_mutex);
+        policy = g_network_policy;
+    }
+    if (policy) {
+        policy->on_network_changed(type);
+    }
 }
 
 // ─── nativeReportReleaseStatus 实现 ──────────────────────

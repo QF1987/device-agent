@@ -64,6 +64,7 @@ bool wait_until_downloading(device_agent::P2PDownloadManager& manager) {
 
 int main() {
     using device_agent::DownloadRequest;
+    using device_agent::NetworkType;
     using device_agent::P2PDownloadState;
     using device_agent::P2PDownloadManager;
     using device_agent::P2PSeedingPolicy;
@@ -111,6 +112,12 @@ int main() {
     }
     assert(invalid_magnet_complete);
     assert(!invalid_magnet_manager.is_downloading());
+
+    P2PDownloadManager network_change_manager;
+    network_change_manager.on_network_changed(NetworkType::CELLULAR);
+    network_change_manager.on_network_changed(NetworkType::WIFI);
+    network_change_manager.on_network_changed(NetworkType::NONE);
+    assert(!network_change_manager.is_downloading());
 
     const std::string dir = make_test_dir();
     const std::string torrent_path = dir + "/fixture.torrent";
