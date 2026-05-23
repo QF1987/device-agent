@@ -6,6 +6,7 @@
 #include <libtorrent/alert.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/error_code.hpp>
+#include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/session.hpp>
 #include <libtorrent/session_params.hpp>
 #include <libtorrent/settings_pack.hpp>
@@ -40,11 +41,63 @@ std::string dirname_or_current(const std::string& path) {
     return path.substr(0, slash);
 }
 
-std::string resolve_save_path(const DownloadRequest& req) {
+bool starts_with(const std::string& value, const std::string& prefix) {
+    return value.size() >= prefix.size() &&
+           value.compare(0, prefix.size(), prefix) == 0;
+}
+
+bool ends_with(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+struct DownloadSource {
+    std::string value;
+    bool is_magnet = false;
+};
+
+std::string lowercase(std::string value);
+
+DownloadSource select_download_source(const DownloadRequest& req,
+                                      std::string& error,
+                                      bool emit_deprecated_warning) {
+    DownloadSource source;
+    if (!req.magnet_uri.empty()) {
+        source.value = req.magnet_uri;
+        source.is_magnet = true;
+        return source;
+    }
+    if (!req.torrent_url.empty()) {
+        source.value = req.torrent_url;
+        source.is_magnet = starts_with(req.torrent_url, "magnet:");
+        return source;
+    }
+    if (!req.url.empty() && ends_with(lowercase(req.url), ".torrent")) {
+        source.value = req.url;
+        if (emit_deprecated_warning) {
+            LOG_WARN("[deprecated] DownloadRequest.url used as torrent source; "
+                     "expected magnet_uri or torrent_url. Remove fallback in M3-GA.");
+        }
+        return source;
+    }
+    error = "no p2p download source: expected magnet_uri, torrent_url, or .torrent url fallback";
+    return source;
+}
+
+std::string resolve_save_path(const DownloadRequest& req,
+                              const std::string& source,
+                              bool is_magnet) {
     if (!req.dest_path.empty()) {
         return req.dest_path;
     }
-    return dirname_or_current(req.url);
+    if (is_magnet) {
+#ifdef __ANDROID__
+        return "/sdcard/Download";
+#else
+        return ".";
+#endif
+    }
+    return dirname_or_current(source);
 }
 
 lt::session make_session() {
@@ -148,6 +201,22 @@ std::string primary_file_path(const lt::torrent_info& torrent, const std::string
     return files.file_path(lt::file_index_t{0}, save_path);
 }
 
+bool resolve_primary_file_path(const lt::torrent_handle& handle,
+                               const std::string& save_path,
+                               std::string& downloaded_path,
+                               std::string& error) {
+    const auto torrent = handle.torrent_file();
+    if (!torrent) {
+        return false;
+    }
+    downloaded_path = primary_file_path(*torrent, save_path);
+    if (downloaded_path.empty()) {
+        error = "p2p alpha supports single-file torrents only";
+        return false;
+    }
+    return true;
+}
+
 double share_ratio(const lt::torrent_status& status) {
     if (status.total_wanted <= 0) {
         return 0.0;
@@ -210,9 +279,11 @@ P2PDownloadManager::~P2PDownloadManager() {
 void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
-    if (req.url.empty()) {
+    std::string source_error;
+    select_download_source(req, source_error, false);
+    if (!source_error.empty()) {
         if (on_complete) {
-            on_complete(false, "torrent path is empty");
+            on_complete(false, source_error);
         }
         return;
     }
@@ -300,21 +371,32 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     std::string downloaded_path;
 
     try {
-        LOG_INFO("P2PDownloadManager: loading torrent " + req.url);
+        const DownloadSource source = select_download_source(req, error, true);
+        if (error.empty()) {
+            LOG_INFO("P2PDownloadManager: loading torrent " + source.value);
 
-        lt::error_code ec;
-        auto torrent = std::make_shared<lt::torrent_info>(req.url, ec);
-        if (ec) {
-            error = "failed to load torrent: " + ec.message();
-        } else {
+            lt::error_code ec;
             lt::add_torrent_params params;
-            params.ti = torrent;
-            params.save_path = resolve_save_path(req);
-            downloaded_path = primary_file_path(*torrent, params.save_path);
-            if (downloaded_path.empty()) {
-                error = "p2p alpha supports single-file torrents only";
-            } else if (callbacks_.on_started) {
-                callbacks_.on_started(req, downloaded_path);
+            params.save_path = resolve_save_path(req, source.value, source.is_magnet);
+            if (source.is_magnet) {
+                params = lt::parse_magnet_uri(source.value, ec);
+                params.save_path = resolve_save_path(req, source.value, source.is_magnet);
+                if (ec) {
+                    error = "failed to parse magnet URI: " + ec.message();
+                }
+            } else {
+                auto torrent = std::make_shared<lt::torrent_info>(source.value, ec);
+                if (ec) {
+                    error = "failed to load torrent: " + ec.message();
+                } else {
+                    params.ti = torrent;
+                    downloaded_path = primary_file_path(*torrent, params.save_path);
+                    if (downloaded_path.empty()) {
+                        error = "p2p alpha supports single-file torrents only";
+                    } else if (callbacks_.on_started) {
+                        callbacks_.on_started(req, downloaded_path);
+                    }
+                }
             }
 
             lt::session_proxy proxy;
@@ -327,7 +409,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 error = "failed to add torrent: " + ec.message();
             } else if (error.empty()) {
                 LOG_INFO("P2PDownloadManager: torrent added, save_path=" +
-                         resolve_save_path(req));
+                         params.save_path);
 
                 while (!cancel_requested_.load()) {
                     if (auto* alert = session.wait_for_alert(std::chrono::milliseconds(250))) {
@@ -337,6 +419,18 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 success = true;
                                 break;
+                            }
+                            if (source.is_magnet &&
+                                    lt::alert_cast<lt::metadata_received_alert>(item) != nullptr &&
+                                    downloaded_path.empty()) {
+                                if (resolve_primary_file_path(handle, params.save_path,
+                                                              downloaded_path, error)) {
+                                    if (callbacks_.on_started) {
+                                        callbacks_.on_started(req, downloaded_path);
+                                    }
+                                } else if (!error.empty()) {
+                                    break;
+                                }
                             }
                             if (is_terminal_error(item)) {
                                 error = alert_message(item);
@@ -350,6 +444,17 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
 
                     lt::torrent_status status = handle.status();
+                    if (source.is_magnet && status.has_metadata && downloaded_path.empty()) {
+                        if (resolve_primary_file_path(handle, params.save_path,
+                                                      downloaded_path, error)) {
+                            if (callbacks_.on_started) {
+                                callbacks_.on_started(req, downloaded_path);
+                            }
+                        }
+                        if (!error.empty()) {
+                            break;
+                        }
+                    }
                     const auto progress = make_progress(status, req.file_size);
                     if (on_progress) {
                         on_progress(progress);

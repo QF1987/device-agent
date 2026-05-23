@@ -1818,6 +1818,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
     kFileTypeFieldNumber = 3,
     kDownloadUrlFieldNumber = 4,
     kSha256FieldNumber = 5,
+    kTorrentUrlFieldNumber = 7,
+    kMagnetUriFieldNumber = 8,
     kFileSizeFieldNumber = 6,
   };
   // string batch_id = 1;
@@ -1895,6 +1897,36 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
   ::std::string* PROTOBUF_NONNULL _internal_mutable_sha256();
 
   public:
+  // string torrent_url = 7;
+  void clear_torrent_url() ;
+  [[nodiscard]] const ::std::string& torrent_url() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_torrent_url(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_torrent_url();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_torrent_url();
+  void set_allocated_torrent_url(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_torrent_url() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_torrent_url(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_torrent_url();
+
+  public:
+  // string magnet_uri = 8;
+  void clear_magnet_uri() ;
+  [[nodiscard]] const ::std::string& magnet_uri() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_magnet_uri(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_magnet_uri();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_magnet_uri();
+  void set_allocated_magnet_uri(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_magnet_uri() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_magnet_uri(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_magnet_uri();
+
+  public:
   // int64 file_size = 6;
   void clear_file_size() ;
   [[nodiscard]] ::int64_t file_size() const;
@@ -1909,8 +1941,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
  private:
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 6,
-                                   0, 89,
+  static const ::google::protobuf::internal::TcParseTable<3, 8,
+                                   0, 118,
                                    2>
       _table_;
 
@@ -1938,6 +1970,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
     ::google::protobuf::internal::ArenaStringPtr file_type_;
     ::google::protobuf::internal::ArenaStringPtr download_url_;
     ::google::protobuf::internal::ArenaStringPtr sha256_;
+    ::google::protobuf::internal::ArenaStringPtr torrent_url_;
+    ::google::protobuf::internal::ArenaStringPtr magnet_uri_;
     ::int64_t file_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -6538,7 +6572,7 @@ inline void DownloadReadyCommand::clear_file_size() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.file_size_ = ::int64_t{0};
   ClearHasBit(_impl_._has_bits_[0],
-                  0x00000020U);
+                  0x00000080U);
 }
 inline ::int64_t DownloadReadyCommand::file_size() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.file_size)
@@ -6546,7 +6580,7 @@ inline ::int64_t DownloadReadyCommand::file_size() const {
 }
 inline void DownloadReadyCommand::set_file_size(::int64_t value) {
   _internal_set_file_size(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000080U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.file_size)
 }
 inline ::int64_t DownloadReadyCommand::_internal_file_size() const {
@@ -6556,6 +6590,136 @@ inline ::int64_t DownloadReadyCommand::_internal_file_size() const {
 inline void DownloadReadyCommand::_internal_set_file_size(::int64_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.file_size_ = value;
+}
+
+// string torrent_url = 7;
+inline void DownloadReadyCommand::clear_torrent_url() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.torrent_url_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000020U);
+}
+inline const ::std::string& DownloadReadyCommand::torrent_url() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.torrent_url)
+  return _internal_torrent_url();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_torrent_url(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  _impl_.torrent_url_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.torrent_url)
+}
+inline ::std::string* PROTOBUF_NONNULL DownloadReadyCommand::mutable_torrent_url()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ::std::string* _s = _internal_mutable_torrent_url();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.torrent_url)
+  return _s;
+}
+inline const ::std::string& DownloadReadyCommand::_internal_torrent_url() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.torrent_url_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_torrent_url(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.torrent_url_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DownloadReadyCommand::_internal_mutable_torrent_url() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.torrent_url_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DownloadReadyCommand::release_torrent_url() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.torrent_url)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000020U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  auto* released = _impl_.torrent_url_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.torrent_url_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DownloadReadyCommand::set_allocated_torrent_url(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  }
+  _impl_.torrent_url_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.torrent_url_.IsDefault()) {
+    _impl_.torrent_url_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.torrent_url)
+}
+
+// string magnet_uri = 8;
+inline void DownloadReadyCommand::clear_magnet_uri() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.magnet_uri_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000040U);
+}
+inline const ::std::string& DownloadReadyCommand::magnet_uri() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DownloadReadyCommand.magnet_uri)
+  return _internal_magnet_uri();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DownloadReadyCommand::set_magnet_uri(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  _impl_.magnet_uri_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DownloadReadyCommand.magnet_uri)
+}
+inline ::std::string* PROTOBUF_NONNULL DownloadReadyCommand::mutable_magnet_uri()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ::std::string* _s = _internal_mutable_magnet_uri();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DownloadReadyCommand.magnet_uri)
+  return _s;
+}
+inline const ::std::string& DownloadReadyCommand::_internal_magnet_uri() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.magnet_uri_.Get();
+}
+inline void DownloadReadyCommand::_internal_set_magnet_uri(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.magnet_uri_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DownloadReadyCommand::_internal_mutable_magnet_uri() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.magnet_uri_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DownloadReadyCommand::release_magnet_uri() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DownloadReadyCommand.magnet_uri)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000040U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  auto* released = _impl_.magnet_uri_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.magnet_uri_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DownloadReadyCommand::set_allocated_magnet_uri(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  }
+  _impl_.magnet_uri_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.magnet_uri_.IsDefault()) {
+    _impl_.magnet_uri_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DownloadReadyCommand.magnet_uri)
 }
 
 // -------------------------------------------------------------------

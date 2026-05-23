@@ -72,7 +72,7 @@ void AndroidDownloadManager::download(
     jclass serviceCls = env->GetObjectClass(g_java_service);
     jmethodID method = env->GetMethodID(
         serviceCls, "onDownloadReady",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;)V");
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (method == nullptr) {
         std::string err = "onDownloadReady method not found in Java service";
         LOG_ERROR("AndroidDownloadManager: " + err);
@@ -90,9 +90,12 @@ void AndroidDownloadManager::download(
     jstring jUrl   = env->NewStringUTF(req.url.c_str());
     jstring jSha   = env->NewStringUTF(req.expected_sha256.c_str());
     jstring jCmdId = env->NewStringUTF(req.command_id.c_str());
+    jstring jTorrent = env->NewStringUTF("");
+    jstring jMagnet = env->NewStringUTF("");
 
     env->CallVoidMethod(g_java_service, method,
-        jBatch, jFile, jType, jUrl, jSha, static_cast<jlong>(req.file_size), jCmdId);
+        jBatch, jFile, jType, jUrl, jSha, static_cast<jlong>(req.file_size), jCmdId,
+        jTorrent, jMagnet);
 
     env->DeleteLocalRef(jBatch);
     env->DeleteLocalRef(jFile);
@@ -100,6 +103,8 @@ void AndroidDownloadManager::download(
     env->DeleteLocalRef(jUrl);
     env->DeleteLocalRef(jSha);
     env->DeleteLocalRef(jCmdId);
+    env->DeleteLocalRef(jTorrent);
+    env->DeleteLocalRef(jMagnet);
 
     // 检查 JNI 调用是否成功（是否有异常抛出）
     if (env->ExceptionCheck()) {

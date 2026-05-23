@@ -167,12 +167,14 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         result.set_message(err_msg.empty() ? "app upgrade scheduled" : err_msg);
 
     } else if (cmd_type == "download_ready") {
-        std::string batch_id, file_id, file_type, url, sha256;
+        std::string batch_id, file_id, file_type, url, torrent_url, magnet_uri, sha256;
         int64_t file_size = 0;
         extract_json_string(payload, "batch_id", batch_id);
         extract_json_string(payload, "file_id", file_id);
         extract_json_string(payload, "file_type", file_type);
         extract_json_string(payload, "download_url", url);
+        extract_json_string(payload, "torrent_url", torrent_url);
+        extract_json_string(payload, "magnet_uri", magnet_uri);
         extract_json_string(payload, "sha256", sha256);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
@@ -187,7 +189,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             dl_mgr = dl_mgr_;
         }
 
-        if (batch_id.empty() || file_id.empty() || url.empty()) {
+        if (batch_id.empty() || file_id.empty() ||
+                (url.empty() && torrent_url.empty() && magnet_uri.empty())) {
             err_msg = "invalid payload: missing required fields for download_ready";
             result.set_status("failed");
             result.set_message(err_msg);
@@ -198,6 +201,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         } else {
             DownloadRequest req;
             req.url = url;
+            req.torrent_url = torrent_url;
+            req.magnet_uri = magnet_uri;
             req.dest_path = "";  // 由下载管理器自行决定存储路径
             req.expected_sha256 = sha256;
             req.file_size = file_size;

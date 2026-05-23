@@ -27,8 +27,11 @@ namespace device_agent {
 // 统一封装下载所需的所有参数。
 // 各平台实现按需使用字段（libcurl 只用 url/dest/sha256，
 // Android 用全部字段用于 JNI 转发和进度上报）。
+// P2PDownloadManager 的来源消费优先级：magnet_uri > torrent_url > url（兼容 fallback）。
 struct DownloadRequest {
     std::string url;            // 下载地址（HTTP/HTTPS）
+    std::string torrent_url;    // Torrent 文件地址（P2P 路径）
+    std::string magnet_uri;     // Magnet URI（P2P 路径，最高优先级）
     std::string dest_path;      // 本地目标路径
     std::string expected_sha256;// SHA256 校验值（空 = 不校验）
     int64_t file_size = 0;      // 文件大小（字节，0 = 未知）

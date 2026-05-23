@@ -235,6 +235,12 @@ inline constexpr DownloadReadyCommand::Impl_::Impl_(
         sha256_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
+        torrent_url_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        magnet_uri_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
         file_size_{::int64_t{0}} {}
 
 template <typename>
@@ -672,19 +678,23 @@ const ::uint32_t
         0,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_._has_bits_),
-        9, // hasbit index offset
+        11, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.batch_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.file_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.file_type_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.download_url_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.sha256_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.file_size_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.torrent_url_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DownloadReadyCommand, _impl_.magnet_uri_),
         0,
         1,
         2,
         3,
         4,
+        7,
         5,
+        6,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::Command, _impl_._has_bits_),
         9, // hasbit index offset
@@ -759,11 +769,11 @@ static const ::_pbi::MigrationSchema
         {90, sizeof(::terminal_agent::v1::EventReport)},
         {105, sizeof(::terminal_agent::v1::EventReportResponse)},
         {112, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
-        {127, sizeof(::terminal_agent::v1::Command)},
-        {142, sizeof(::terminal_agent::v1::CommandStreamRequest)},
-        {147, sizeof(::terminal_agent::v1::CommandResult)},
-        {160, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
-        {179, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
+        {131, sizeof(::terminal_agent::v1::Command)},
+        {146, sizeof(::terminal_agent::v1::CommandStreamRequest)},
+        {151, sizeof(::terminal_agent::v1::CommandResult)},
+        {164, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
+        {183, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::terminal_agent::v1::_AuthContext_default_instance_._instance,
@@ -815,52 +825,53 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "imestamp\030\002 \001(\003\022\022\n\nevent_type\030\003 \001(\t\022\020\n\010se"
     "verity\030\004 \001(\t\022\017\n\007message\030\005 \001(\t\022\023\n\013detail_"
     "json\030\006 \001(\t\"8\n\023EventReportResponse\022\020\n\010acc"
-    "epted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\205\001\n\024Downloa"
+    "epted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\256\001\n\024Downloa"
     "dReadyCommand\022\020\n\010batch_id\030\001 \001(\t\022\017\n\007file_"
     "id\030\002 \001(\t\022\021\n\tfile_type\030\003 \001(\t\022\024\n\014download_"
     "url\030\004 \001(\t\022\016\n\006sha256\030\005 \001(\t\022\021\n\tfile_size\030\006"
-    " \001(\003\"\210\001\n\007Command\022\021\n\tdevice_id\030\001 \001(\t\022\022\n\nc"
-    "ommand_id\030\002 \001(\t\022\024\n\014command_type\030\003 \001(\t\022\024\n"
-    "\014payload_json\030\004 \001(\t\022\021\n\tissued_at\030\005 \001(\003\022\027"
-    "\n\017timeout_seconds\030\006 \001(\003\")\n\024CommandStream"
-    "Request\022\021\n\tdevice_id\030\001 \001(\t\"l\n\rCommandRes"
-    "ult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 \001"
-    "(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013e"
-    "xecuted_at\030\005 \001(\003\"\201\002\n\024ReleaseStatusReques"
-    "t\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022\017"
-    "\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.termin"
-    "al_agent.v1.ReleaseDeviceStatus\022\030\n\020downl"
-    "oaded_bytes\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#."
-    "terminal_agent.v1.ReleaseErrorCode\022\025\n\rer"
-    "ror_message\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\":\n\025"
-    "ReleaseStatusResponse\022\020\n\010accepted\030\001 \001(\010\022"
-    "\017\n\007message\030\002 \001(\t*\266\003\n\023ReleaseDeviceStatus"
-    "\022%\n!RELEASE_DEVICE_STATUS_UNSPECIFIED\020\000\022"
-    "!\n\035RELEASE_DEVICE_STATUS_PENDING\020\001\022\037\n\033RE"
-    "LEASE_DEVICE_STATUS_READY\020\002\022%\n!RELEASE_D"
-    "EVICE_STATUS_DOWNLOADING\020\003\022$\n RELEASE_DE"
-    "VICE_STATUS_DOWNLOADED\020\004\022$\n RELEASE_DEVI"
-    "CE_STATUS_INSTALLING\020\005\022#\n\037RELEASE_DEVICE"
-    "_STATUS_INSTALLED\020\006\022)\n%RELEASE_DEVICE_ST"
-    "ATUS_DOWNLOAD_FAILED\020\007\022(\n$RELEASE_DEVICE"
-    "_STATUS_INSTALL_FAILED\020\010\022#\n\037RELEASE_DEVI"
-    "CE_STATUS_CANCELLED\020\t\022\"\n\036RELEASE_DEVICE_"
-    "STATUS_RETRYING\020\n*\234\002\n\020ReleaseErrorCode\022\""
-    "\n\036RELEASE_ERROR_CODE_UNSPECIFIED\020\000\022$\n RE"
-    "LEASE_ERROR_CODE_NETWORK_ERROR\020\001\022#\n\037RELE"
-    "ASE_ERROR_CODE_SERVER_ERROR\020\002\022$\n RELEASE"
-    "_ERROR_CODE_STORAGE_ERROR\020\003\022&\n\"RELEASE_E"
-    "RROR_CODE_CHECKSUM_FAILED\020\004\022$\n RELEASE_E"
-    "RROR_CODE_INSTALL_ERROR\020\005\022%\n!RELEASE_ERR"
-    "OR_CODE_BUSINESS_ERROR\020\006B;Z9github.com/Q"
-    "F1987/terminal-agent-go/gen/terminal_age"
-    "nt/v1b\006proto3"
+    " \001(\003\022\023\n\013torrent_url\030\007 \001(\t\022\022\n\nmagnet_uri\030"
+    "\010 \001(\t\"\210\001\n\007Command\022\021\n\tdevice_id\030\001 \001(\t\022\022\n\n"
+    "command_id\030\002 \001(\t\022\024\n\014command_type\030\003 \001(\t\022\024"
+    "\n\014payload_json\030\004 \001(\t\022\021\n\tissued_at\030\005 \001(\003\022"
+    "\027\n\017timeout_seconds\030\006 \001(\003\")\n\024CommandStrea"
+    "mRequest\022\021\n\tdevice_id\030\001 \001(\t\"l\n\rCommandRe"
+    "sult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 "
+    "\001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013"
+    "executed_at\030\005 \001(\003\"\201\002\n\024ReleaseStatusReque"
+    "st\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022"
+    "\017\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.termi"
+    "nal_agent.v1.ReleaseDeviceStatus\022\030\n\020down"
+    "loaded_bytes\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#"
+    ".terminal_agent.v1.ReleaseErrorCode\022\025\n\re"
+    "rror_message\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\":\n"
+    "\025ReleaseStatusResponse\022\020\n\010accepted\030\001 \001(\010"
+    "\022\017\n\007message\030\002 \001(\t*\266\003\n\023ReleaseDeviceStatu"
+    "s\022%\n!RELEASE_DEVICE_STATUS_UNSPECIFIED\020\000"
+    "\022!\n\035RELEASE_DEVICE_STATUS_PENDING\020\001\022\037\n\033R"
+    "ELEASE_DEVICE_STATUS_READY\020\002\022%\n!RELEASE_"
+    "DEVICE_STATUS_DOWNLOADING\020\003\022$\n RELEASE_D"
+    "EVICE_STATUS_DOWNLOADED\020\004\022$\n RELEASE_DEV"
+    "ICE_STATUS_INSTALLING\020\005\022#\n\037RELEASE_DEVIC"
+    "E_STATUS_INSTALLED\020\006\022)\n%RELEASE_DEVICE_S"
+    "TATUS_DOWNLOAD_FAILED\020\007\022(\n$RELEASE_DEVIC"
+    "E_STATUS_INSTALL_FAILED\020\010\022#\n\037RELEASE_DEV"
+    "ICE_STATUS_CANCELLED\020\t\022\"\n\036RELEASE_DEVICE"
+    "_STATUS_RETRYING\020\n*\234\002\n\020ReleaseErrorCode\022"
+    "\"\n\036RELEASE_ERROR_CODE_UNSPECIFIED\020\000\022$\n R"
+    "ELEASE_ERROR_CODE_NETWORK_ERROR\020\001\022#\n\037REL"
+    "EASE_ERROR_CODE_SERVER_ERROR\020\002\022$\n RELEAS"
+    "E_ERROR_CODE_STORAGE_ERROR\020\003\022&\n\"RELEASE_"
+    "ERROR_CODE_CHECKSUM_FAILED\020\004\022$\n RELEASE_"
+    "ERROR_CODE_INSTALL_ERROR\020\005\022%\n!RELEASE_ER"
+    "ROR_CODE_BUSINESS_ERROR\020\006B;Z9github.com/"
+    "QF1987/terminal-agent-go/gen/terminal_ag"
+    "ent/v1b\006proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    2773,
+    2814,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
@@ -4620,7 +4631,9 @@ PROTOBUF_NDEBUG_INLINE DownloadReadyCommand::Impl_::Impl_(
         file_id_(arena, from.file_id_),
         file_type_(arena, from.file_type_),
         download_url_(arena, from.download_url_),
-        sha256_(arena, from.sha256_) {}
+        sha256_(arena, from.sha256_),
+        torrent_url_(arena, from.torrent_url_),
+        magnet_uri_(arena, from.magnet_uri_) {}
 
 DownloadReadyCommand::DownloadReadyCommand(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -4647,7 +4660,9 @@ PROTOBUF_NDEBUG_INLINE DownloadReadyCommand::Impl_::Impl_(
         file_id_(arena),
         file_type_(arena),
         download_url_(arena),
-        sha256_(arena) {}
+        sha256_(arena),
+        torrent_url_(arena),
+        magnet_uri_(arena) {}
 
 inline void DownloadReadyCommand::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
@@ -4666,6 +4681,8 @@ inline void DownloadReadyCommand::SharedDtor(MessageLite& self) {
   this_._impl_.file_type_.Destroy();
   this_._impl_.download_url_.Destroy();
   this_._impl_.sha256_.Destroy();
+  this_._impl_.torrent_url_.Destroy();
+  this_._impl_.magnet_uri_.Destroy();
   this_._impl_.~Impl_();
 }
 
@@ -4712,16 +4729,16 @@ DownloadReadyCommand::GetClassData() const {
   return DownloadReadyCommand_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 6, 0, 89, 2>
+const ::_pbi::TcParseTable<3, 8, 0, 118, 2>
 DownloadReadyCommand::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_._has_bits_),
     0, // no _extensions_
-    6, 56,  // max_field_number, fast_idx_mask
+    8, 56,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967232,  // skipmap
+    4294967040,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    6,  // num_field_entries
+    8,  // num_field_entries
     0,  // num_aux_entries
     offsetof(decltype(_table_), field_names),  // no aux_entries
     DownloadReadyCommand_class_data_.base(),
@@ -4731,7 +4748,9 @@ DownloadReadyCommand::_table_ = {
     ::_pbi::TcParser::GetTable<::terminal_agent::v1::DownloadReadyCommand>(),  // to_prefetch
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
+    // string magnet_uri = 8;
+    {::_pbi::TcParser::FastUS1,
+     {66, 6, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.magnet_uri_)}},
     // string batch_id = 1;
     {::_pbi::TcParser::FastUS1,
      {10, 0, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.batch_id_)}},
@@ -4748,9 +4767,11 @@ DownloadReadyCommand::_table_ = {
     {::_pbi::TcParser::FastUS1,
      {42, 4, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.sha256_)}},
     // int64 file_size = 6;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DownloadReadyCommand, _impl_.file_size_), 5>(),
-     {48, 5, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.file_size_)}},
-    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DownloadReadyCommand, _impl_.file_size_), 7>(),
+     {48, 7, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.file_size_)}},
+    // string torrent_url = 7;
+    {::_pbi::TcParser::FastUS1,
+     {58, 5, 0, PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.torrent_url_)}},
   }}, {{
     65535, 65535
   }}, {{
@@ -4770,18 +4791,26 @@ DownloadReadyCommand::_table_ = {
     {PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.sha256_), _Internal::kHasBitsOffset + 4, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // int64 file_size = 6;
-    {PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.file_size_), _Internal::kHasBitsOffset + 5, 0,
+    {PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.file_size_), _Internal::kHasBitsOffset + 7, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+    // string torrent_url = 7;
+    {PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.torrent_url_), _Internal::kHasBitsOffset + 5, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string magnet_uri = 8;
+    {PROTOBUF_FIELD_OFFSET(DownloadReadyCommand, _impl_.magnet_uri_), _Internal::kHasBitsOffset + 6, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
   }},
   // no aux_entries
   {{
-    "\46\10\7\11\14\6\0\0"
+    "\46\10\7\11\14\6\0\13\12\0\0\0\0\0\0\0"
     "terminal_agent.v1.DownloadReadyCommand"
     "batch_id"
     "file_id"
     "file_type"
     "download_url"
     "sha256"
+    "torrent_url"
+    "magnet_uri"
   }},
 };
 PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
@@ -4792,7 +4821,7 @@ PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000001fu) != 0) {
+  if ((cached_has_bits & 0x0000007fu) != 0) {
     if ((cached_has_bits & 0x00000001u) != 0) {
       _impl_.batch_id_.ClearNonDefaultToEmpty();
     }
@@ -4807,6 +4836,12 @@ PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
     }
     if ((cached_has_bits & 0x00000010u) != 0) {
       _impl_.sha256_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      _impl_.torrent_url_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      _impl_.magnet_uri_.ClearNonDefaultToEmpty();
     }
   }
   _impl_.file_size_ = ::int64_t{0};
@@ -4880,11 +4915,31 @@ PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
   }
 
   // int64 file_size = 6;
-  if ((this_._impl_._has_bits_[0] & 0x00000020u) != 0) {
+  if ((this_._impl_._has_bits_[0] & 0x00000080u) != 0) {
     if (this_._internal_file_size() != 0) {
       target =
           ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<6>(
               stream, this_._internal_file_size(), target);
+    }
+  }
+
+  // string torrent_url = 7;
+  if ((this_._impl_._has_bits_[0] & 0x00000020u) != 0) {
+    if (!this_._internal_torrent_url().empty()) {
+      const ::std::string& _s = this_._internal_torrent_url();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DownloadReadyCommand.torrent_url");
+      target = stream->WriteStringMaybeAliased(7, _s, target);
+    }
+  }
+
+  // string magnet_uri = 8;
+  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+    if (!this_._internal_magnet_uri().empty()) {
+      const ::std::string& _s = this_._internal_magnet_uri();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DownloadReadyCommand.magnet_uri");
+      target = stream->WriteStringMaybeAliased(8, _s, target);
     }
   }
 
@@ -4913,7 +4968,7 @@ PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     // string batch_id = 1;
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (!this_._internal_batch_id().empty()) {
@@ -4949,8 +5004,22 @@ PROTOBUF_NOINLINE void DownloadReadyCommand::Clear() {
                                         this_._internal_sha256());
       }
     }
-    // int64 file_size = 6;
+    // string torrent_url = 7;
     if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!this_._internal_torrent_url().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_torrent_url());
+      }
+    }
+    // string magnet_uri = 8;
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!this_._internal_magnet_uri().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_magnet_uri());
+      }
+    }
+    // int64 file_size = 6;
+    if ((cached_has_bits & 0x00000080u) != 0) {
       if (this_._internal_file_size() != 0) {
         total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
             this_._internal_file_size());
@@ -4970,7 +5039,7 @@ void DownloadReadyCommand::MergeImpl(::google::protobuf::MessageLite& to_msg, co
   (void) cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (!from._internal_batch_id().empty()) {
         _this->_internal_set_batch_id(from._internal_batch_id());
@@ -5017,6 +5086,24 @@ void DownloadReadyCommand::MergeImpl(::google::protobuf::MessageLite& to_msg, co
       }
     }
     if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!from._internal_torrent_url().empty()) {
+        _this->_internal_set_torrent_url(from._internal_torrent_url());
+      } else {
+        if (_this->_impl_.torrent_url_.IsDefault()) {
+          _this->_internal_set_torrent_url("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!from._internal_magnet_uri().empty()) {
+        _this->_internal_set_magnet_uri(from._internal_magnet_uri());
+      } else {
+        if (_this->_impl_.magnet_uri_.IsDefault()) {
+          _this->_internal_set_magnet_uri("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
       if (from._internal_file_size() != 0) {
         _this->_impl_.file_size_ = from._impl_.file_size_;
       }
@@ -5045,6 +5132,8 @@ void DownloadReadyCommand::InternalSwap(DownloadReadyCommand* PROTOBUF_RESTRICT 
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.file_type_, &other->_impl_.file_type_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.download_url_, &other->_impl_.download_url_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.sha256_, &other->_impl_.sha256_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.torrent_url_, &other->_impl_.torrent_url_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.magnet_uri_, &other->_impl_.magnet_uri_, arena);
   swap(_impl_.file_size_, other->_impl_.file_size_);
 }
 

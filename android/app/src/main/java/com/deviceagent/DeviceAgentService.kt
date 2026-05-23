@@ -568,7 +568,8 @@ class DeviceAgentService : Service() {
         }.start()
     }
 
-    fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long, commandId: String) {
+    @Suppress("UNUSED_PARAMETER")
+    fun onDownloadReady(batchId: String, fileId: String, fileType: String, downloadUrl: String, sha256: String, fileSize: Long, commandId: String, torrentUrl: String, magnetUri: String) {
         android.util.Log.i(TAG, "onDownloadReady: cmd=$commandId batch=$batchId file=$fileId type=$fileType size=$fileSize")
         synchronized(inFlightCmds) { if (inFlightCmds.contains(fileId)) { android.util.Log.i(TAG, "Skip already in-flight: $fileId"); return } }
         Thread { handleDownloadAndInstall(batchId, fileId, commandId, downloadUrl, sha256) }.start()

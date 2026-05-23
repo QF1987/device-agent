@@ -335,6 +335,10 @@ message DownloadReadyCommand {
     string sha256 = 5;
     // 文件大小（字节），用于进度计算
     int64 file_size = 6;
+    // Torrent 文件地址（P2P 路径，优先于 download_url）
+    string torrent_url = 7;
+    // Magnet URI（P2P 路径，最高优先级）
+    string magnet_uri = 8;
 }
 
 // ─── 服务端 → 设备：指令 ────────────────────────────────
