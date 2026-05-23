@@ -8,14 +8,32 @@
 # 此脚本用各自的 protoc 生成，但保证 proto 定义一致。
 # 改 proto 后运行此脚本即可。
 #
-# protoc v31.1: 为 Android 编译的，放在 tools/protoc-31.1
-# protoc v34.1: Homebrew 安装的，路径 /opt/homebrew/bin/protoc
+# 默认工具路径（可用环境变量覆盖）：
+# - protoc v34.1: /Users/qf/Software/protobuf/34.1/bin/protoc（desktop stub）
+# - protoc v31.1: /Users/qf/Software/protobuf/31.1/bin/protoc（Android stub）
 # ============================================================
 set -e
 cd "$(dirname "$0")/.."
 
-PROTOC_DESKTOP="${PROTOC_DESKTOP:-${PROTOC:-$(command -v protoc || true)}}"
-PROTOC_ANDROID="${PROTOC_ANDROID:-tools/protoc-31.1}"
+DEFAULT_PROTOC_DESKTOP="/Users/qf/Software/protobuf/34.1/bin/protoc"
+DEFAULT_PROTOC_ANDROID="/Users/qf/Software/protobuf/31.1/bin/protoc"
+
+PROTOC_DESKTOP="${PROTOC_DESKTOP:-${PROTOC:-$DEFAULT_PROTOC_DESKTOP}}"
+PROTOC_ANDROID="${PROTOC_ANDROID:-$DEFAULT_PROTOC_ANDROID}"
+
+require_protoc_version() {
+  local binary="$1"
+  local expected="$2"
+  local role="$3"
+  local actual
+
+  actual="$("$binary" --version 2>/dev/null || true)"
+  if [ "$actual" != "libprotoc $expected" ]; then
+    echo "wrong $role protoc version: expected libprotoc $expected, got '${actual:-<not executable>}'" >&2
+    echo "set PROTOC_${role^^} to a matching protoc binary" >&2
+    exit 1
+  fi
+}
 
 if [ ! -x "$PROTOC_DESKTOP" ]; then
   echo "missing desktop protoc; set PROTOC_DESKTOP to protoc v34.1" >&2
@@ -26,6 +44,9 @@ if [ ! -x "$PROTOC_ANDROID" ]; then
   echo "missing Android protoc; set PROTOC_ANDROID to protoc v31.1" >&2
   exit 1
 fi
+
+require_protoc_version "$PROTOC_DESKTOP" "34.1" "DESKTOP"
+require_protoc_version "$PROTOC_ANDROID" "31.1" "ANDROID"
 
 GRPC_CPP_PLUGIN="${GRPC_CPP_PLUGIN:-$(command -v grpc_cpp_plugin || true)}"
 if [ -z "$GRPC_CPP_PLUGIN" ]; then
