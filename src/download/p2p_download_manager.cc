@@ -194,6 +194,61 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
     return true;
 }
 
+bool wait_for_cache_flush(lt::session& session,
+                          lt::torrent_handle& handle,
+                          std::string& error) {
+    if (!handle.is_valid()) {
+        return true;
+    }
+
+    handle.flush_cache();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (auto* alert = session.wait_for_alert(std::chrono::milliseconds(100))) {
+            std::vector<lt::alert*> alerts;
+            session.pop_alerts(&alerts);
+            for (const auto* item : alerts) {
+                if (const auto* flushed = lt::alert_cast<lt::cache_flushed_alert>(item)) {
+                    if (!flushed->handle.is_valid() || flushed->handle == handle) {
+                        return true;
+                    }
+                }
+                if (is_terminal_error(item)) {
+                    error = alert_message(item);
+                    return false;
+                }
+            }
+        }
+    }
+
+    LOG_WARN("P2PDownloadManager: cache flush alert timed out; retrying sha256 read");
+    return true;
+}
+
+bool verify_sha256_with_retry(const std::string& path,
+                              const std::string& expected_sha256,
+                              std::string& error) {
+    std::string last_error;
+    for (int attempt = 0; attempt < 25; ++attempt) {
+        std::string actual_sha256;
+        std::string sha_error;
+        if (sha256_file(path, actual_sha256, sha_error)) {
+            if (lowercase(actual_sha256) == lowercase(expected_sha256)) {
+                return true;
+            }
+            last_error = "sha256 mismatch: expected=" + expected_sha256 +
+                         " actual=" + actual_sha256;
+        } else {
+            last_error = sha_error;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    error = last_error;
+    return false;
+}
+
 std::string primary_file_path(const lt::torrent_info& torrent, const std::string& save_path) {
     const auto& files = torrent.files();
     if (files.num_files() != 1) {
@@ -572,16 +627,21 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 }
 
                 if (success) {
+                    std::string verify_error;
+                    if (!wait_for_cache_flush(*session, handle, verify_error)) {
+                        success = false;
+                        error = verify_error;
+                    }
+                }
+
+                if (success) {
                     if (!req.expected_sha256.empty()) {
-                        std::string actual_sha256;
-                        std::string sha_error;
-                        if (!sha256_file(downloaded_path, actual_sha256, sha_error)) {
+                        std::string verify_error;
+                        if (!verify_sha256_with_retry(downloaded_path,
+                                                      req.expected_sha256,
+                                                      verify_error)) {
                             success = false;
-                            error = sha_error;
-                        } else if (lowercase(actual_sha256) != lowercase(req.expected_sha256)) {
-                            success = false;
-                            error = "sha256 mismatch: expected=" + req.expected_sha256 +
-                                    " actual=" + actual_sha256;
+                            error = verify_error;
                         }
                     }
                 }
