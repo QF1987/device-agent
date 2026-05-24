@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_SERIALS="192.168.31.239:41337,192.168.31.44:5555"
+DEFAULT_SERIALS="192.168.31.239:41351,bf9ec82f"
 PACKAGE_NAME="${PACKAGE_NAME:-com.deviceagent}"
 REMOTE_DIR="${REMOTE_DIR:-/sdcard/Download/m3-alpha}"
 RESULT_ROOT="${RESULT_ROOT:-/Users/qf/Alcedo/code/DeviceOps/.ai/logs/m3-alpha-s4}"
 DATABASE_URL="${DATABASE_URL:-postgres://deviceops:deviceops123@localhost:5432/deviceops?sslmode=disable}"
 SERVER_URL="${SERVER_URL:-http://192.168.31.81:8080}"
+GRPC_PORT="${GRPC_PORT:-9090}"
 WAIT_SECONDS="${WAIT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
 
@@ -24,6 +25,7 @@ Environment:
   SHA256=<hex>                 Expected payload SHA-256.
   FILE_SIZE=<bytes>            Optional expected file size.
   WEB_SEED_URL=<url>           HTTP fallback URL for baseline/download evidence.
+  GRPC_PORT=<port>             gRPC CommandStream port. Defaults to 9090.
   DEVICE_SERIALS=a,b           Defaults to the two known LAN devices.
   DEVICE_IDS=id1,id2           Server-side device ids. If omitted, script tries app prefs.
   RESULT_ROOT=<path>           Defaults to DeviceOps .ai/logs/m3-alpha-s4.
@@ -91,6 +93,7 @@ configure_device_agent() {
 <map>
   <string name="server_url">$(xml_escape "$SERVER_URL")</string>
   <string name="device_id">$(xml_escape "$device_id")</string>
+  <string name="grpc_port">$(xml_escape "$GRPC_PORT")</string>
 </map>
 EOF_CONFIG
   adb_shell "$serial" am force-stop "$PACKAGE_NAME" >/dev/null 2>&1 || true

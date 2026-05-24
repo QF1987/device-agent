@@ -35,6 +35,7 @@ import org.json.JSONObject
 private const val PREFS_NAME = "device_agent_config"
 private const val KEY_SERVER_URL = "server_url"
 private const val KEY_DEVICE_ID = "device_id"
+private const val KEY_GRPC_PORT = "grpc_port"
 private const val PENDING_INSTALL_FILE = "pending_release_install.json"
 private var cfgServerUrl: String = ""
 private var cfgDeviceId: String = ""
@@ -452,7 +453,6 @@ class DeviceAgentService : Service() {
         RestartReceiver.cancelRestart(this)
         mkChannel(); startForeground(NOTIFICATION_ID, mkNotification(IDLE_NOTIFICATION_TEXT))
         // 方案 B: gRPC streaming 替代 HTTP polling
-        // gRPC 端口固定 9090，HTTP API 端口 8080
         val (parsedHost, _) = try {
             val u = java.net.URL(cfgServerUrl)
             Pair(u.host, if (u.port > 0) u.port else 8080)
@@ -460,7 +460,7 @@ class DeviceAgentService : Service() {
             android.util.Log.e(TAG, "Failed to parse server URL: $cfgServerUrl", e)
             Pair("localhost", 8080)
         }
-        val grpcPort = 9090
+        val grpcPort = prefs.getString(KEY_GRPC_PORT, null)?.toIntOrNull() ?: 9090
         android.util.Log.i(TAG, "Starting native gRPC: host=$parsedHost port=$grpcPort")
         val ret = nativeStart(this, parsedHost, grpcPort, cfgDeviceId)
         android.util.Log.i(TAG, "nativeStart returned: $ret")
@@ -533,6 +533,11 @@ class DeviceAgentService : Service() {
             cfgDeviceId = idExtra
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_DEVICE_ID, idExtra).apply()
             android.util.Log.i(TAG, "cfgDeviceId overridden: $idExtra")
+        }
+        val grpcPortExtra = i?.getIntExtra("grpc_port", -1) ?: -1
+        if (grpcPortExtra > 0) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(KEY_GRPC_PORT, grpcPortExtra.toString()).apply()
+            android.util.Log.i(TAG, "grpc port overridden: $grpcPortExtra")
         }
         return START_STICKY
     }
