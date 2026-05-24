@@ -34,6 +34,7 @@ namespace device_agent {
 // 前向声明：Executor 定义在 executor.h，IDownloadManager 定义在 download/idownload_manager.h
 class Executor;
 class IDownloadManager;
+class P2PConfigStore;
 
 // ─── CommandHandler：指令处理器 ────────────────────────────
 class CommandHandler {
@@ -51,6 +52,9 @@ public:
     // 不设置时，download_ready 命令将返回 "not supported"
     void set_download_manager(std::shared_ptr<IDownloadManager> dl_mgr);
 
+    // 设置 P2P 配置存储，用于 update_config kind=p2p_seeding 热更新。
+    void set_p2p_config_store(std::shared_ptr<P2PConfigStore> store);
+
     // 处理指令（异步模式，立即返回，结果通过回调回报）
     void handle(const terminal_agent::v1::Command& cmd);
 
@@ -63,6 +67,7 @@ private:
     ResultReporter reporter_;
     std::shared_ptr<Executor> executor_;
     std::shared_ptr<IDownloadManager> dl_mgr_;
+    std::shared_ptr<P2PConfigStore> p2p_config_store_;
     std::mutex mu_;
 };
 

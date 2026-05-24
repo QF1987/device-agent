@@ -14,6 +14,7 @@ set(COMMON_SOURCES
     src/client/device_client.cc
     src/client/command_handler.cc
     src/config/config.cc
+    src/config/p2p_config_store.cc
     src/logger/logger.cc
     src/bridge/bridge.cc
     src/executor/linux_executor.cc
@@ -27,6 +28,7 @@ set(COMMON_HEADERS
     src/client/device_client.h
     src/client/command_handler.h
     src/config/config.h
+    src/config/p2p_config_store.h
     src/logger/logger.h
     src/executor/executor.h
     src/download/idownload_manager.h
@@ -177,6 +179,7 @@ extern "C" const char* device_agent_libtorrent_version() {
         src/download/p2p_download_manager_test.cc
         src/download/p2p_download_manager.cc
         src/download/network_policy.cc
+        src/config/p2p_config_store.cc
         src/logger/logger.cc
     )
     target_include_directories(p2p_download_manager_test PRIVATE
@@ -199,6 +202,14 @@ extern "C" const char* device_agent_libtorrent_version() {
         src/download/network_policy.cc
     )
     target_include_directories(network_policy_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+
+    add_executable(p2p_config_store_test
+        src/config/p2p_config_store_test.cc
+        src/config/p2p_config_store.cc
+    )
+    target_include_directories(p2p_config_store_test PRIVATE
         ${CMAKE_SOURCE_DIR}/src
     )
 

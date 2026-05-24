@@ -20,6 +20,7 @@
 #include "client/device_client.h"
 #include "client/command_handler.h"
 #include "config/config.h"
+#include "config/p2p_config_store.h"
 #include "logger/logger.h"
 #include "executor/executor.h"
 #include "download/idownload_manager.h"
@@ -46,6 +47,7 @@ static void Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl(
 static std::shared_ptr<device_agent::DeviceClient> g_client;
 static std::shared_ptr<device_agent::Executor> g_executor;
 static std::shared_ptr<device_agent::NetworkPolicy> g_network_policy;
+static std::shared_ptr<device_agent::P2PConfigStore> g_p2p_config_store;
 static std::unique_ptr<device_agent::CommandHandler> g_handler;
 static std::mutex g_client_mutex;
 
@@ -379,6 +381,9 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
         });
     g_handler->set_executor(executor);
     g_network_policy = std::make_shared<device_agent::NetworkPolicy>();
+    g_p2p_config_store = std::make_shared<device_agent::P2PConfigStore>();
+    device_agent::P2PConfigStore::set_global(g_p2p_config_store);
+    g_handler->set_p2p_config_store(g_p2p_config_store);
     device_agent::P2PDownloadManager::Callbacks p2pCallbacks;
     p2pCallbacks.on_started = [](const device_agent::DownloadRequest& req, const std::string& localPath) {
         call_p2p_started(req, localPath);
@@ -424,6 +429,8 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
             g_client.reset();
         }
         g_handler.reset();
+        device_agent::P2PConfigStore::set_global(nullptr);
+        g_p2p_config_store.reset();
         g_network_policy.reset();
         g_executor.reset();
     }

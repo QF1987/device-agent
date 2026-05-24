@@ -6,6 +6,7 @@
 // ============================================================
 
 #include "client/command_handler.h"
+#include "config/p2p_config_store.h"
 #include "executor/executor.h"
 #include "download/idownload_manager.h"
 #include "logger/logger.h"
@@ -83,6 +84,11 @@ void CommandHandler::set_download_manager(std::shared_ptr<IDownloadManager> dl_m
     dl_mgr_ = std::move(dl_mgr);
 }
 
+void CommandHandler::set_p2p_config_store(std::shared_ptr<P2PConfigStore> store) {
+    std::lock_guard<std::mutex> lock(mu_);
+    p2p_config_store_ = std::move(store);
+}
+
 void CommandHandler::handle(const terminal_agent::v1::Command& cmd) {
     const auto& cmd_type = cmd.command_type();
     const auto& cmd_id = cmd.command_id();
@@ -108,6 +114,7 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
     result.set_executed_at(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
 
     std::shared_ptr<Executor> executor;
+    std::shared_ptr<P2PConfigStore> p2p_config_store;
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (!executor_) {
@@ -120,6 +127,7 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         } else {
             executor = executor_;
         }
+        p2p_config_store = p2p_config_store_;
     }
 
     const auto& cmd_type = cmd.command_type();
@@ -134,13 +142,25 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         result.set_message(err_msg.empty() ? "reboot scheduled" : err_msg);
 
     } else if (cmd_type == "update_config") {
-        std::string key, value;
-        if (!extract_json_string(payload, "key", key)) {
-            err_msg = "invalid payload: missing 'key'";
-        } else if (!extract_json_string(payload, "value", value)) {
-            err_msg = "invalid payload: missing 'value'";
+        std::string kind;
+        if (extract_json_string(payload, "kind", kind) && kind == "p2p_seeding") {
+            if (!p2p_config_store) {
+                err_msg = "p2p config store not configured";
+            } else {
+                std::string apply_error;
+                if (!p2p_config_store->apply(payload, &apply_error)) {
+                    err_msg = apply_error.empty() ? "invalid p2p config payload" : apply_error;
+                }
+            }
         } else {
-            executor->updateConfig(key, value, err_msg);
+            std::string key, value;
+            if (!extract_json_string(payload, "key", key)) {
+                err_msg = "invalid payload: missing 'key'";
+            } else if (!extract_json_string(payload, "value", value)) {
+                err_msg = "invalid payload: missing 'value'";
+            } else {
+                executor->updateConfig(key, value, err_msg);
+            }
         }
         result.set_status(err_msg.empty() ? "success" : "failed");
         result.set_message(err_msg.empty() ? "config updated" : err_msg);

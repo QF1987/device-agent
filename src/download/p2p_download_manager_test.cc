@@ -1,4 +1,5 @@
 #include "download/p2p_download_manager.h"
+#include "config/p2p_config_store.h"
 
 #include <cassert>
 #include <chrono>
@@ -6,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
@@ -96,6 +98,7 @@ int main() {
     using device_agent::NetworkType;
     using device_agent::P2PDownloadState;
     using device_agent::P2PDownloadManager;
+    using device_agent::P2PConfigStore;
     using device_agent::P2PSeedingPolicy;
     using device_agent::P2PSeedingStateMachine;
 
@@ -114,6 +117,15 @@ int main() {
     assert(state_machine.state() == P2PDownloadState::Stopping);
     state_machine.mark_idle();
     assert(state_machine.state() == P2PDownloadState::Idle);
+
+    auto config_store = std::make_shared<P2PConfigStore>();
+    std::string config_error;
+    assert(config_store->apply(R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25})", &config_error));
+    P2PConfigStore::set_global(config_store);
+    const auto alpha_policy = P2PSeedingPolicy::alpha_defaults();
+    assert(alpha_policy.ttl == std::chrono::seconds(3));
+    assert(alpha_policy.ratio_limit == 1.25);
+    P2PConfigStore::set_global(nullptr);
 
     P2PDownloadManager empty_url_manager;
     bool empty_complete = false;

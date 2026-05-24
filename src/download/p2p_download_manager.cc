@@ -1,5 +1,6 @@
 #include "download/p2p_download_manager.h"
 
+#include "config/p2p_config_store.h"
 #include "logger/logger.h"
 
 #include <libtorrent/add_torrent_params.hpp>
@@ -240,7 +241,8 @@ void set_upload_throttle(lt::torrent_handle& handle, bool stop_upload) {
 }  // namespace
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
-    return P2PSeedingPolicy{std::chrono::hours(6), 1.0};
+    const auto cfg = P2PConfigStore::global_snapshot();
+    return P2PSeedingPolicy{std::chrono::seconds(cfg.seeding_ttl_seconds), cfg.max_share_ratio};
 }
 
 P2PSeedingStateMachine::P2PSeedingStateMachine(P2PSeedingPolicy policy)
