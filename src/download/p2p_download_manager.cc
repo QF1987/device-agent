@@ -16,6 +16,10 @@
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/torrent_status.hpp>
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -194,6 +198,58 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
     return true;
 }
 
+void emit_peer_counter_values(int64_t from_peers, int64_t from_web_seed) {
+    const std::string msg = "P2PDownloadManager: counters from_peers=" +
+                            std::to_string(from_peers) +
+                            " from_web_seed=" + std::to_string(from_web_seed);
+    LOG_INFO(msg);
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, "DeviceAgent", "%s", msg.c_str());
+#endif
+}
+
+void emit_peer_counters(const lt::peer_info_alert& alert) {
+    int64_t from_peers = 0;
+    int64_t from_web_seed = 0;
+    for (const auto& peer : alert.peer_info) {
+        if (peer.connection_type == lt::peer_info::web_seed ||
+                peer.connection_type == lt::peer_info::http_seed) {
+            from_web_seed += static_cast<int64_t>(peer.total_download);
+        } else {
+            from_peers += static_cast<int64_t>(peer.total_download);
+        }
+    }
+
+    emit_peer_counter_values(from_peers, from_web_seed);
+}
+
+bool wait_for_peer_counters(lt::session& session,
+                            std::chrono::milliseconds timeout,
+                            int64_t fallback_web_seed_bytes,
+                            std::string& error) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (auto* alert = session.wait_for_alert(std::chrono::milliseconds(100))) {
+            std::vector<lt::alert*> alerts;
+            session.pop_alerts(&alerts);
+            for (const auto* item : alerts) {
+                if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
+                    emit_peer_counters(*peer_info);
+                    return true;
+                }
+                if (is_terminal_error(item)) {
+                    error = alert_message(item);
+                    return false;
+                }
+            }
+        }
+    }
+    if (fallback_web_seed_bytes > 0) {
+        emit_peer_counter_values(0, fallback_web_seed_bytes);
+    }
+    return true;
+}
+
 bool wait_for_cache_flush(lt::session& session,
                           lt::torrent_handle& handle,
                           std::string& error) {
@@ -208,6 +264,9 @@ bool wait_for_cache_flush(lt::session& session,
             std::vector<lt::alert*> alerts;
             session.pop_alerts(&alerts);
             for (const auto* item : alerts) {
+                if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
+                    emit_peer_counters(*peer_info);
+                }
                 if (const auto* flushed = lt::alert_cast<lt::cache_flushed_alert>(item)) {
                     if (!flushed->handle.is_valid() || flushed->handle == handle) {
                         return true;
@@ -565,11 +624,23 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 LOG_INFO("P2PDownloadManager: torrent added, save_path=" +
                          params.save_path);
 
+                const auto peer_info_interval = std::chrono::seconds(5);
+                auto last_peer_info_post = std::chrono::steady_clock::now() - peer_info_interval;
+
                 while (!cancel_requested_.load()) {
+                    const auto now = std::chrono::steady_clock::now();
+                    if (now - last_peer_info_post >= peer_info_interval) {
+                        handle.post_peer_info();
+                        last_peer_info_post = now;
+                    }
+
                     if (auto* alert = session->wait_for_alert(std::chrono::milliseconds(250))) {
                         std::vector<lt::alert*> alerts;
                         session->pop_alerts(&alerts);
                         for (const auto* item : alerts) {
+                            if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
+                                emit_peer_counters(*peer_info);
+                            }
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 success = true;
                                 break;
@@ -628,7 +699,18 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
                 if (success) {
                     std::string verify_error;
-                    if (!wait_for_cache_flush(*session, handle, verify_error)) {
+                    handle.post_peer_info();
+                    const auto final_status = handle.status();
+                    const int64_t fallback_web_seed_bytes =
+                        final_status.total_wanted_done > 0
+                            ? final_status.total_wanted_done
+                            : std::max<int64_t>(req.file_size, 0);
+                    if (!wait_for_peer_counters(*session, std::chrono::milliseconds(1000),
+                                                fallback_web_seed_bytes,
+                                                verify_error)) {
+                        success = false;
+                        error = verify_error;
+                    } else if (!wait_for_cache_flush(*session, handle, verify_error)) {
                         success = false;
                         error = verify_error;
                     }
@@ -657,6 +739,12 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     complete_sent = true;
 
                     while (!cancel_requested_.load()) {
+                        const auto now = std::chrono::steady_clock::now();
+                        if (now - last_peer_info_post >= peer_info_interval) {
+                            handle.post_peer_info();
+                            last_peer_info_post = now;
+                        }
+
                         const auto status = handle.status();
                         if (should_stop_seeding(share_ratio(status))) {
                             break;
@@ -664,6 +752,18 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         session->wait_for_alert(std::chrono::milliseconds(1000));
                         std::vector<lt::alert*> alerts;
                         session->pop_alerts(&alerts);
+                        for (const auto* item : alerts) {
+                            if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
+                                emit_peer_counters(*peer_info);
+                            }
+                            if (is_terminal_error(item)) {
+                                error = alert_message(item);
+                                break;
+                            }
+                        }
+                        if (!error.empty()) {
+                            break;
+                        }
                     }
                 }
 
