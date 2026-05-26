@@ -127,11 +127,11 @@ headless_pm_install_apk() {
     return 2
   fi
 
-  local staged="/data/local/tmp/m3-alpha-headless-$(basename "$apk_path")"
+  local staged="${REMOTE_DIR}/headless-$(basename "$apk_path")"
   {
     echo "source=${apk_path}"
     echo "staged=${staged}"
-    adb_shell "$serial" rm -f "$staged"
+    adb_shell "$serial" mkdir -p "$REMOTE_DIR"
     if [[ "$apk_path" == /data/data/"$PACKAGE_NAME"/* || "$apk_path" == /data/user/*/"$PACKAGE_NAME"/* ]]; then
       local host_apk="${TMPDIR:-/tmp}/m3-alpha-headless-${serial//[^A-Za-z0-9]/_}.apk"
       adb -s "$serial" exec-out run-as "$PACKAGE_NAME" cat "$apk_path" >"$host_apk"
@@ -140,7 +140,6 @@ headless_pm_install_apk() {
     else
       adb_shell "$serial" cp "$apk_path" "$staged"
     fi
-    adb_shell "$serial" chmod 0644 "$staged"
     adb_shell "$serial" pm install -r -d "$staged"
   } >"$out_file" 2>&1
 }
