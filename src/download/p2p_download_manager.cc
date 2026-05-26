@@ -897,8 +897,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 const auto peer_info_interval = std::chrono::seconds(5);
                 auto last_peer_info_post = std::chrono::steady_clock::now() - peer_info_interval;
                 const auto stall_timeout = std::chrono::seconds(60);
+                const auto slow_start_timeout = std::chrono::seconds(60);
+                const auto download_started_at = std::chrono::steady_clock::now();
                 auto last_progress_at = std::chrono::steady_clock::now();
-                int64_t last_done = -1;
+                int64_t last_reported_done = -1;
 
                 while (!cancel_requested_.load()) {
                     const auto now = std::chrono::steady_clock::now();
@@ -961,11 +963,29 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         }
                     }
                     const auto progress = make_progress(status, req.file_size);
-                    const int64_t done = status.total_wanted_done;
-                    if (done > last_done) {
-                        last_done = done;
+                    const int64_t slow_start_threshold =
+                        req.file_size > 0 ? std::min<int64_t>(5 * 1024 * 1024, req.file_size / 10) : 5 * 1024 * 1024;
+                    if (is_http_url(req.url) && !downloaded_path.empty() &&
+                            progress.downloaded_bytes < slow_start_threshold &&
+                            std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout) {
+                        LOG_WARN("P2PDownloadManager: web seed slow start; falling back to direct HTTP download");
+                        session->remove_torrent(handle);
+                        {
+                            std::lock_guard<std::mutex> lock(mu_);
+                            remove_active_handle_locked(handle);
+                        }
+                        std::string fallback_error;
+                        if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+                            success = true;
+                        } else {
+                            error = fallback_error;
+                        }
+                        break;
+                    }
+                    if (progress.downloaded_bytes > last_reported_done) {
+                        last_reported_done = progress.downloaded_bytes;
                         last_progress_at = std::chrono::steady_clock::now();
-                    } else if (done > 0 && is_http_url(req.url) && !downloaded_path.empty() &&
+                    } else if (is_http_url(req.url) && !downloaded_path.empty() &&
                                std::chrono::steady_clock::now() - last_progress_at >= stall_timeout) {
                         LOG_WARN("P2PDownloadManager: web seed stalled; falling back to direct HTTP download");
                         session->remove_torrent(handle);

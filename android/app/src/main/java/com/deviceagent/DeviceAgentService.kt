@@ -44,6 +44,8 @@ private var mainServiceRef: WeakReference<DeviceAgentService>? = null
 private const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
 private const val PROGRESS_MIN_BYTES = 1L * 1024 * 1024
 private const val ACTION_VIEW_INSTALL_TIMEOUT_MS = 2 * 60 * 1000L
+private const val P2P_SLOW_START_TIMEOUT_MS = 75_000L
+private const val P2P_SLOW_START_BYTES = 5L * 1024L * 1024L
 private const val TRANSIENT_NOTIFICATION_MS = 10_000L
 private const val IDLE_NOTIFICATION_TEXT = "device-agent running"
 
@@ -418,7 +420,8 @@ class DeviceAgentService : Service() {
         val localPath: String,
         val fileType: String,
         var lastReportTimeMs: Long = 0L,
-        var lastReportBytes: Long = 0L
+        var lastReportBytes: Long = 0L,
+        var fallbackStarted: Boolean = false
     )
     private val p2pLock = Any()
     private var activeP2PContext: P2PDownloadContext? = null
@@ -473,7 +476,7 @@ class DeviceAgentService : Service() {
             android.util.Log.w(TAG, "register network callback failed: ${e.message}")
         }
         android.os.Handler(mainLooper).postDelayed({
-            completeRecoveredInstallIfNeeded()
+            Thread({ completeRecoveredInstallIfNeeded() }, "install-recovery-check").start()
         }, 3_000)
         // 15秒后检查本地 download 目录，如有 APK 则自升级
         android.os.Handler(mainLooper).postDelayed({
@@ -627,6 +630,7 @@ class DeviceAgentService : Service() {
         }
         reportReleaseStatus(batchId, fileId, "downloading")
         updateNotification("⏬ P2P 下载中...")
+        scheduleP2PSlowStartFallback(batchId, fileId, commandId, sha256, fileType)
     }
 
     fun onP2PProgress(percent: Int, downloadedBytes: Long, totalBytes: Long) {
@@ -692,6 +696,43 @@ class DeviceAgentService : Service() {
                 File(ctx.localPath)
             )
         }.start()
+    }
+
+    private fun scheduleP2PSlowStartFallback(
+        batchId: String,
+        fileId: String,
+        commandId: String,
+        sha256: String,
+        fileType: String
+    ) {
+        Thread({
+            try {
+                Thread.sleep(P2P_SLOW_START_TIMEOUT_MS)
+                var shouldFallback = false
+                synchronized(p2pLock) {
+                    val ctx = activeP2PContext
+                    if (ctx != null && ctx.fileId == fileId && !ctx.fallbackStarted) {
+                        shouldFallback = ctx.lastReportBytes < P2P_SLOW_START_BYTES
+                        if (shouldFallback) {
+                            ctx.fallbackStarted = true
+                            activeP2PContext = null
+                        }
+                    }
+                }
+                if (!shouldFallback) return@Thread
+                val fallbackUrl = "${cfgServerUrl.trimEnd('/')}/api/v1/files/$fileId/download"
+                android.util.Log.w(TAG, "P2P slow start fallback: cmd=$commandId file=$fileId url=$fallbackUrl")
+                if (fileType.equals("apk", ignoreCase = true)) {
+                    handleDownloadAndInstall(batchId, fileId, commandId, fallbackUrl, sha256)
+                } else {
+                    android.util.Log.w(TAG, "P2P slow start fallback skipped for non-apk type=$fileType file=$fileId")
+                }
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "P2P slow start fallback failed: ${e.message}", e)
+            }
+        }, "p2p-slow-start-fallback").start()
     }
 
     fun onUpgradeApp(apkUrl: String, md5: String, commandId: String) {
@@ -997,7 +1038,7 @@ class DeviceAgentService : Service() {
             val installChanged = info.lastUpdateTime >= startedAt || info.longVersionCode != oldVersion
             if (installChanged) {
                 android.util.Log.i(TAG, "action-view install timeout saw completed install: cmd=$commandId file=$fileId lastUpdate=${info.lastUpdateTime}")
-                completeRecoveredInstallIfNeeded()
+                Thread({ completeRecoveredInstallIfNeeded() }, "install-timeout-recovery").start()
                 return
             }
 
