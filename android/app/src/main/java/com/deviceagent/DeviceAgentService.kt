@@ -715,7 +715,9 @@ class DeviceAgentService : Service() {
                         shouldFallback = ctx.lastReportBytes < P2P_SLOW_START_BYTES
                         if (shouldFallback) {
                             ctx.fallbackStarted = true
-                            activeP2PContext = null
+                            if (fileType.equals("apk", ignoreCase = true)) {
+                                activeP2PContext = null
+                            }
                         }
                     }
                 }
@@ -725,7 +727,7 @@ class DeviceAgentService : Service() {
                 if (fileType.equals("apk", ignoreCase = true)) {
                     handleDownloadAndInstall(batchId, fileId, commandId, fallbackUrl, sha256)
                 } else {
-                    android.util.Log.w(TAG, "P2P slow start fallback skipped for non-apk type=$fileType file=$fileId")
+                    handleDownloadOnly(batchId, fileId, commandId, fallbackUrl, sha256, fileType)
                 }
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
@@ -741,6 +743,48 @@ class DeviceAgentService : Service() {
     }
 
     // ─── Download + Install helpers ─────────────────────────────
+
+    private fun handleDownloadOnly(
+        batchId: String,
+        fileId: String,
+        commandId: String,
+        url: String,
+        sha: String,
+        fileType: String
+    ) {
+        synchronized(inFlightFiles) { if (inFlightFiles.contains(fileId)) return; inFlightFiles.add(fileId) }
+        val suffix = if (fileType.equals("system", ignoreCase = true)) "bin" else fileType.lowercase().ifEmpty { "bin" }
+        val dest = File(File(filesDir, "downloads").also { it.mkdirs() }, "$fileId.$suffix")
+        reportReleaseStatus(batchId, fileId, "downloading")
+        updateNotification("⏬ 正在下载...")
+        var lastReportTimeMs = 0L
+        var lastReportBytes = 0L
+        val downloaded = downloadFile(url, dest, sha) { absBytes, totalBytes ->
+            val nowMs = SystemClock.elapsedRealtime()
+            if (shouldReportProgress(lastReportTimeMs, lastReportBytes, nowMs, absBytes, totalBytes)) {
+                reportReleaseStatus(batchId, fileId, "downloading", absBytes)
+                updateNotification(buildDownloadText(absBytes, totalBytes))
+                lastReportTimeMs = nowMs
+                lastReportBytes = absBytes
+            }
+        }
+        synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
+        if (!downloaded) {
+            reportCommandStatus(commandId, "failed", "Download failed")
+            reportReleaseStatus(batchId, fileId, "download_failed", errorCode = "NETWORK_ERROR", errorMessage = "Download failed")
+            updateNotificationTemporarily("❌ 下载失败")
+            return
+        }
+        synchronized(p2pLock) {
+            if (activeP2PContext?.fileId == fileId) {
+                activeP2PContext = null
+            }
+        }
+        android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId type=$fileType fallback-only")
+        reportCommandStatus(commandId, "success", "Downloaded via fallback")
+        reportReleaseStatus(batchId, fileId, "downloaded", bytes = dest.length())
+        updateNotificationTemporarily("✅ 下载完成")
+    }
 
     private fun handleDownloadAndInstall(
         batchId: String,

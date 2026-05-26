@@ -70,6 +70,15 @@ bool is_http_url(const std::string& value) {
     return starts_with(value, "http://") || starts_with(value, "https://");
 }
 
+std::string first_web_seed_url(const lt::torrent_info& torrent) {
+    for (const auto& seed : torrent.web_seeds()) {
+        if (is_http_url(seed.url)) {
+            return seed.url;
+        }
+    }
+    return std::string();
+}
+
 std::string env_or_empty(const char* name) {
     const char* value = std::getenv(name);
     return value == nullptr ? std::string() : std::string(value);
@@ -833,6 +842,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
             lt::error_code ec;
             lt::add_torrent_params params;
+            std::string fallback_web_seed_url = is_http_url(req.url) ? req.url : std::string();
             params.save_path = resolve_save_path(req, source.value, source.is_magnet);
             if (source.is_magnet) {
                 params = lt::parse_magnet_uri(source.value, ec);
@@ -846,6 +856,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     error = "failed to load torrent: " + ec.message();
                 } else {
                     params.ti = torrent;
+                    if (fallback_web_seed_url.empty()) {
+                        fallback_web_seed_url = first_web_seed_url(*torrent);
+                    }
                     if (is_http_url(req.url)) {
                         params.url_seeds.push_back(req.url);
                         LOG_INFO("P2PDownloadManager: added explicit web seed " + req.url);
@@ -965,17 +978,17 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     const auto progress = make_progress(status, req.file_size);
                     const int64_t slow_start_threshold =
                         req.file_size > 0 ? std::min<int64_t>(5 * 1024 * 1024, req.file_size / 10) : 5 * 1024 * 1024;
-                    if (is_http_url(req.url) && !downloaded_path.empty() &&
+                    if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
                             progress.downloaded_bytes < slow_start_threshold &&
                             std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout) {
-                        LOG_WARN("P2PDownloadManager: web seed slow start; falling back to direct HTTP download");
+                        LOG_WARN("P2PDownloadManager: peer/web seed slow start; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
                             std::lock_guard<std::mutex> lock(mu_);
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                         } else {
                             error = fallback_error;
@@ -985,16 +998,16 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     if (progress.downloaded_bytes > last_reported_done) {
                         last_reported_done = progress.downloaded_bytes;
                         last_progress_at = std::chrono::steady_clock::now();
-                    } else if (is_http_url(req.url) && !downloaded_path.empty() &&
+                    } else if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
                                std::chrono::steady_clock::now() - last_progress_at >= stall_timeout) {
-                        LOG_WARN("P2PDownloadManager: web seed stalled; falling back to direct HTTP download");
+                        LOG_WARN("P2PDownloadManager: peer/web seed stalled after recovery window; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
                             std::lock_guard<std::mutex> lock(mu_);
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                         } else {
                             error = fallback_error;
@@ -1042,10 +1055,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         if (!verify_sha256_with_retry(downloaded_path,
                                                       req.expected_sha256,
                                                       verify_error)) {
-                            if (is_http_url(req.url)) {
+                            if (!fallback_web_seed_url.empty()) {
                                 LOG_WARN("P2PDownloadManager: sha256 verify failed; falling back to direct HTTP download");
                                 std::string fallback_error;
-                                if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error) &&
+                                if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
                                         verify_sha256_with_retry(downloaded_path,
                                                                  req.expected_sha256,
                                                                  verify_error)) {
