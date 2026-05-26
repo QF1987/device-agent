@@ -860,16 +860,38 @@ class DeviceAgentService : Service() {
 
     // ─── Reporting helpers ──────────────────────────────────────
 
-    private fun reportCommandStatus(cmdId: String, status: String, msg: String) {
-        try {
+    private fun reportCommandStatusWithRetry(cmdId: String, status: String, msg: String, attempts: Int = 3): Boolean {
+        repeat(attempts) { index ->
+            if (reportCommandStatus(cmdId, status, msg)) return true
+            if (index < attempts - 1) {
+                try {
+                    Thread.sleep(1000L * (index + 1))
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+        }
+        return false
+    }
+
+    private fun reportCommandStatus(cmdId: String, status: String, msg: String): Boolean {
+        var c: HttpURLConnection? = null
+        return try {
             val j = JSONObject().apply { put("command_id", cmdId); put("status", status); put("result_message", msg) }
-            val c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/report").openConnection() as HttpURLConnection
+            c = URL("$cfgServerUrl/api/v1/devices/$cfgDeviceId/report").openConnection() as HttpURLConnection
             c.requestMethod = "POST"; c.connectTimeout = 5000; c.readTimeout = 10000
             c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true
             c.outputStream.use { it.write(j.toString().toByteArray()) }
-            android.util.Log.i(TAG, "Report: $cmdId status=$status httpCode=${c.responseCode}")
-            c.disconnect()
-        } catch (e: Exception) { android.util.Log.e(TAG, "Report failed: ${e.message}") }
+            val code = c.responseCode
+            android.util.Log.i(TAG, "Report: $cmdId status=$status httpCode=$code")
+            code in 200..299
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Report failed: ${e.javaClass.simpleName}: ${e.message}", e)
+            false
+        } finally {
+            c?.disconnect()
+        }
     }
 
     private fun reportReleaseStatus(
@@ -1019,17 +1041,26 @@ class DeviceAgentService : Service() {
                 return
             }
             android.util.Log.i(TAG, "Recovered install completion: cmd=$commandId batch=$batchId file=$fileId version=${info.longVersionCode} lastUpdate=${info.lastUpdateTime}")
-            // 旧格式 JSON 可能无 command_id，此时仅上报 release 状态（不依赖 command_id）
-            if (commandId.isNotEmpty()) {
-                reportCommandStatus(commandId, "completed", "Installed after package restart")
-            }
-            if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "installed")
-            clearPendingInstall()
-            RestartReceiver.cancelRestart(this)
-            try { File(filesDir, "pending_upgrade").delete() } catch (_: Exception) {}
-            UpgradingMark.clear(this)
-            removeSkip(fileId)
-            try { File(filesDir, "downloads/$fileId.apk").delete() } catch (_: Exception) {}
+            Thread({
+                try {
+                    // 旧格式 JSON 可能无 command_id，此时仅上报 release 状态（不依赖 command_id）
+                    val commandReported = commandId.isEmpty() ||
+                        reportCommandStatusWithRetry(commandId, "completed", "Installed after package restart")
+                    if (batchId.isNotEmpty()) reportReleaseStatus(batchId, fileId, "installed")
+                    if (!commandReported) {
+                        android.util.Log.w(TAG, "Recovered install report not completed; keeping pending marker for retry: cmd=$commandId")
+                        return@Thread
+                    }
+                    clearPendingInstall()
+                    RestartReceiver.cancelRestart(this)
+                    try { File(filesDir, "pending_upgrade").delete() } catch (_: Exception) {}
+                    UpgradingMark.clear(this)
+                    removeSkip(fileId)
+                    try { File(filesDir, "downloads/$fileId.apk").delete() } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "complete recovered install async report failed: ${e.message}", e)
+                }
+            }, "install-recovery-report").start()
         } catch (e: Exception) {
             android.util.Log.e(TAG, "complete recovered install failed: ${e.message}")
         }
