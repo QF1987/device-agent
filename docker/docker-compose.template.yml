@@ -1,0 +1,48 @@
+services:
+  tracker:
+    image: __TRACKER_IMAGE__
+    build:
+      context: __ROOT_DIR__
+      dockerfile: docker/Dockerfile.tracker
+    networks:
+      - fleet
+
+  runner:
+    image: __RUNNER_IMAGE__
+    depends_on:
+      tracker:
+        condition: service_healthy
+    volumes:
+      - __SHARED_DIR__:/shared
+    environment:
+      P2P_RUNNER_URL: "__WEB_SEED_URL__"
+      P2P_TRACKER_URL: "http://tracker:6969/announce"
+      P2P_PEER_WAIT_SECONDS: "__PEER_WAIT_SECONDS__"
+      P2P_RETRY_COUNT: "__RETRY_COUNT__"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        url_arg=""
+        if [ -n "$${P2P_RUNNER_URL}" ]; then
+          url_arg="--url $${P2P_RUNNER_URL}"
+        fi
+        exec /usr/local/bin/p2p_docker_runner \
+          --log-format=json \
+          --runner-id "$${HOSTNAME}" \
+          --torrent /shared/payload.torrent \
+          --dest "/shared/downloads/$${HOSTNAME}" \
+          $${url_arg} \
+          --sha256 "$(cat /shared/sha256.txt)" \
+          --file-size "$(cat /shared/file_size.txt)" \
+          --keep-seeding-seconds __KEEP_SEEDING_SECONDS__ \
+          --tracker-url "$${P2P_TRACKER_URL}" \
+          --peer-wait-seconds "$${P2P_PEER_WAIT_SECONDS}" \
+          --retry-count "$${P2P_RETRY_COUNT}"
+    deploy:
+      replicas: __SIZE__
+    networks:
+      - fleet
+
+networks:
+  fleet:

@@ -70,6 +70,24 @@ bool is_http_url(const std::string& value) {
     return starts_with(value, "http://") || starts_with(value, "https://");
 }
 
+std::string env_or_empty(const char* name) {
+    const char* value = std::getenv(name);
+    return value == nullptr ? std::string() : std::string(value);
+}
+
+int env_int_or_default(const char* name, int fallback) {
+    const std::string value = env_or_empty(name);
+    return value.empty() ? fallback : std::atoi(value.c_str());
+}
+
+void add_tracker_helper(lt::add_torrent_params& params, const std::string& tracker_url) {
+    if (tracker_url.empty()) {
+        return;
+    }
+    params.trackers.push_back(tracker_url);
+    LOG_INFO("P2PDownloadManager: added tracker " + tracker_url);
+}
+
 bool run_web_seed_http_fallback(const std::string& url,
                                 const std::string& output_path,
                                 std::string& error) {
@@ -390,6 +408,65 @@ void emit_peer_counters(const lt::peer_info_alert& alert) {
     }
 
     emit_peer_counter_values(from_peers, from_web_seed);
+}
+
+int count_p2p_peers(const lt::peer_info_alert& alert) {
+    int count = 0;
+    for (const auto& peer : alert.peer_info) {
+        if (peer.connection_type != lt::peer_info::web_seed &&
+                peer.connection_type != lt::peer_info::http_seed) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool wait_for_p2p_peer(lt::session& session,
+                       lt::torrent_handle& handle,
+                       std::chrono::seconds timeout,
+                       std::string& error) {
+    if (timeout.count() <= 0) {
+        return true;
+    }
+    LOG_INFO("P2PDownloadManager: waiting for p2p peer seconds=" +
+             std::to_string(timeout.count()));
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    auto last_post = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_post >= std::chrono::seconds(1)) {
+            handle.post_peer_info();
+            last_post = now;
+        }
+        session.wait_for_alert(std::chrono::milliseconds(250));
+        std::vector<lt::alert*> alerts;
+        session.pop_alerts(&alerts);
+        for (const auto* item : alerts) {
+            if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
+                emit_peer_counters(*peer_info);
+                const int p2p_peers = count_p2p_peers(*peer_info);
+                if (p2p_peers > 0) {
+                    LOG_INFO("P2PDownloadManager: p2p peer detected from_peers=" +
+                             std::to_string(p2p_peers));
+                    return true;
+                }
+            }
+            if (is_piece_hash_failure(item)) {
+                log_piece_hash_failure(item);
+                continue;
+            }
+            if (const auto* tracker_error = lt::alert_cast<lt::tracker_error_alert>(item)) {
+                LOG_WARN("P2PDownloadManager: tracker error while waiting for peer: " +
+                         tracker_error->message());
+            }
+            if (is_terminal_error(item)) {
+                error = alert_message(item);
+                return false;
+            }
+        }
+    }
+    error = "peer wait timed out after " + std::to_string(timeout.count()) + " seconds";
+    return false;
 }
 
 bool wait_for_peer_counters(lt::session& session,
@@ -781,6 +858,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
                 }
             }
+            if (error.empty()) {
+                add_tracker_helper(params, env_or_empty("P2P_TRACKER_URL"));
+            }
 
             lt::torrent_handle handle;
             lt::session* session = nullptr;
@@ -799,6 +879,15 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     if (network_policy_) {
                         set_upload_throttle(handle, !network_policy_->should_seed());
                     }
+                }
+            }
+            if (error.empty() && env_int_or_default("P2P_PEER_WAIT_SECONDS", 0) > 0) {
+                if (!wait_for_p2p_peer(*session,
+                                       handle,
+                                       std::chrono::seconds(
+                                           env_int_or_default("P2P_PEER_WAIT_SECONDS", 0)),
+                                       error)) {
+                    LOG_WARN("P2PDownloadManager: " + error);
                 }
             }
             if (error.empty()) {
@@ -826,6 +915,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                                 emit_peer_counters(*peer_info);
                             }
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
+                                if (!is_http_url(req.url)) {
+                                    LOG_INFO("P2PDownloadManager: completed with p2p-only source from_peers=1");
+                                }
                                 success = true;
                                 break;
                             }

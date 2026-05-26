@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -168,56 +169,43 @@ device_agent::RunnerLogger::Format parse_log_format(const std::string& value) {
 
 std::vector<std::pair<std::string, std::string>> reserved_arg_payload(const Args& args) {
     std::vector<std::pair<std::string, std::string>> payload;
-    if (!args.tracker_url.empty()) {
-        payload.emplace_back("tracker_url", args.tracker_url);
-    }
-    if (args.peer_wait_seconds > 0) {
-        payload.emplace_back("peer_wait_seconds", std::to_string(args.peer_wait_seconds));
-    }
-    if (args.retry_count > 0) {
-        payload.emplace_back("retry_count", std::to_string(args.retry_count));
-    }
     if (args.metric_port > 0) {
         payload.emplace_back("metric_port", std::to_string(args.metric_port));
     }
     return payload;
 }
 
-}  // namespace
+void set_env_int(const char* name, int value) {
+    if (value > 0) {
+        setenv(name, std::to_string(value).c_str(), 1);
+    } else {
+        unsetenv(name);
+    }
+}
 
-int main(int argc, char** argv) {
-    Args args;
-    std::string parse_error;
-    if (!parse_args(argc, argv, args, parse_error)) {
-        if (!parse_error.empty()) {
-            std::cerr << parse_error << "\n";
-        }
-        usage(argv[0]);
-        return 2;
+void apply_runtime_env(const Args& args) {
+    if (!args.tracker_url.empty()) {
+        setenv("P2P_TRACKER_URL", args.tracker_url.c_str(), 1);
+    } else {
+        unsetenv("P2P_TRACKER_URL");
     }
+    set_env_int("P2P_PEER_WAIT_SECONDS", args.peer_wait_seconds);
+}
 
-    std::streambuf* original_stdout = std::cout.rdbuf();
-    std::ostream runner_stdout(original_stdout);
-    if (args.log_format == "json") {
-        std::cout.rdbuf(std::cerr.rdbuf());
+std::string attempt_label(int attempt, int retry_count) {
+    std::ostringstream oss;
+    oss << attempt << "/" << retry_count;
+    return oss.str();
+}
+
+int run_download_once(const Args& args, device_agent::RunnerLogger& logger) {
+    apply_runtime_env(args);
+    if (!args.tracker_url.empty()) {
+        logger.log("tracker_config", {{"tracker_url", args.tracker_url}});
     }
-    device_agent::RunnerLogger logger(parse_log_format(args.log_format),
-                                      args.runner_id,
-                                      args.log_format == "json" ? runner_stdout : std::cout);
-    logger.log("runner_config", {
-        {"torrent", args.torrent},
-        {"dest", args.dest},
-        {"url", args.url},
-        {"keep_seeding_seconds", std::to_string(args.keep_seeding_seconds)},
-        {"file_size", std::to_string(args.file_size)},
-    });
-    const auto reserved_payload = reserved_arg_payload(args);
-    if (!reserved_payload.empty()) {
-        logger.log("reserved_cli_not_implemented", reserved_payload);
-    }
-    if (args.self_test) {
-        logger.log("self_test_ok");
-        return 0;
+    if (args.peer_wait_seconds > 0) {
+        logger.log("peer_wait_config",
+                   {{"peer_wait_seconds", std::to_string(args.peer_wait_seconds)}});
     }
 
     device_agent::DownloadRequest req;
@@ -286,4 +274,62 @@ int main(int argc, char** argv) {
 
     std::this_thread::sleep_for(std::chrono::seconds(args.keep_seeding_seconds));
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    Args args;
+    std::string parse_error;
+    if (!parse_args(argc, argv, args, parse_error)) {
+        if (!parse_error.empty()) {
+            std::cerr << parse_error << "\n";
+        }
+        usage(argv[0]);
+        return 2;
+    }
+
+    std::streambuf* original_stdout = std::cout.rdbuf();
+    std::ostream runner_stdout(original_stdout);
+    if (args.log_format == "json") {
+        std::cout.rdbuf(std::cerr.rdbuf());
+    }
+    device_agent::RunnerLogger logger(parse_log_format(args.log_format),
+                                      args.runner_id,
+                                      args.log_format == "json" ? runner_stdout : std::cout);
+    logger.log("runner_config", {
+        {"torrent", args.torrent},
+        {"dest", args.dest},
+        {"url", args.url},
+        {"keep_seeding_seconds", std::to_string(args.keep_seeding_seconds)},
+        {"file_size", std::to_string(args.file_size)},
+    });
+    const auto reserved_payload = reserved_arg_payload(args);
+    if (!reserved_payload.empty()) {
+        logger.log("reserved_cli_not_implemented", reserved_payload);
+    }
+    if (args.self_test) {
+        logger.log("self_test_ok");
+        return 0;
+    }
+
+    int exit_code = 1;
+    for (int attempt = 0; attempt <= args.retry_count; ++attempt) {
+        logger.log("download_attempt", {
+            {"attempt", std::to_string(attempt + 1)},
+            {"max_attempts", std::to_string(args.retry_count + 1)},
+        });
+        exit_code = run_download_once(args, logger);
+        if (exit_code == 0 || exit_code == 3) {
+            return exit_code;
+        }
+        if (attempt < args.retry_count) {
+            logger.log("retry", {
+                {"message", "retry " + attempt_label(attempt + 1, args.retry_count)},
+                {"attempt", std::to_string(attempt + 1)},
+                {"retry_count", std::to_string(args.retry_count)},
+            });
+        }
+    }
+    return exit_code;
 }

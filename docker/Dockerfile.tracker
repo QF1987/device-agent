@@ -1,0 +1,10 @@
+FROM alpine:3.20
+
+RUN apk add --no-cache opentracker socat
+
+EXPOSE 6969/tcp 6969/udp
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=3s --retries=3 \
+    CMD wget -q -O - "http://127.0.0.1:6969/stats?mode=version" >/dev/null || exit 1
+
+CMD ["sh", "-c", "opentracker -i 127.0.0.1 -p 6968 -P 6969 & exec socat -v TCP-LISTEN:6969,fork,reuseaddr TCP:127.0.0.1:6968"]
