@@ -4,12 +4,13 @@ set -euo pipefail
 DEFAULT_SERIALS="192.168.31.239:41351,bf9ec82f"
 PACKAGE_NAME="${PACKAGE_NAME:-com.deviceagent}"
 REMOTE_DIR="${REMOTE_DIR:-/sdcard/Download/m3-alpha}"
-RESULT_ROOT="${RESULT_ROOT:-/Users/qf/Alcedo/code/DeviceOps/.ai/logs/m3-alpha-s4}"
+RESULT_ROOT="${RESULT_ROOT:-./logs/m3-alpha-s4}"
 DATABASE_URL="${DATABASE_URL:-postgres://deviceops:deviceops123@localhost:5432/deviceops?sslmode=disable}"
 SERVER_URL="${SERVER_URL:-http://192.168.31.81:8080}"
 GRPC_PORT="${GRPC_PORT:-9090}"
-WAIT_SECONDS="${WAIT_SECONDS:-300}"
+WAIT_SECONDS="${E2E_WAIT_SECONDS:-${WAIT_SECONDS:-600}}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
+HEADLESS_PM_INSTALL="${HEADLESS_PM_INSTALL:-1}"
 
 usage() {
   cat <<'USAGE'
@@ -28,7 +29,9 @@ Environment:
   GRPC_PORT=<port>             gRPC CommandStream port. Defaults to 9090.
   DEVICE_SERIALS=a,b           Defaults to the two known LAN devices.
   DEVICE_IDS=id1,id2           Server-side device ids. If omitted, script tries app prefs.
-  RESULT_ROOT=<path>           Defaults to DeviceOps .ai/logs/m3-alpha-s4.
+  RESULT_ROOT=<path>           Defaults to ./logs/m3-alpha-s4.
+  E2E_WAIT_SECONDS=<seconds>   Download evidence wait window. Defaults to 600.
+  HEADLESS_PM_INSTALL=0        Disable adb pm install helper after APK P2P completion.
   SKIP_DB_TRIGGER=1            Push torrent and collect logs without inserting commands.
 USAGE
 }
@@ -106,6 +109,39 @@ launch_device_agent() {
   local serial="$1"
   adb_shell "$serial" monkey -p "$PACKAGE_NAME" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 ||
     adb_shell "$serial" am start -n "${PACKAGE_NAME}/.MainActivity" >/dev/null 2>&1
+}
+
+headless_pm_install_apk() {
+  local serial="$1"
+  local log_file="$2"
+  local out_file="$3"
+  [[ "$HEADLESS_PM_INSTALL" == "1" ]] || {
+    echo "HEADLESS_PM_INSTALL disabled" >"$out_file"
+    return 0
+  }
+
+  local apk_path
+  apk_path="$(sed -n 's/.*onP2PStarted:.*type=apk path=\([^ ]*\).*/\1/p' "$log_file" | tail -n 1)"
+  if [[ -z "$apk_path" ]]; then
+    echo "SKIP: no P2P APK path found in logcat" >"$out_file"
+    return 2
+  fi
+
+  local staged="${REMOTE_DIR}/headless-$(basename "$apk_path")"
+  {
+    echo "source=${apk_path}"
+    echo "staged=${staged}"
+    adb_shell "$serial" mkdir -p "$REMOTE_DIR"
+    if [[ "$apk_path" == /data/data/"$PACKAGE_NAME"/* || "$apk_path" == /data/user/*/"$PACKAGE_NAME"/* ]]; then
+      local host_apk="${TMPDIR:-/tmp}/m3-alpha-headless-${serial//[^A-Za-z0-9]/_}.apk"
+      adb -s "$serial" exec-out run-as "$PACKAGE_NAME" cat "$apk_path" >"$host_apk"
+      adb -s "$serial" push "$host_apk" "$staged"
+      rm -f "$host_apk"
+    else
+      adb_shell "$serial" cp "$apk_path" "$staged"
+    fi
+    adb_shell "$serial" pm install -r -d "$staged"
+  } >"$out_file" 2>&1
 }
 
 detect_test_binary() {
@@ -356,6 +392,11 @@ while (( elapsed < WAIT_SECONDS )); do
   sleep "$POLL_SECONDS"
   elapsed=$((elapsed + POLL_SECONDS))
   collect_command_rows "$result_dir"
+done
+
+for ((i=0; i<DEVICE_COUNT; i++)); do
+  serial="$(csv_item "$DEVICE_SERIALS" "$i")"
+  headless_pm_install_apk "$serial" "${result_dir}/logcat-${i}.log" "${result_dir}/headless-install-${i}.log" || true
 done
 
 for pid in "${logcat_pids[@]}"; do

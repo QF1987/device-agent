@@ -11,9 +11,10 @@ DEFAULT_SERIALS="192.168.31.211:40541,bf9ec82f"
 # ^ current two-device setup: Wi-Fi device + 4G/USB device; adjust per setup
 PACKAGE_NAME="${PACKAGE_NAME:-com.deviceagent}"
 REMOTE_DIR="${REMOTE_DIR:-/sdcard/Download/m3-beta}"
-RESULT_ROOT="${RESULT_ROOT:-/Users/qf/Alcedo/code/DeviceOps/.ai/logs/m3-beta-e2e}"
+RESULT_ROOT="${RESULT_ROOT:-./logs/m3-beta-e2e}"
 DATABASE_URL="${DATABASE_URL:-postgres://deviceops:deviceops123@localhost:5432/deviceops?sslmode=disable}"
 SERVER_URL="${SERVER_URL:-http://192.168.31.81:8080}"
+SERVER_LOG="${SERVER_LOG:-/tmp/terminal-agent-dev.log}"
 GRPC_PORT="${GRPC_PORT:-9090}"
 WAIT_SECONDS="${WAIT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
@@ -451,11 +452,11 @@ scenario_config_hotload() {
 
   # Wait up to 60s for propagation (pusher 30s ticker + network delay)
   log "config: waiting up to 60s for P2PConfigPusher propagation..."
+  log "config: server_log=${SERVER_LOG}"
 
-  local server_log="/tmp/terminal-agent-dev.log"
   local server_log_start_line=1
-  if [[ -f "$server_log" ]]; then
-    server_log_start_line="$(($(wc -l <"$server_log") + 1))"
+  if [[ -f "$SERVER_LOG" ]]; then
+    server_log_start_line="$(($(wc -l <"$SERVER_LOG") + 1))"
   fi
   local config_pushed=0
   local config_received=0
@@ -464,8 +465,8 @@ scenario_config_hotload() {
 
   while (( elapsed < 60 )); do
     local server_log_delta=""
-    if [[ -f "$server_log" ]]; then
-      server_log_delta="$(tail -n +"$server_log_start_line" "$server_log" 2>/dev/null || true)"
+    if [[ -f "$SERVER_LOG" ]]; then
+      server_log_delta="$(tail -n +"$server_log_start_line" "$SERVER_LOG" 2>/dev/null || true)"
     fi
     # Check server log for push confirmation
     if echo "$server_log_delta" | grep -q "P2P 配置已推送到"; then
@@ -617,6 +618,8 @@ Environment:
   DATABASE_URL=<url>           PostgreSQL connection string
   SERVER_URL=<url>             Backend server URL
   GRPC_PORT=<port>             gRPC port (default: 9090)
+  RESULT_ROOT=<path>           Result directory root (default: ./logs/m3-beta-e2e)
+  SERVER_LOG=<path>            Backend log path for config scenario (default: /tmp/terminal-agent-dev.log)
 USAGE
 }
 
