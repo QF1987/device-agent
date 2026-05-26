@@ -375,6 +375,7 @@ else()
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
+            src/logger/runner_logger.cc
         )
         target_include_directories(p2p_docker_runner PRIVATE
             ${CMAKE_SOURCE_DIR}/src

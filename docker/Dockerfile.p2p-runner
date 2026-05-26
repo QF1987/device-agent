@@ -1,0 +1,41 @@
+FROM ubuntu:24.04 AS build
+
+RUN sed -i 's#http://ports.ubuntu.com/ubuntu-ports/#http://mirrors.aliyun.com/ubuntu-ports/#g' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        cmake \
+        g++ \
+        libssl-dev \
+        libtorrent-rasterbar-dev \
+        make \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . /src
+RUN cmake -S /src -B /tmp/build-p2p \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_P2P_DOCKER_TOOLS=ON \
+    && cmake --build /tmp/build-p2p \
+        --target p2p_download_manager_test p2p_docker_runner -- -j8 \
+    && /tmp/build-p2p/bin/p2p_download_manager_test \
+    && /tmp/build-p2p/bin/p2p_docker_runner --self-test
+
+FROM ubuntu:24.04
+
+RUN sed -i 's#http://ports.ubuntu.com/ubuntu-ports/#http://mirrors.aliyun.com/ubuntu-ports/#g' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3t64 \
+        libtorrent-rasterbar2.0t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /tmp/build-p2p/bin/p2p_docker_runner /usr/local/bin/p2p_docker_runner
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/p2p_docker_runner", "--self-test"]
+
+ENTRYPOINT ["/usr/local/bin/p2p_docker_runner"]
