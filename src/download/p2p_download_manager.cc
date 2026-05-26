@@ -18,6 +18,8 @@
 
 #ifdef __ANDROID__
 #include <android/log.h>
+#else
+#include <openssl/sha.h>
 #endif
 
 #include <algorithm>
@@ -331,14 +333,23 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
         return false;
     }
 
+#ifdef __ANDROID__
     lt::sha256_ctx ctx;
     lt::SHA256_init(ctx);
+#else
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+#endif
     std::array<std::uint8_t, 8192> buffer{};
     while (input.good()) {
         input.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
         const std::streamsize n = input.gcount();
         if (n > 0) {
+#ifdef __ANDROID__
             lt::SHA256_update(ctx, buffer.data(), static_cast<int>(n));
+#else
+            SHA256_Update(&ctx, buffer.data(), static_cast<std::size_t>(n));
+#endif
         }
     }
     if (input.bad()) {
@@ -347,7 +358,11 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
     }
 
     std::array<std::uint8_t, 32> digest{};
+#ifdef __ANDROID__
     lt::SHA256_final(digest.data(), ctx);
+#else
+    SHA256_Final(digest.data(), &ctx);
+#endif
     out_hex = hex_encode(digest.data(), digest.size());
     return true;
 }

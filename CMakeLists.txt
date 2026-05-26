@@ -216,6 +216,7 @@ extern "C" const char* device_agent_libtorrent_version() {
 # ─── Desktop (Linux/macOS): build as standalone executable ─
 else()
     message(STATUS "=== Building device-agent for desktop ===")
+    option(BUILD_P2P_DOCKER_TOOLS "Build Linux P2P Docker spike tools" ON)
 
     # Proto files for Desktop: gen-desktop/ (v34.1, pre-generated)
     # gen/ is only used by Android (gen-android/)
@@ -342,6 +343,48 @@ else()
         pthread
         z
     )
+
+    if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
+        find_package(Threads REQUIRED)
+        find_package(OpenSSL REQUIRED)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(LIBTORRENT_RASTERBAR REQUIRED IMPORTED_TARGET libtorrent-rasterbar)
+
+        add_executable(p2p_download_manager_test
+            src/download/p2p_download_manager_test.cc
+            src/download/p2p_download_manager.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+        )
+        target_link_libraries(p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+
+        add_executable(p2p_docker_runner
+            src/download/p2p_docker_runner.cc
+            src/download/p2p_download_manager.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_docker_runner PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_link_libraries(p2p_docker_runner PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+    endif()
 
     # Build examples
     option(BUILD_EXAMPLES "Build example business apps" ON)

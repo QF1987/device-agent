@@ -93,7 +93,7 @@ std::string LinuxExecutor::reboot(bool force, const std::string& command_id, std
         // 调用 reboot(RB_AUTOBOOT) 系统调用
         // 成功时不会返回，进程被内核重启系统
         // 失败时返回 -1，errno 被设置
-        int ret = reboot(RB_AUTOBOOT);
+        int ret = ::reboot(RB_AUTOBOOT);
         // 如果 reboot 成功，进程被内核杀掉，不会执行到这里
         // 如果失败，写失败状态文件
         LOG_ERROR("LinuxExecutor: reboot syscall failed, errno=" + std::to_string(errno));
