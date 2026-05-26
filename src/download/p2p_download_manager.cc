@@ -28,9 +28,17 @@
 #include <exception>
 #include <fstream>
 #include <memory>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifdef __ANDROID__
+#include <netdb.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 namespace device_agent {
 namespace {
@@ -54,6 +62,144 @@ bool starts_with(const std::string& value, const std::string& prefix) {
 bool ends_with(const std::string& value, const std::string& suffix) {
     return value.size() >= suffix.size() &&
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool is_http_url(const std::string& value) {
+    return starts_with(value, "http://") || starts_with(value, "https://");
+}
+
+bool run_web_seed_http_fallback(const std::string& url,
+                                const std::string& output_path,
+                                std::string& error) {
+#ifdef __ANDROID__
+    if (!starts_with(url, "http://") || output_path.empty()) {
+        error = "web seed fallback missing url or output path";
+        return false;
+    }
+
+    const std::string without_scheme = url.substr(std::string("http://").size());
+    const auto slash = without_scheme.find('/');
+    const std::string host_port = slash == std::string::npos
+        ? without_scheme
+        : without_scheme.substr(0, slash);
+    const std::string path = slash == std::string::npos
+        ? "/"
+        : without_scheme.substr(slash);
+    const auto colon = host_port.find(':');
+    const std::string host = colon == std::string::npos ? host_port : host_port.substr(0, colon);
+    const std::string port = colon == std::string::npos ? "80" : host_port.substr(colon + 1);
+    if (host.empty() || port.empty()) {
+        error = "web seed fallback invalid http url";
+        return false;
+    }
+
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* result = nullptr;
+    const int gai = getaddrinfo(host.c_str(), port.c_str(), &hints, &result);
+    if (gai != 0) {
+        error = "web seed fallback resolve failed";
+        return false;
+    }
+
+    int fd = -1;
+    for (addrinfo* ai = result; ai != nullptr; ai = ai->ai_next) {
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0) {
+            continue;
+        }
+        if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) {
+            break;
+        }
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(result);
+    if (fd < 0) {
+        error = "web seed fallback connect failed";
+        return false;
+    }
+
+    const std::string request =
+        "GET " + path + " HTTP/1.1\r\n" +
+        "Host: " + host_port + "\r\n" +
+        "User-Agent: device-agent-web-seed-fallback/1.0\r\n" +
+        "Connection: close\r\n\r\n";
+    ssize_t sent = send(fd, request.data(), request.size(), 0);
+    if (sent < 0 || static_cast<size_t>(sent) != request.size()) {
+        close(fd);
+        error = "web seed fallback request send failed";
+        return false;
+    }
+
+    std::remove(output_path.c_str());
+    std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        close(fd);
+        error = "web seed fallback output open failed";
+        return false;
+    }
+
+    std::string header;
+    std::array<char, 8192> buffer{};
+    bool header_done = false;
+    int status_code = 0;
+    while (true) {
+        const ssize_t n = recv(fd, buffer.data(), buffer.size(), 0);
+        if (n < 0) {
+            close(fd);
+            out.close();
+            std::remove(output_path.c_str());
+            error = "web seed fallback read failed";
+            return false;
+        }
+        if (n == 0) {
+            break;
+        }
+        const char* data = buffer.data();
+        size_t size = static_cast<size_t>(n);
+        if (!header_done) {
+            header.append(data, size);
+            const auto pos = header.find("\r\n\r\n");
+            if (pos == std::string::npos) {
+                continue;
+            }
+            const auto first_line_end = header.find("\r\n");
+            if (first_line_end != std::string::npos && header.size() >= 12) {
+                status_code = std::atoi(header.substr(9, 3).c_str());
+            }
+            if (status_code < 200 || status_code >= 300) {
+                close(fd);
+                out.close();
+                std::remove(output_path.c_str());
+                error = "web seed fallback http status=" + std::to_string(status_code);
+                return false;
+            }
+            const size_t body_start = pos + 4;
+            if (body_start < header.size()) {
+                out.write(header.data() + body_start,
+                          static_cast<std::streamsize>(header.size() - body_start));
+            }
+            header_done = true;
+        } else {
+            out.write(data, static_cast<std::streamsize>(size));
+        }
+    }
+    close(fd);
+    out.close();
+    if (!header_done || !out) {
+        std::remove(output_path.c_str());
+        error = "web seed fallback incomplete response";
+        return false;
+    }
+    return true;
+#else
+    (void)url;
+    (void)output_path;
+    error = "web seed fallback is only available on Android";
+    return false;
+#endif
 }
 
 struct DownloadSource {
@@ -135,8 +281,16 @@ bool is_terminal_error(const lt::alert* alert) {
     return lt::alert_cast<lt::torrent_error_alert>(alert) != nullptr ||
            lt::alert_cast<lt::file_error_alert>(alert) != nullptr ||
            lt::alert_cast<lt::storage_moved_failed_alert>(alert) != nullptr ||
-           lt::alert_cast<lt::metadata_failed_alert>(alert) != nullptr ||
-           lt::alert_cast<lt::hash_failed_alert>(alert) != nullptr;
+           lt::alert_cast<lt::metadata_failed_alert>(alert) != nullptr;
+}
+
+bool is_piece_hash_failure(const lt::alert* alert) {
+    return lt::alert_cast<lt::hash_failed_alert>(alert) != nullptr;
+}
+
+void log_piece_hash_failure(const lt::alert* alert) {
+    LOG_WARN("P2PDownloadManager: piece hash failed; libtorrent will retry: " +
+             alert_message(alert));
 }
 
 DownloadProgress make_progress(const lt::torrent_status& status,
@@ -237,6 +391,10 @@ bool wait_for_peer_counters(lt::session& session,
                     emit_peer_counters(*peer_info);
                     return true;
                 }
+                if (is_piece_hash_failure(item)) {
+                    log_piece_hash_failure(item);
+                    continue;
+                }
                 if (is_terminal_error(item)) {
                     error = alert_message(item);
                     return false;
@@ -271,6 +429,10 @@ bool wait_for_cache_flush(lt::session& session,
                     if (!flushed->handle.is_valid() || flushed->handle == handle) {
                         return true;
                     }
+                }
+                if (is_piece_hash_failure(item)) {
+                    log_piece_hash_failure(item);
+                    continue;
                 }
                 if (is_terminal_error(item)) {
                     error = alert_message(item);
@@ -592,6 +754,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     error = "failed to load torrent: " + ec.message();
                 } else {
                     params.ti = torrent;
+                    if (is_http_url(req.url)) {
+                        params.url_seeds.push_back(req.url);
+                        LOG_INFO("P2PDownloadManager: added explicit web seed " + req.url);
+                    }
                     downloaded_path = primary_file_path(*torrent, params.save_path);
                     if (downloaded_path.empty()) {
                         error = "p2p alpha supports single-file torrents only";
@@ -626,6 +792,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
                 const auto peer_info_interval = std::chrono::seconds(5);
                 auto last_peer_info_post = std::chrono::steady_clock::now() - peer_info_interval;
+                const auto stall_timeout = std::chrono::seconds(60);
+                auto last_progress_at = std::chrono::steady_clock::now();
+                int64_t last_done = -1;
 
                 while (!cancel_requested_.load()) {
                     const auto now = std::chrono::steady_clock::now();
@@ -644,6 +813,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 success = true;
                                 break;
+                            }
+                            if (is_piece_hash_failure(item)) {
+                                log_piece_hash_failure(item);
+                                continue;
                             }
                             if (source.is_magnet &&
                                     lt::alert_cast<lt::metadata_received_alert>(item) != nullptr &&
@@ -681,6 +854,26 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         }
                     }
                     const auto progress = make_progress(status, req.file_size);
+                    const int64_t done = status.total_wanted_done;
+                    if (done > last_done) {
+                        last_done = done;
+                        last_progress_at = std::chrono::steady_clock::now();
+                    } else if (done > 0 && is_http_url(req.url) && !downloaded_path.empty() &&
+                               std::chrono::steady_clock::now() - last_progress_at >= stall_timeout) {
+                        LOG_WARN("P2PDownloadManager: web seed stalled; falling back to direct HTTP download");
+                        session->remove_torrent(handle);
+                        {
+                            std::lock_guard<std::mutex> lock(mu_);
+                            remove_active_handle_locked(handle);
+                        }
+                        std::string fallback_error;
+                        if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+                            success = true;
+                        } else {
+                            error = fallback_error;
+                        }
+                        break;
+                    }
                     if (on_progress) {
                         on_progress(progress);
                     }
@@ -722,8 +915,22 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         if (!verify_sha256_with_retry(downloaded_path,
                                                       req.expected_sha256,
                                                       verify_error)) {
-                            success = false;
-                            error = verify_error;
+                            if (is_http_url(req.url)) {
+                                LOG_WARN("P2PDownloadManager: sha256 verify failed; falling back to direct HTTP download");
+                                std::string fallback_error;
+                                if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error) &&
+                                        verify_sha256_with_retry(downloaded_path,
+                                                                 req.expected_sha256,
+                                                                 verify_error)) {
+                                    emit_peer_counter_values(0, std::max<int64_t>(req.file_size, 0));
+                                } else {
+                                    success = false;
+                                    error = fallback_error.empty() ? verify_error : fallback_error;
+                                }
+                            } else {
+                                success = false;
+                                error = verify_error;
+                            }
                         }
                     }
                 }
@@ -755,6 +962,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         for (const auto* item : alerts) {
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                                 emit_peer_counters(*peer_info);
+                            }
+                            if (is_piece_hash_failure(item)) {
+                                log_piece_hash_failure(item);
+                                continue;
                             }
                             if (is_terminal_error(item)) {
                                 error = alert_message(item);

@@ -416,6 +416,7 @@ class DeviceAgentService : Service() {
         val commandId: String,
         val sha256: String,
         val localPath: String,
+        val fileType: String,
         var lastReportTimeMs: Long = 0L,
         var lastReportBytes: Long = 0L
     )
@@ -619,10 +620,10 @@ class DeviceAgentService : Service() {
         Thread { handleDownloadAndInstall(batchId, fileId, commandId, downloadUrl, sha256) }.start()
     }
 
-    fun onP2PStarted(batchId: String, fileId: String, commandId: String, sha256: String, localPath: String) {
-        android.util.Log.i(TAG, "onP2PStarted: cmd=$commandId batch=$batchId file=$fileId path=$localPath")
+    fun onP2PStarted(batchId: String, fileId: String, commandId: String, sha256: String, localPath: String, fileType: String) {
+        android.util.Log.i(TAG, "onP2PStarted: cmd=$commandId batch=$batchId file=$fileId type=$fileType path=$localPath")
         synchronized(p2pLock) {
-            activeP2PContext = P2PDownloadContext(batchId, fileId, commandId, sha256, localPath)
+            activeP2PContext = P2PDownloadContext(batchId, fileId, commandId, sha256, localPath, fileType)
         }
         reportReleaseStatus(batchId, fileId, "downloading")
         updateNotification("⏬ P2P 下载中...")
@@ -670,6 +671,14 @@ class DeviceAgentService : Service() {
             val errorCode = if (errorMsg.contains("sha256", ignoreCase = true)) "CHECKSUM_FAILED" else "NETWORK_ERROR"
             reportReleaseStatus(ctx.batchId, ctx.fileId, "download_failed", errorCode = errorCode, errorMessage = errorMsg)
             updateNotificationTemporarily("❌ P2P 下载失败")
+            return
+        }
+
+        if (!ctx.fileType.equals("apk", ignoreCase = true)) {
+            android.util.Log.i(TAG, "P2P download verified: cmd=${ctx.commandId} batch=${ctx.batchId} file=${ctx.fileId} type=${ctx.fileType}")
+            reportCommandStatus(ctx.commandId, "success", "P2P download verified")
+            reportReleaseStatus(ctx.batchId, ctx.fileId, "downloaded", bytes = File(ctx.localPath).length())
+            updateNotificationTemporarily("✅ P2P 下载完成")
             return
         }
 
