@@ -288,6 +288,16 @@ lt::session make_session() {
     pack.set_bool(lt::settings_pack::enable_natpmp, false);
     pack.set_int(lt::settings_pack::connections_limit, 64);
     pack.set_int(lt::settings_pack::active_downloads, 1);
+    const std::string listen_interfaces = env_or_empty("P2P_LISTEN_INTERFACES");
+    if (!listen_interfaces.empty()) {
+        pack.set_str(lt::settings_pack::listen_interfaces, listen_interfaces);
+        LOG_INFO("P2PDownloadManager: listen_interfaces=" + listen_interfaces);
+    }
+    const std::string announce_ip = env_or_empty("P2P_ANNOUNCE_IP");
+    if (!announce_ip.empty()) {
+        pack.set_str(lt::settings_pack::announce_ip, announce_ip);
+        LOG_INFO("P2PDownloadManager: announce_ip=" + announce_ip);
+    }
 
     const auto alert_mask =
         lt::alert_category::error |
