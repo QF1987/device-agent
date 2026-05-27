@@ -457,6 +457,14 @@ enum ReleaseErrorCode {
     RELEASE_ERROR_CODE_BUSINESS_ERROR = 6;   // 业务拒绝（INVALID_FILE_TYPE / 版本降级拒绝 / 用户取消）
 }
 
+enum CompletionPath {
+    COMPLETION_PATH_UNSPECIFIED = 0;       // 老端或未知完成路径
+    P2P_PRIMARY = 1;                       // 主要由 P2P peer pieces 完成
+    WEB_SEED_PRIMARY = 2;                  // 主要由 torrent web seed 完成
+    HTTP_FALLBACK_STALL = 3;               // peer/web seed 断流或慢启动后 HTTP fallback 完成
+    HTTP_FALLBACK_SHA_MISMATCH = 4;        // P2P 下载校验失败后 HTTP fallback 完成
+}
+
 // ReleaseStatusRequest：下载/安装状态上报
 // 设备在 download_ready 指令执行过程中主动上报
 message ReleaseStatusRequest {
@@ -483,6 +491,9 @@ message ReleaseStatusRequest {
 
     // 上报时间
     int64 timestamp = 8;
+
+    // 下载完成路径；旧端不上报时保持 UNSPECIFIED
+    CompletionPath completion_path = 9;
 }
 
 // ReleaseStatusResponse：状态上报响应

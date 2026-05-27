@@ -383,6 +383,8 @@ class DeviceAgentService : Service() {
         private const val TAG = "DeviceAgentService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "device_agent_channel"
+        private const val COMPLETION_PATH_UNSPECIFIED = 0
+        private const val COMPLETION_PATH_HTTP_FALLBACK_STALL = 3
 
         init {
             try {
@@ -400,7 +402,7 @@ class DeviceAgentService : Service() {
         @JvmStatic
         external fun nativeOnNetworkChanged(isCellular: Boolean, isWifi: Boolean)
         @JvmStatic
-        external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String): Boolean
+        external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String, completionPath: Int): Boolean
 
         /** 根据 BuildConfig flavor 创建对应的安装器 */
         private fun createInstaller(service: DeviceAgentService): IAppInstaller = when (BuildConfig.INSTALL_MODE) {
@@ -658,7 +660,7 @@ class DeviceAgentService : Service() {
         }
     }
 
-    fun onP2PComplete(success: Boolean, errorMsg: String) {
+    fun onP2PComplete(success: Boolean, errorMsg: String, completionPath: Int) {
         val ctx = synchronized(p2pLock) {
             val current = activeP2PContext
             activeP2PContext = null
@@ -681,7 +683,7 @@ class DeviceAgentService : Service() {
         if (!ctx.fileType.equals("apk", ignoreCase = true)) {
             android.util.Log.i(TAG, "P2P download verified: cmd=${ctx.commandId} batch=${ctx.batchId} file=${ctx.fileId} type=${ctx.fileType}")
             reportCommandStatus(ctx.commandId, "success", "P2P download verified")
-            reportReleaseStatus(ctx.batchId, ctx.fileId, "downloaded", bytes = File(ctx.localPath).length())
+            reportReleaseStatus(ctx.batchId, ctx.fileId, "downloaded", bytes = File(ctx.localPath).length(), completionPath = completionPath)
             updateNotificationTemporarily("✅ P2P 下载完成")
             return
         }
@@ -693,7 +695,8 @@ class DeviceAgentService : Service() {
                 ctx.commandId,
                 ctx.localPath,
                 ctx.sha256,
-                File(ctx.localPath)
+                File(ctx.localPath),
+                completionPath
             )
         }.start()
     }
@@ -725,9 +728,9 @@ class DeviceAgentService : Service() {
                 val fallbackUrl = "${cfgServerUrl.trimEnd('/')}/api/v1/files/$fileId/download"
                 android.util.Log.w(TAG, "P2P slow start fallback: cmd=$commandId file=$fileId url=$fallbackUrl")
                 if (fileType.equals("apk", ignoreCase = true)) {
-                    handleDownloadAndInstall(batchId, fileId, commandId, fallbackUrl, sha256)
+                    handleDownloadAndInstall(batchId, fileId, commandId, fallbackUrl, sha256, completionPath = COMPLETION_PATH_HTTP_FALLBACK_STALL)
                 } else {
-                    handleDownloadOnly(batchId, fileId, commandId, fallbackUrl, sha256, fileType)
+                    handleDownloadOnly(batchId, fileId, commandId, fallbackUrl, sha256, fileType, COMPLETION_PATH_HTTP_FALLBACK_STALL)
                 }
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
@@ -750,7 +753,8 @@ class DeviceAgentService : Service() {
         commandId: String,
         url: String,
         sha: String,
-        fileType: String
+        fileType: String,
+        completionPath: Int = COMPLETION_PATH_UNSPECIFIED
     ) {
         synchronized(inFlightFiles) { if (inFlightFiles.contains(fileId)) return; inFlightFiles.add(fileId) }
         val suffix = if (fileType.equals("system", ignoreCase = true)) "bin" else fileType.lowercase().ifEmpty { "bin" }
@@ -782,7 +786,7 @@ class DeviceAgentService : Service() {
         }
         android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId type=$fileType fallback-only")
         reportCommandStatus(commandId, "success", "Downloaded via fallback")
-        reportReleaseStatus(batchId, fileId, "downloaded", bytes = dest.length())
+        reportReleaseStatus(batchId, fileId, "downloaded", bytes = dest.length(), completionPath = completionPath)
         updateNotificationTemporarily("✅ 下载完成")
     }
 
@@ -792,7 +796,8 @@ class DeviceAgentService : Service() {
         commandId: String,
         url: String,
         sha: String,
-        predownloadedApk: File? = null
+        predownloadedApk: File? = null,
+        completionPath: Int = COMPLETION_PATH_UNSPECIFIED
     ) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) {
@@ -828,7 +833,7 @@ class DeviceAgentService : Service() {
             return
         }
         synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
-        reportReleaseStatus(batchId, fileId, "downloaded", dest.length())
+        reportReleaseStatus(batchId, fileId, "downloaded", dest.length(), completionPath = completionPath)
         android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId, installing via ${installer.mode}")
         UpgradingMark.write(svc, fileId)
         reportReleaseStatus(batchId, fileId, "installing")
@@ -985,11 +990,12 @@ class DeviceAgentService : Service() {
         status: String,
         bytes: Long = 0,
         errorCode: String = "",
-        errorMessage: String = ""
+        errorMessage: String = "",
+        completionPath: Int = COMPLETION_PATH_UNSPECIFIED
     ) {
         if (batchId.isEmpty()) return
         Thread {
-            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, errorCode, errorMessage) }
+            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, errorCode, errorMessage, completionPath) }
             catch (e: Exception) {
                 android.util.Log.e(TAG, "reportReleaseStatus native: ${e.message}")
             }

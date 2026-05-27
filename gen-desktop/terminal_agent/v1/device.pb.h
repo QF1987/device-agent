@@ -56,6 +56,8 @@ extern const ::google::protobuf::internal::DescriptorTable descriptor_table_term
 }  // extern "C"
 namespace terminal_agent {
 namespace v1 {
+enum CompletionPath : int;
+extern const uint32_t CompletionPath_internal_data_[];
 enum ReleaseDeviceStatus : int;
 extern const uint32_t ReleaseDeviceStatus_internal_data_[];
 enum ReleaseErrorCode : int;
@@ -128,6 +130,9 @@ extern const ::google::protobuf::internal::ClassDataFull StatusReportResponse_cl
 }  // namespace terminal_agent
 namespace google {
 namespace protobuf {
+template <>
+internal::EnumTraitsT<::terminal_agent::v1::CompletionPath_internal_data_>
+    internal::EnumTraitsImpl::value<::terminal_agent::v1::CompletionPath>;
 template <>
 internal::EnumTraitsT<::terminal_agent::v1::ReleaseDeviceStatus_internal_data_>
     internal::EnumTraitsImpl::value<::terminal_agent::v1::ReleaseDeviceStatus>;
@@ -231,6 +236,49 @@ template <>
 [[nodiscard]] inline bool ReleaseErrorCode_Parse(
     ::absl::string_view name, ReleaseErrorCode* PROTOBUF_NONNULL value) {
   return ::google::protobuf::internal::ParseNamedEnum<ReleaseErrorCode>(ReleaseErrorCode_descriptor(), name,
+                                           value);
+}
+enum CompletionPath : int {
+  COMPLETION_PATH_UNSPECIFIED = 0,
+  P2P_PRIMARY = 1,
+  WEB_SEED_PRIMARY = 2,
+  HTTP_FALLBACK_STALL = 3,
+  HTTP_FALLBACK_SHA_MISMATCH = 4,
+  CompletionPath_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::min(),
+  CompletionPath_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::max(),
+};
+
+extern const uint32_t CompletionPath_internal_data_[];
+inline constexpr CompletionPath CompletionPath_MIN =
+    static_cast<CompletionPath>(0);
+inline constexpr CompletionPath CompletionPath_MAX =
+    static_cast<CompletionPath>(4);
+[[nodiscard]] inline bool CompletionPath_IsValid(int value) {
+  return 0 <= value && value <= 4;
+}
+inline constexpr int CompletionPath_ARRAYSIZE = 4 + 1;
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+CompletionPath_descriptor();
+[[nodiscard]] inline auto ProtobufInternalGetEnumDescriptor(CompletionPath) {
+  return CompletionPath_descriptor();
+}
+template <typename T>
+[[nodiscard]] const ::std::string& CompletionPath_Name(T value) {
+  static_assert(::std::is_same<T, CompletionPath>::value ||
+                    ::std::is_integral<T>::value,
+                "Incorrect type passed to CompletionPath_Name().");
+  return CompletionPath_Name(static_cast<CompletionPath>(value));
+}
+template <>
+[[nodiscard]] inline const ::std::string& CompletionPath_Name(CompletionPath value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<CompletionPath_descriptor, 0, 4>(
+      static_cast<int>(value));
+}
+[[nodiscard]] inline bool CompletionPath_Parse(
+    ::absl::string_view name, CompletionPath* PROTOBUF_NONNULL value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CompletionPath>(CompletionPath_descriptor(), name,
                                            value);
 }
 
@@ -819,6 +867,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
     kStatusFieldNumber = 4,
     kErrorCodeFieldNumber = 6,
     kTimestampFieldNumber = 8,
+    kCompletionPathFieldNumber = 9,
   };
   // string device_id = 1;
   void clear_device_id() ;
@@ -920,11 +969,21 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   void _internal_set_timestamp(::int64_t value);
 
   public:
+  // .terminal_agent.v1.CompletionPath completion_path = 9;
+  void clear_completion_path() ;
+  [[nodiscard]] ::terminal_agent::v1::CompletionPath completion_path() const;
+  void set_completion_path(::terminal_agent::v1::CompletionPath value);
+
+  private:
+  ::terminal_agent::v1::CompletionPath _internal_completion_path() const;
+  void _internal_set_completion_path(::terminal_agent::v1::CompletionPath value);
+
+  public:
   // @@protoc_insertion_point(class_scope:terminal_agent.v1.ReleaseStatusRequest)
  private:
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 8,
+  static const ::google::protobuf::internal::TcParseTable<4, 9,
                                    0, 92,
                                    2>
       _table_;
@@ -956,6 +1015,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
     int status_;
     int error_code_;
     ::int64_t timestamp_;
+    int completion_path_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -7758,6 +7818,31 @@ inline void ReleaseStatusRequest::_internal_set_timestamp(::int64_t value) {
   _impl_.timestamp_ = value;
 }
 
+// .terminal_agent.v1.CompletionPath completion_path = 9;
+inline void ReleaseStatusRequest::clear_completion_path() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.completion_path_ = 0;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000100U);
+}
+inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::completion_path() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.completion_path)
+  return _internal_completion_path();
+}
+inline void ReleaseStatusRequest::set_completion_path(::terminal_agent::v1::CompletionPath value) {
+  _internal_set_completion_path(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000100U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.completion_path)
+}
+inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::_internal_completion_path() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return static_cast<::terminal_agent::v1::CompletionPath>(_impl_.completion_path_);
+}
+inline void ReleaseStatusRequest::_internal_set_completion_path(::terminal_agent::v1::CompletionPath value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.completion_path_ = value;
+}
+
 // -------------------------------------------------------------------
 
 // ReleaseStatusResponse
@@ -7875,6 +7960,12 @@ struct is_proto_enum<::terminal_agent::v1::ReleaseErrorCode> : std::true_type {}
 template <>
 inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::terminal_agent::v1::ReleaseErrorCode>() {
   return ::terminal_agent::v1::ReleaseErrorCode_descriptor();
+}
+template <>
+struct is_proto_enum<::terminal_agent::v1::CompletionPath> : std::true_type {};
+template <>
+inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::terminal_agent::v1::CompletionPath>() {
+  return ::terminal_agent::v1::CompletionPath_descriptor();
 }
 
 }  // namespace protobuf

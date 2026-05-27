@@ -31,7 +31,8 @@ class P2PJniCallbackTest {
             DeviceAgentService::class.java.getDeclaredMethod(
                 "onP2PComplete",
                 Boolean::class.javaPrimitiveType,
-                String::class.java
+                String::class.java,
+                Int::class.javaPrimitiveType
             )
         )
     }
@@ -64,7 +65,8 @@ class P2PJniCallbackTest {
             String::class.java,
             String::class.java,
             String::class.java,
-            File::class.java
+            File::class.java,
+            Int::class.javaPrimitiveType
         )
         assertNotNull(method)
     }

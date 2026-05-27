@@ -45,6 +45,11 @@
 namespace device_agent {
 namespace {
 
+struct PeerCounters {
+    int64_t from_peers = 0;
+    int64_t from_web_seed = 0;
+};
+
 std::string dirname_or_current(const std::string& path) {
     const auto slash = path.find_last_of('/');
     if (slash == std::string::npos) {
@@ -414,19 +419,19 @@ void emit_peer_counter_values(int64_t from_peers, int64_t from_web_seed) {
 #endif
 }
 
-void emit_peer_counters(const lt::peer_info_alert& alert) {
-    int64_t from_peers = 0;
-    int64_t from_web_seed = 0;
+PeerCounters emit_peer_counters(const lt::peer_info_alert& alert) {
+    PeerCounters counters;
     for (const auto& peer : alert.peer_info) {
         if (peer.connection_type == lt::peer_info::web_seed ||
                 peer.connection_type == lt::peer_info::http_seed) {
-            from_web_seed += static_cast<int64_t>(peer.total_download);
+            counters.from_web_seed += static_cast<int64_t>(peer.total_download);
         } else {
-            from_peers += static_cast<int64_t>(peer.total_download);
+            counters.from_peers += static_cast<int64_t>(peer.total_download);
         }
     }
 
-    emit_peer_counter_values(from_peers, from_web_seed);
+    emit_peer_counter_values(counters.from_peers, counters.from_web_seed);
+    return counters;
 }
 
 int count_p2p_peers(const lt::peer_info_alert& alert) {
@@ -491,6 +496,8 @@ bool wait_for_p2p_peer(lt::session& session,
 bool wait_for_peer_counters(lt::session& session,
                             std::chrono::milliseconds timeout,
                             int64_t fallback_web_seed_bytes,
+                            int64_t& last_peer_bytes,
+                            int64_t& last_web_seed_bytes,
                             std::string& error) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -499,7 +506,9 @@ bool wait_for_peer_counters(lt::session& session,
             session.pop_alerts(&alerts);
             for (const auto* item : alerts) {
                 if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
-                    emit_peer_counters(*peer_info);
+                    const auto counters = emit_peer_counters(*peer_info);
+                    last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
+                    last_web_seed_bytes = std::max(last_web_seed_bytes, counters.from_web_seed);
                     return true;
                 }
                 if (is_piece_hash_failure(item)) {
@@ -517,6 +526,38 @@ bool wait_for_peer_counters(lt::session& session,
         emit_peer_counter_values(0, fallback_web_seed_bytes);
     }
     return true;
+}
+
+CompletionPathTelemetry choose_completion_path(bool stall_fallback,
+                                               bool sha_fallback,
+                                               int64_t peer_bytes,
+                                               int64_t web_seed_bytes) {
+    if (sha_fallback) {
+        return CompletionPathTelemetry::HttpFallbackShaMismatch;
+    }
+    if (stall_fallback) {
+        return CompletionPathTelemetry::HttpFallbackStall;
+    }
+    if (peer_bytes > 0) {
+        return CompletionPathTelemetry::P2PPrimary;
+    }
+    if (web_seed_bytes > 0) {
+        return CompletionPathTelemetry::WebSeedPrimary;
+    }
+    return CompletionPathTelemetry::Unspecified;
+}
+
+void emit_complete_callback(const P2PDownloadManager::Callbacks& callbacks,
+                            const DownloadRequest& req,
+                            const std::string& downloaded_path,
+                            bool success,
+                            const std::string& error,
+                            CompletionPathTelemetry completion_path) {
+    if (callbacks.on_complete_with_path) {
+        callbacks.on_complete_with_path(req, downloaded_path, success, error, completion_path);
+    } else if (callbacks.on_complete) {
+        callbacks.on_complete(req, downloaded_path, success, error);
+    }
 }
 
 bool wait_for_cache_flush(lt::session& session,
@@ -844,6 +885,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     std::string error;
     bool complete_sent = false;
     std::string downloaded_path;
+    bool completed_by_stall_fallback = false;
+    bool completed_by_sha_fallback = false;
+    int64_t last_peer_bytes = 0;
+    int64_t last_web_seed_bytes = 0;
 
     try {
         const DownloadSource source = select_download_source(req, error, true);
@@ -937,7 +982,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         session->pop_alerts(&alerts);
                         for (const auto* item : alerts) {
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
-                                emit_peer_counters(*peer_info);
+                                const auto counters = emit_peer_counters(*peer_info);
+                                last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
+                                last_web_seed_bytes = std::max(last_web_seed_bytes, counters.from_web_seed);
                             }
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 if (!is_http_url(req.url)) {
@@ -1000,6 +1047,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         std::string fallback_error;
                         if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
+                            completed_by_stall_fallback = true;
                         } else {
                             error = fallback_error;
                         }
@@ -1019,6 +1067,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         std::string fallback_error;
                         if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
+                            completed_by_stall_fallback = true;
                         } else {
                             error = fallback_error;
                         }
@@ -1050,6 +1099,8 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             : std::max<int64_t>(req.file_size, 0);
                     if (!wait_for_peer_counters(*session, std::chrono::milliseconds(1000),
                                                 fallback_web_seed_bytes,
+                                                last_peer_bytes,
+                                                last_web_seed_bytes,
                                                 verify_error)) {
                         success = false;
                         error = verify_error;
@@ -1073,6 +1124,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                                                                  req.expected_sha256,
                                                                  verify_error)) {
                                     emit_peer_counter_values(0, std::max<int64_t>(req.file_size, 0));
+                                    completed_by_sha_fallback = true;
+                                    last_web_seed_bytes = std::max<int64_t>(
+                                        last_web_seed_bytes,
+                                        std::max<int64_t>(req.file_size, 0));
                                 } else {
                                     success = false;
                                     error = fallback_error.empty() ? verify_error : fallback_error;
@@ -1090,8 +1145,17 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     if (on_complete) {
                         on_complete(true, "");
                     }
-                    if (callbacks_.on_complete) {
-                        callbacks_.on_complete(req, downloaded_path, true, "");
+                    if (callbacks_.on_complete || callbacks_.on_complete_with_path) {
+                        emit_complete_callback(
+                            callbacks_,
+                            req,
+                            downloaded_path,
+                            true,
+                            "",
+                            choose_completion_path(completed_by_stall_fallback,
+                                                   completed_by_sha_fallback,
+                                                   last_peer_bytes,
+                                                   last_web_seed_bytes));
                     }
                     complete_sent = true;
 
@@ -1149,8 +1213,17 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     if (!complete_sent && on_complete) {
         on_complete(success, success ? std::string() : error);
     }
-    if (!complete_sent && callbacks_.on_complete) {
-        callbacks_.on_complete(req, downloaded_path, success, success ? std::string() : error);
+    if (!complete_sent && (callbacks_.on_complete || callbacks_.on_complete_with_path)) {
+        emit_complete_callback(
+            callbacks_,
+            req,
+            downloaded_path,
+            success,
+            success ? std::string() : error,
+            choose_completion_path(completed_by_stall_fallback,
+                                   completed_by_sha_fallback,
+                                   last_peer_bytes,
+                                   last_web_seed_bytes));
     }
     set_state_idle();
 }

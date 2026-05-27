@@ -24,6 +24,14 @@ enum class P2PDownloadState {
     Stopping,
 };
 
+enum class CompletionPathTelemetry {
+    Unspecified = 0,
+    P2PPrimary = 1,
+    WebSeedPrimary = 2,
+    HttpFallbackStall = 3,
+    HttpFallbackShaMismatch = 4,
+};
+
 struct P2PSeedingPolicy {
     std::chrono::seconds ttl;
     double ratio_limit;
@@ -54,6 +62,7 @@ public:
         std::function<void(const DownloadRequest&, const std::string&)> on_started;
         std::function<void(const DownloadRequest&, const DownloadProgress&)> on_progress;
         std::function<void(const DownloadRequest&, const std::string&, bool, const std::string&)> on_complete;
+        std::function<void(const DownloadRequest&, const std::string&, bool, const std::string&, CompletionPathTelemetry)> on_complete_with_path;
     };
 
     explicit P2PDownloadManager(
