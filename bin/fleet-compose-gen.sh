@@ -21,33 +21,65 @@ while [[ $# -gt 0 ]]; do
       SIZE="${2:-}"
       shift 2
       ;;
+    --size=*)
+      SIZE="${1#*=}"
+      shift
+      ;;
     --shared-dir)
       SHARED_DIR="${2:-}"
       shift 2
+      ;;
+    --shared-dir=*)
+      SHARED_DIR="${1#*=}"
+      shift
       ;;
     --runner-image)
       RUNNER_IMAGE="${2:-}"
       shift 2
       ;;
+    --runner-image=*)
+      RUNNER_IMAGE="${1#*=}"
+      shift
+      ;;
     --tracker-image)
       TRACKER_IMAGE="${2:-}"
       shift 2
+      ;;
+    --tracker-image=*)
+      TRACKER_IMAGE="${1#*=}"
+      shift
       ;;
     --web-seed-url)
       WEB_SEED_URL="${2:-}"
       shift 2
       ;;
+    --web-seed-url=*)
+      WEB_SEED_URL="${1#*=}"
+      shift
+      ;;
     --peer-wait-seconds)
       PEER_WAIT_SECONDS="${2:-}"
       shift 2
+      ;;
+    --peer-wait-seconds=*)
+      PEER_WAIT_SECONDS="${1#*=}"
+      shift
       ;;
     --retry-count)
       RETRY_COUNT="${2:-}"
       shift 2
       ;;
+    --retry-count=*)
+      RETRY_COUNT="${1#*=}"
+      shift
+      ;;
     --keep-seeding-seconds)
       KEEP_SEEDING_SECONDS="${2:-}"
       shift 2
+      ;;
+    --keep-seeding-seconds=*)
+      KEEP_SEEDING_SECONDS="${1#*=}"
+      shift
       ;;
     -h|--help)
       usage

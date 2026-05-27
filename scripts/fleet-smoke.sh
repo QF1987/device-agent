@@ -13,6 +13,10 @@ while [[ $# -gt 0 ]]; do
       SIZE="${2:-}"
       shift 2
       ;;
+    --size=*)
+      SIZE="${1#*=}"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
