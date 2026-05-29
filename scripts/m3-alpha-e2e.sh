@@ -27,6 +27,7 @@ Environment:
   FILE_ID=<id>                 Release file id.
   SHA256=<hex>                 Expected payload SHA-256.
   FILE_SIZE=<bytes>            Optional expected file size.
+  FILE_TYPE=<type>             Payload file_type. Defaults to apk; use file for download+SHA regression.
   WEB_SEED_URL=<url>           HTTP fallback URL for baseline/download evidence.
   GRPC_PORT=<port>             gRPC CommandStream port. Defaults to 9090.
   DEVICE_SERIALS=a,b           Defaults to the two known LAN devices.
@@ -108,6 +109,48 @@ cleanup_p2p_artifacts() {
     ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}"} \
     ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}.part"} \
     "${APP_TORRENT_DIR%/}"/*.fastresume >/dev/null 2>&1 || true
+}
+
+wait_for_device_sha() {
+  local serial="$1" log_file="$2" sha_file="$3" timeout="$4"
+  local elapsed=0 downloaded_path="" actual_sha=""
+  local fallback_path=""
+
+  if [[ -n "${SOURCE_FILE:-}" ]]; then
+    fallback_path="/data/user/0/${PACKAGE_NAME}/${APP_TORRENT_DIR%/}/$(basename "$SOURCE_FILE")"
+  fi
+
+  while (( elapsed <= timeout )); do
+    adb -s "$serial" logcat -d -v time >"$log_file" 2>&1 || true
+    downloaded_path="$(LC_ALL=C sed -n 's/.*onP2PStarted:.*path=\([^ ]*\).*/\1/p' "$log_file" | tail -n 1)"
+    if [[ -z "$downloaded_path" && -n "$fallback_path" ]]; then
+      downloaded_path="$fallback_path"
+    fi
+
+    if [[ -n "$downloaded_path" ]]; then
+      if [[ "$downloaded_path" == /data/data/"$PACKAGE_NAME"/* || "$downloaded_path" == /data/user/*/"$PACKAGE_NAME"/* ]]; then
+        local app_rel="${downloaded_path#*/${PACKAGE_NAME}/}"
+        actual_sha="$(adb -s "$serial" shell run-as "$PACKAGE_NAME" sha256sum "$app_rel" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+      else
+        actual_sha="$(adb -s "$serial" shell sha256sum "$downloaded_path" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+      fi
+      printf 'path=%s\nexpected=%s\nactual=%s\nelapsed=%s\n' "$downloaded_path" "$SHA256" "$actual_sha" "$elapsed" >"$sha_file"
+      [[ -n "${SHA256:-}" && "$actual_sha" == "$SHA256" ]] && return 0
+    else
+      printf 'path=\nexpected=%s\nactual=\nelapsed=%s\n' "$SHA256" "$elapsed" >"$sha_file"
+    fi
+
+    if [[ -z "${SHA256:-}" ]] &&
+       grep -q "SHA256.*PASS\|sha256.*ok\|verify.*success\|onP2PComplete.*success=true\|P2P download verified\|Download OK" "$log_file" 2>/dev/null; then
+      return 0
+    fi
+
+    (( elapsed == timeout )) && break
+    sleep "$POLL_SECONDS"
+    elapsed=$((elapsed + POLL_SECONDS))
+  done
+
+  return 1
 }
 
 xml_escape() {
@@ -232,9 +275,10 @@ insert_download_ready() {
   local command_row_id="$4"
   local remote_torrent="$5"
   local payload
-  payload=$(printf '{"batch_id":"%s","file_id":"%s","file_type":"apk","download_url":"%s","sha256":"%s","file_size":%s,"torrent_url":"%s"}' \
+  payload=$(printf '{"batch_id":"%s","file_id":"%s","file_type":"%s","download_url":"%s","sha256":"%s","file_size":%s,"torrent_url":"%s"}' \
     "$(json_escape "$batch_id")" \
     "$(json_escape "$FILE_ID")" \
+    "$(json_escape "$FILE_TYPE")" \
     "$(json_escape "${WEB_SEED_URL:-}")" \
     "$(json_escape "${SHA256:-}")" \
     "${FILE_SIZE:-0}" \
@@ -256,7 +300,8 @@ VALUES ('$(sql_escape "$device_id")', 'm3-alpha-e2e $(sql_escape "$device_id")',
 ON CONFLICT (id) DO UPDATE SET status = 'online', address = EXCLUDED.address, last_heartbeat = NOW();
 
 INSERT INTO files (file_id, file_name, file_size, file_type, sha256, storage_path, storage_mode, upload_mode, created_by)
-VALUES ('$(sql_escape "$FILE_ID")', '$(sql_escape "$FILE_ID").apk', ${FILE_SIZE:-0}, 'apk',
+VALUES ('$(sql_escape "$FILE_ID")', '$(sql_escape "$FILE_ID").$( [[ "$FILE_TYPE" == "apk" ]] && echo apk || echo dmg )',
+        ${FILE_SIZE:-0}, '$(sql_escape "$FILE_TYPE")',
         '$(sql_escape "$SHA256")', '$(sql_escape "${SOURCE_FILE:-$TORRENT_PATH}")', 'local', 'p2p', 'm3-alpha-e2e')
 ON CONFLICT (file_id) DO UPDATE SET file_size = EXCLUDED.file_size,
     file_type = EXCLUDED.file_type, sha256 = EXCLUDED.sha256, storage_path = EXCLUDED.storage_path;
@@ -264,7 +309,7 @@ ON CONFLICT (file_id) DO UPDATE SET file_size = EXCLUDED.file_size,
 INSERT INTO release_tasks (task_id, name, file_id, file_type, strategy, total_batches, batch_size,
                            status, created_by, total_devices, pending_devices)
 VALUES ('$(sql_escape "$task_id")', 'm3-alpha-e2e-${RUN_ID}', '$(sql_escape "$FILE_ID")',
-        'apk', 'manual', 1, 1, 'running', 'm3-alpha-e2e', 1, 1)
+        '$(sql_escape "$FILE_TYPE")', 'manual', 1, 1, 'running', 'm3-alpha-e2e', 1, 1)
 ON CONFLICT (task_id) DO UPDATE SET status = 'running', updated_at = NOW();
 
 INSERT INTO release_batches (task_id, batch_id, batch_number, status, strategy, total_devices,
@@ -301,8 +346,10 @@ write_summary() {
   local sha_result="FAIL"
   local native_result="FAIL"
   local seeding_result="FAIL"
+  local regression_verdict="FAIL"
   local complete_count
   local native_pass_count
+  local sha_pass_count
   local web_seed_bytes
   local peer_bytes
 
@@ -312,10 +359,15 @@ write_summary() {
   if (( peer_bytes > 0 )); then peer_positive="YES"; fi
   complete_count="$(grep -Rhc 'onP2PComplete.*success=true\|Install SUCCESS\|downloaded' "$result_dir"/logcat-*.log 2>/dev/null | awk '{sum += $1} END {print sum + 0}')"
   native_pass_count="$(grep -Rhc '^native_test=PASS' "$result_dir"/device-*.env 2>/dev/null | awk '{sum += $1} END {print sum + 0}')"
+  sha_pass_count="$(grep -Rhc '^status=PASS$' "$result_dir"/sha256-*.txt 2>/dev/null | awk '{sum += $1} END {print sum + 0}')"
   [[ -s "$TORRENT_PATH" ]] && torrent_pushed_result="PASS"
-  (( complete_count > 0 )) && sha_result="PARTIAL"
+  (( sha_pass_count >= DEVICE_COUNT )) && sha_result="PASS"
+  (( sha_pass_count > 0 && sha_pass_count < DEVICE_COUNT )) && sha_result="PARTIAL"
   (( native_pass_count > 0 )) && native_result="PASS"
   grep -Rqh 'Seeding\|onP2PComplete.*success=true' "$result_dir"/logcat-*.log 2>/dev/null && seeding_result="PARTIAL"
+  if [[ "$peer_positive" == YES && "$sha_result" == PASS ]]; then
+    regression_verdict="PASS"
+  fi
 
   cat >"$summary" <<EOF_SUMMARY
 # M3-A S4 LAN E2E Result
@@ -334,10 +386,15 @@ write_summary() {
 
 - Native C++ test PASS count: \`${native_pass_count}/${DEVICE_COUNT}\`
 - P2P complete/install log hits: \`${complete_count}\`
+- SHA-256 PASS count: \`${sha_pass_count}/${DEVICE_COUNT}\`
 - Parsed \`from_peers\` bytes: \`${peer_bytes}\`
 - Parsed \`from_web_seed\` bytes: \`${web_seed_bytes}\`
 - Commands: \`commands.tsv\`
 - Per-device logs: \`logcat-*.log\`, \`native-test-*.log\`, \`device-*.env\`
+
+## Regression Verdict
+
+${regression_verdict}
 
 ## AC Gate
 
@@ -345,7 +402,7 @@ write_summary() {
 | --- | --- | --- |
 | AC1 torrent exists and pushed | ${torrent_pushed_result} | \`${TORRENT_PATH}\` |
 | AC2 at least one device got peer pieces | $([[ "$peer_positive" == YES ]] && echo PASS || echo FAIL) | parsed \`from_peers=${peer_bytes}\` |
-| AC3 SHA256/fallback completion observed | ${sha_result} | logcat complete/install hits; SHA256 enforced by S3 manager |
+| AC3 SHA256 verified on device | ${sha_result} | \`sha256-*.txt\` expected vs actual |
 | AC4 bandwidth comparison data | $([[ "$stats_present" == YES ]] && echo PASS || echo FAIL) | parsed peer/web-seed bytes |
 | AC5 seeding lifecycle observed | ${seeding_result} | logcat lifecycle markers |
 | RV-20260523-02 native test executed | ${native_result} | native-test logs |
@@ -373,6 +430,7 @@ PRESET_TORRENT_PATH="${TORRENT_PATH:-}"
 PRESET_FILE_ID="${FILE_ID:-}"
 PRESET_SHA256="${SHA256:-}"
 PRESET_FILE_SIZE="${FILE_SIZE:-}"
+PRESET_FILE_TYPE="${FILE_TYPE:-}"
 PRESET_WEB_SEED_URL="${WEB_SEED_URL:-}"
 PRESET_SOURCE_FILE="${SOURCE_FILE:-}"
 if [[ -f "${M3_ALPHA_ENV:-/tmp/m3-alpha-s4/latest.env}" ]]; then
@@ -383,6 +441,7 @@ TORRENT_PATH="${PRESET_TORRENT_PATH:-${TORRENT_PATH:-}}"
 FILE_ID="${PRESET_FILE_ID:-${FILE_ID:-}}"
 SHA256="${PRESET_SHA256:-${SHA256:-}}"
 FILE_SIZE="${PRESET_FILE_SIZE:-${FILE_SIZE:-0}}"
+FILE_TYPE="${PRESET_FILE_TYPE:-${FILE_TYPE:-apk}}"
 WEB_SEED_URL="${PRESET_WEB_SEED_URL:-${WEB_SEED_URL:-}}"
 SOURCE_FILE="${PRESET_SOURCE_FILE:-${SOURCE_FILE:-}}"
 
@@ -485,6 +544,15 @@ done
 
 for ((i=0; i<DEVICE_COUNT; i++)); do
   serial="$(csv_item "$DEVICE_SERIALS" "$i")"
+  if wait_for_device_sha "$serial" "${result_dir}/logcat-${i}.log" "${result_dir}/sha256-${i}.txt" 1; then
+    echo "status=PASS" >>"${result_dir}/sha256-${i}.txt"
+  else
+    echo "status=FAIL" >>"${result_dir}/sha256-${i}.txt"
+  fi
+done
+
+for ((i=0; i<DEVICE_COUNT; i++)); do
+  serial="$(csv_item "$DEVICE_SERIALS" "$i")"
   headless_pm_install_apk "$serial" "${result_dir}/logcat-${i}.log" "${result_dir}/headless-install-${i}.log" || true
 done
 
@@ -497,6 +565,8 @@ summary="$(write_summary "$result_dir")"
 log "summary=${summary}"
 
 if grep -q '| AC2 at least one device got peer pieces | PASS ' "$summary" && \
+   grep -q '| AC3 SHA256 verified on device | PASS ' "$summary" && \
+   grep -q '^PASS$' "$summary" && \
    grep -q '| AC4 bandwidth comparison data | PASS ' "$summary"; then
   log "S4 E2E PASS"
 else
