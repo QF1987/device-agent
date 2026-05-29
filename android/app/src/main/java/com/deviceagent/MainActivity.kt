@@ -48,14 +48,18 @@ class MainActivity : Activity() {
     }
 
     private fun startAndFinish() {
-        val serviceIntent = Intent(this, DeviceAgentService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            @Suppress("DEPRECATION")
-            startService(serviceIntent)
+        if (!refreshRunningDeviceAgentService()) {
+            val serviceIntent = Intent(this, DeviceAgentService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                @Suppress("DEPRECATION")
+                startService(serviceIntent)
+            }
         }
         Toast.makeText(this, "device-agent 已启动", Toast.LENGTH_SHORT).show()
-        finish()
+        window.decorView.postDelayed({
+            finish()
+        }, 2_000)
     }
 }

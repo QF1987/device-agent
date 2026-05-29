@@ -76,7 +76,7 @@ class NormalInstaller(ctx: Context) : BaseInstaller(ctx) {
 
             val pending = PendingIntent.getActivity(
                 ctx, System.currentTimeMillis().toInt(), intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
             val notification = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

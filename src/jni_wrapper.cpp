@@ -257,7 +257,7 @@ static void call_p2p_started(const device_agent::DownloadRequest& req, const std
     jmethodID method = env->GetMethodID(
         clazz,
         "onP2PStarted",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     if (method == nullptr) {
         clear_jni_exception(env, "onP2PStarted");
         env->DeleteLocalRef(clazz);
@@ -270,7 +270,8 @@ static void call_p2p_started(const device_agent::DownloadRequest& req, const std
     jstring jSha = env->NewStringUTF(req.expected_sha256.c_str());
     jstring jPath = env->NewStringUTF(localPath.c_str());
     jstring jType = env->NewStringUTF(req.file_type.c_str());
-    env->CallVoidMethod(g_java_service, method, jBatch, jFile, jCmd, jSha, jPath, jType);
+    jstring jUrl = env->NewStringUTF(req.url.c_str());
+    env->CallVoidMethod(g_java_service, method, jBatch, jFile, jCmd, jSha, jPath, jType, jUrl);
     clear_jni_exception(env, "onP2PStarted");
     env->DeleteLocalRef(jBatch);
     env->DeleteLocalRef(jFile);
@@ -278,6 +279,7 @@ static void call_p2p_started(const device_agent::DownloadRequest& req, const std
     env->DeleteLocalRef(jSha);
     env->DeleteLocalRef(jPath);
     env->DeleteLocalRef(jType);
+    env->DeleteLocalRef(jUrl);
     env->DeleteLocalRef(clazz);
 }
 

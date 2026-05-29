@@ -4,6 +4,8 @@ set -euo pipefail
 DEFAULT_SERIALS="192.168.31.239:41351,bf9ec82f"
 PACKAGE_NAME="${PACKAGE_NAME:-com.deviceagent}"
 REMOTE_DIR="${REMOTE_DIR:-/sdcard/Download/m3-alpha}"
+HEADLESS_INSTALL_DIR="${HEADLESS_INSTALL_DIR:-/data/local/tmp/m3-alpha}"
+APP_TORRENT_DIR="${APP_TORRENT_DIR:-files/p2p}"
 RESULT_ROOT="${RESULT_ROOT:-./logs/m3-alpha-s4}"
 DATABASE_URL="${DATABASE_URL:-postgres://deviceops:deviceops123@localhost:5432/deviceops?sslmode=disable}"
 SERVER_URL="${SERVER_URL:-http://192.168.31.81:8080}"
@@ -30,6 +32,7 @@ Environment:
   DEVICE_SERIALS=a,b           Defaults to the two known LAN devices.
   DEVICE_IDS=id1,id2           Server-side device ids. If omitted, script tries app prefs.
   RESULT_ROOT=<path>           Defaults to ./logs/m3-alpha-s4.
+  APP_TORRENT_DIR=<rel-path>   App-internal torrent staging dir via run-as. Defaults to files/p2p.
   E2E_WAIT_SECONDS=<seconds>   Download evidence wait window. Defaults to 600.
   HEADLESS_PM_INSTALL=0        Disable adb pm install helper after APK P2P completion.
   SKIP_DB_TRIGGER=1            Push torrent and collect logs without inserting commands.
@@ -74,6 +77,37 @@ adb_shell() {
   local serial="$1"
   shift
   adb -s "$serial" shell "$@"
+}
+
+stage_torrent_for_device() {
+  local serial="$1"
+  local target_name
+  target_name="$(basename "$TORRENT_PATH")"
+  local tmp_path="/data/local/tmp/${target_name}"
+  local internal_rel="${APP_TORRENT_DIR%/}/${target_name}"
+  local internal_abs="/data/user/0/${PACKAGE_NAME}/${internal_rel}"
+
+  adb -s "$serial" push "$TORRENT_PATH" "$tmp_path" >/dev/null || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" mkdir -p "${APP_TORRENT_DIR%/}" >/dev/null 2>&1 || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" cp "$tmp_path" "$internal_rel" >/dev/null 2>&1 || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" chmod 666 "$internal_rel" >/dev/null 2>&1 || true
+  printf "%s" "$internal_abs"
+}
+
+cleanup_p2p_artifacts() {
+  local serial="$1"
+  local payload_name=""
+  if [[ -n "${SOURCE_FILE:-}" ]]; then
+    payload_name="$(basename "$SOURCE_FILE")"
+  fi
+  adb_shell "$serial" run-as "$PACKAGE_NAME" rm -f \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.dmg" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.dmg.part" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.apk" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.apk.part" \
+    ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}"} \
+    ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}.part"} \
+    "${APP_TORRENT_DIR%/}"/*.fastresume >/dev/null 2>&1 || true
 }
 
 xml_escape() {
@@ -122,16 +156,19 @@ headless_pm_install_apk() {
 
   local apk_path
   apk_path="$(sed -n 's/.*onP2PStarted:.*type=apk path=\([^ ]*\).*/\1/p' "$log_file" | tail -n 1)"
+  if [[ -z "$apk_path" && -n "${SOURCE_FILE:-}" ]]; then
+    apk_path="/data/user/0/${PACKAGE_NAME}/${APP_TORRENT_DIR%/}/$(basename "$SOURCE_FILE")"
+  fi
   if [[ -z "$apk_path" ]]; then
     echo "SKIP: no P2P APK path found in logcat" >"$out_file"
     return 2
   fi
 
-  local staged="${REMOTE_DIR}/headless-$(basename "$apk_path")"
+  local staged="${HEADLESS_INSTALL_DIR}/headless-$(basename "$apk_path")"
   {
     echo "source=${apk_path}"
     echo "staged=${staged}"
-    adb_shell "$serial" mkdir -p "$REMOTE_DIR"
+    adb_shell "$serial" mkdir -p "$HEADLESS_INSTALL_DIR"
     if [[ "$apk_path" == /data/data/"$PACKAGE_NAME"/* || "$apk_path" == /data/user/*/"$PACKAGE_NAME"/* ]]; then
       local host_apk="${TMPDIR:-/tmp}/m3-alpha-headless-${serial//[^A-Za-z0-9]/_}.apk"
       adb -s "$serial" exec-out run-as "$PACKAGE_NAME" cat "$apk_path" >"$host_apk"
@@ -140,6 +177,7 @@ headless_pm_install_apk() {
     else
       adb_shell "$serial" cp "$apk_path" "$staged"
     fi
+    adb_shell "$serial" chmod 644 "$staged"
     adb_shell "$serial" pm install -r -d "$staged"
   } >"$out_file" 2>&1
 }
@@ -194,17 +232,55 @@ insert_download_ready() {
   local command_row_id="$4"
   local remote_torrent="$5"
   local payload
-  payload=$(printf '{"batch_id":"%s","file_id":"%s","file_type":"apk","download_url":"%s","sha256":"%s","file_size":%s}' \
+  payload=$(printf '{"batch_id":"%s","file_id":"%s","file_type":"apk","download_url":"%s","sha256":"%s","file_size":%s,"torrent_url":"%s"}' \
     "$(json_escape "$batch_id")" \
     "$(json_escape "$FILE_ID")" \
-    "$(json_escape "$remote_torrent")" \
+    "$(json_escape "${WEB_SEED_URL:-}")" \
     "$(json_escape "${SHA256:-}")" \
-    "${FILE_SIZE:-0}")
+    "${FILE_SIZE:-0}" \
+    "$(json_escape "$remote_torrent")")
 
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
 INSERT INTO commands (id, command_id, device_id, command_type, payload_json, status, timeout_seconds, issued_at, created_by)
 VALUES ('$(sql_escape "$command_row_id")', '$(sql_escape "$command_id")', '$(sql_escape "$device_id")',
         'download_ready', '$(sql_escape "$payload")', 'pending', 3600, NOW(), 'm3-alpha-e2e');
+" >/dev/null
+}
+
+ensure_release_fixture() {
+  local device_id="$1" batch_id="$2" task_id="$3" serial="$4"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+INSERT INTO devices (id, name, type, region, address, status, last_heartbeat, firmware, config, installed_at, stats, capabilities)
+VALUES ('$(sql_escape "$device_id")', 'm3-alpha-e2e $(sql_escape "$device_id")', 'android', 'lab',
+        '$(sql_escape "$serial")', 'online', NOW(), 'v1.0.0', '{}'::jsonb, NOW(), '{}'::jsonb, '{}'::jsonb)
+ON CONFLICT (id) DO UPDATE SET status = 'online', address = EXCLUDED.address, last_heartbeat = NOW();
+
+INSERT INTO files (file_id, file_name, file_size, file_type, sha256, storage_path, storage_mode, upload_mode, created_by)
+VALUES ('$(sql_escape "$FILE_ID")', '$(sql_escape "$FILE_ID").apk', ${FILE_SIZE:-0}, 'apk',
+        '$(sql_escape "$SHA256")', '$(sql_escape "${SOURCE_FILE:-$TORRENT_PATH}")', 'local', 'p2p', 'm3-alpha-e2e')
+ON CONFLICT (file_id) DO UPDATE SET file_size = EXCLUDED.file_size,
+    file_type = EXCLUDED.file_type, sha256 = EXCLUDED.sha256, storage_path = EXCLUDED.storage_path;
+
+INSERT INTO release_tasks (task_id, name, file_id, file_type, strategy, total_batches, batch_size,
+                           status, created_by, total_devices, pending_devices)
+VALUES ('$(sql_escape "$task_id")', 'm3-alpha-e2e-${RUN_ID}', '$(sql_escape "$FILE_ID")',
+        'apk', 'manual', 1, 1, 'running', 'm3-alpha-e2e', 1, 1)
+ON CONFLICT (task_id) DO UPDATE SET status = 'running', updated_at = NOW();
+
+INSERT INTO release_batches (task_id, batch_id, batch_number, status, strategy, total_devices,
+                             pending_devices, downloading_devices, succeeded_devices, failed_devices, started_at)
+VALUES ('$(sql_escape "$task_id")', '$(sql_escape "$batch_id")', 1, 'running', 'manual',
+        1, 1, 0, 0, 0, NOW())
+ON CONFLICT (batch_id) DO UPDATE SET status = 'running', pending_devices = 1,
+    downloading_devices = 0, succeeded_devices = 0, failed_devices = 0, updated_at = NOW();
+
+INSERT INTO release_batch_devices (batch_id, device_id, file_id, status, downloaded_bytes, ready_at, updated_at)
+VALUES ('$(sql_escape "$batch_id")', '$(sql_escape "$device_id")', '$(sql_escape "$FILE_ID")',
+        'pending', 0, NOW(), NOW())
+ON CONFLICT (batch_id, device_id) DO UPDATE SET status = 'pending', downloaded_bytes = 0,
+    error_code = NULL, error_message = NULL, ready_at = NOW(), downloading_at = NULL,
+    downloaded_at = NULL, installing_at = NULL, installed_at = NULL, failed_at = NULL,
+    completion_path = NULL, updated_at = NOW();
 " >/dev/null
 }
 
@@ -293,17 +369,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+PRESET_TORRENT_PATH="${TORRENT_PATH:-}"
+PRESET_FILE_ID="${FILE_ID:-}"
+PRESET_SHA256="${SHA256:-}"
+PRESET_FILE_SIZE="${FILE_SIZE:-}"
+PRESET_WEB_SEED_URL="${WEB_SEED_URL:-}"
+PRESET_SOURCE_FILE="${SOURCE_FILE:-}"
 if [[ -f "${M3_ALPHA_ENV:-/tmp/m3-alpha-s4/latest.env}" ]]; then
   # shellcheck disable=SC1090
   source "${M3_ALPHA_ENV:-/tmp/m3-alpha-s4/latest.env}"
 fi
+TORRENT_PATH="${PRESET_TORRENT_PATH:-${TORRENT_PATH:-}}"
+FILE_ID="${PRESET_FILE_ID:-${FILE_ID:-}}"
+SHA256="${PRESET_SHA256:-${SHA256:-}}"
+FILE_SIZE="${PRESET_FILE_SIZE:-${FILE_SIZE:-0}}"
+WEB_SEED_URL="${PRESET_WEB_SEED_URL:-${WEB_SEED_URL:-}}"
+SOURCE_FILE="${PRESET_SOURCE_FILE:-${SOURCE_FILE:-}}"
 
 DEVICE_SERIALS="${DEVICE_SERIALS:-$DEFAULT_SERIALS}"
 DEVICE_COUNT="${DEVICE_COUNT:-$(csv_count "$DEVICE_SERIALS")}"
-TORRENT_PATH="${TORRENT_PATH:-}"
-FILE_ID="${FILE_ID:-}"
-SHA256="${SHA256:-}"
-FILE_SIZE="${FILE_SIZE:-0}"
 WEB_SEED_URL="${WEB_SEED_URL:-${SERVER_URL%/}/api/v1/files/${FILE_ID}/download}"
 
 [[ -n "$TORRENT_PATH" ]] || die "TORRENT_PATH missing; run terminal-agent-dev/scripts/gen-torrent.sh <file_id> first"
@@ -353,9 +437,9 @@ for ((i=0; i<DEVICE_COUNT; i++)); do
     log "WARN: unable to write app prefs via run-as for ${serial}; assuming device is already configured as ${device_id}"
   fi
 
-  remote_torrent="${REMOTE_DIR}/$(basename "$TORRENT_PATH")"
-  adb_shell "$serial" mkdir -p "$REMOTE_DIR"
-  adb -s "$serial" push "$TORRENT_PATH" "$remote_torrent" | tee "${result_dir}/adb-push-${i}.log"
+  cleanup_p2p_artifacts "$serial"
+  remote_torrent="$(stage_torrent_for_device "$serial")" || die "failed to stage torrent into app internal dir on ${serial}"
+  printf 'staged_torrent=%s\n' "$remote_torrent" | tee "${result_dir}/adb-push-${i}.log"
 
   native_status="SKIP"
   if run_native_test "$serial" "${result_dir}/native-test-${i}.log"; then
@@ -371,9 +455,12 @@ for ((i=0; i<DEVICE_COUNT; i++)); do
   launch_device_agent "$serial" || log "WARN: unable to launch ${PACKAGE_NAME}/.MainActivity on ${serial}"
 
   command_id="$(uuidgen | tr 'A-Z' 'a-z')"
+  batch_id="$(uuidgen | tr 'A-Z' 'a-z')"
+  task_id="$(uuidgen | tr 'A-Z' 'a-z')"
   command_row_id="CMD-${RUN_ID}-${i}"
   if [[ "${SKIP_DB_TRIGGER:-0}" != "1" ]]; then
-    insert_download_ready "$device_id" "m3-alpha-${RUN_ID}" "$command_id" "$command_row_id" "$remote_torrent"
+    ensure_release_fixture "$device_id" "$batch_id" "$task_id" "$serial"
+    insert_download_ready "$device_id" "$batch_id" "$command_id" "$command_row_id" "$remote_torrent"
   fi
 
   cat >"${result_dir}/device-${i}.env" <<EOF_DEVICE
@@ -382,6 +469,8 @@ device_id=${device_id}
 remote_torrent=${remote_torrent}
 command_id=${command_id}
 command_row_id=${command_row_id}
+task_id=${task_id}
+batch_id=${batch_id}
 native_test=${native_status}
 EOF_DEVICE
 done

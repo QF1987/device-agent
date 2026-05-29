@@ -12,7 +12,9 @@
 #include <libtorrent/session_params.hpp>
 #include <libtorrent/settings_pack.hpp>
 #include <libtorrent/sha256.hpp>
+#include <libtorrent/socket_io.hpp>
 #include <libtorrent/torrent_handle.hpp>
+#include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/torrent_status.hpp>
 
@@ -20,6 +22,8 @@
 #include <android/log.h>
 #else
 #include <openssl/sha.h>
+constexpr int ANDROID_LOG_INFO = 4;
+constexpr int ANDROID_LOG_WARN = 5;
 #endif
 
 #include <algorithm>
@@ -29,10 +33,13 @@
 #include <cstdint>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <cstdio>
 #include <cstdlib>
+#include <random>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -71,6 +78,11 @@ bool ends_with(const std::string& value, const std::string& suffix) {
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+bool file_exists(const std::string& path) {
+    std::ifstream input(path, std::ios::binary);
+    return input.good();
+}
+
 bool is_http_url(const std::string& value) {
     return starts_with(value, "http://") || starts_with(value, "https://");
 }
@@ -92,6 +104,36 @@ std::string env_or_empty(const char* name) {
 int env_int_or_default(const char* name, int fallback) {
     const std::string value = env_or_empty(name);
     return value.empty() ? fallback : std::atoi(value.c_str());
+}
+
+std::string make_peer_fingerprint() {
+    const std::string override = env_or_empty("P2P_PEER_FINGERPRINT");
+    if (!override.empty()) {
+        return override;
+    }
+
+    std::uint64_t seed =
+        static_cast<std::uint64_t>(
+            std::chrono::high_resolution_clock::now().time_since_epoch().count()) ^
+        (static_cast<std::uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()) << 1) ^
+        (static_cast<std::uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id())) << 7);
+    try {
+        std::random_device rd;
+        seed ^= (static_cast<std::uint64_t>(rd()) << 32);
+        seed ^= static_cast<std::uint64_t>(rd());
+    } catch (...) {
+        // Some Android builds expose a deterministic or unavailable random_device;
+        // time plus thread entropy still avoids identical test-device peer IDs.
+    }
+
+    std::mt19937_64 rng(seed);
+    constexpr char kAlphabet[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    std::string fingerprint = "-DA0010-";
+    while (fingerprint.size() < 20) {
+        fingerprint.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
+    }
+    return fingerprint;
 }
 
 void add_tracker_helper(lt::add_torrent_params& params, const std::string& tracker_url) {
@@ -287,6 +329,18 @@ std::string resolve_save_path(const DownloadRequest& req,
 
 lt::session make_session() {
     lt::settings_pack pack;
+    const std::string peer_fingerprint = make_peer_fingerprint();
+    pack.set_str(lt::settings_pack::peer_fingerprint, peer_fingerprint);
+    LOG_INFO("P2PDownloadManager: peer_fingerprint prefix=" +
+             peer_fingerprint.substr(0, std::min<std::size_t>(8, peer_fingerprint.size())) +
+             " length=" + std::to_string(peer_fingerprint.size()));
+    const bool enable_utp = env_int_or_default("P2P_ENABLE_UTP", 0) == 1;
+    pack.set_bool(lt::settings_pack::enable_outgoing_utp, enable_utp);
+    pack.set_bool(lt::settings_pack::enable_incoming_utp, enable_utp);
+    pack.set_bool(lt::settings_pack::enable_outgoing_tcp, true);
+    pack.set_bool(lt::settings_pack::enable_incoming_tcp, true);
+    LOG_INFO(std::string("P2PDownloadManager: transport tcp=enabled utp=") +
+             (enable_utp ? "enabled" : "disabled"));
     pack.set_bool(lt::settings_pack::enable_dht, true);
     pack.set_bool(lt::settings_pack::enable_lsd, true);
     pack.set_bool(lt::settings_pack::enable_upnp, false);
@@ -306,6 +360,8 @@ lt::session make_session() {
 
     const auto alert_mask =
         lt::alert_category::error |
+        lt::alert_category::peer |
+        lt::alert_category::connect |
         lt::alert_category::status |
         lt::alert_category::storage |
         lt::alert_category::tracker;
@@ -315,6 +371,20 @@ lt::session make_session() {
     lt::session_params params;
     params.settings = pack;
     return lt::session(std::move(params));
+}
+
+void apply_peer_role_settings(lt::session& session, bool seed_role) {
+    const bool enable_utp = env_int_or_default("P2P_ENABLE_UTP", 0) == 1;
+    lt::settings_pack pack;
+    pack.set_bool(lt::settings_pack::enable_outgoing_utp, enable_utp && !seed_role);
+    pack.set_bool(lt::settings_pack::enable_incoming_utp, enable_utp && seed_role);
+    pack.set_bool(lt::settings_pack::enable_outgoing_tcp, !seed_role);
+    pack.set_bool(lt::settings_pack::enable_incoming_tcp, seed_role);
+    session.apply_settings(pack);
+    LOG_INFO(std::string("P2PDownloadManager: peer role=") +
+             (seed_role ? "seed" : "download") +
+             " outgoing=" + (seed_role ? "disabled" : "enabled") +
+             " incoming=" + (seed_role ? "enabled" : "disabled"));
 }
 
 std::string alert_message(const lt::alert* alert) {
@@ -335,6 +405,101 @@ bool is_piece_hash_failure(const lt::alert* alert) {
 void log_piece_hash_failure(const lt::alert* alert) {
     LOG_WARN("P2PDownloadManager: piece hash failed; libtorrent will retry: " +
              alert_message(alert));
+}
+
+void emit_android_p2p_log(int priority, const std::string& msg) {
+#ifdef __ANDROID__
+    __android_log_print(priority, "DeviceAgent", "%s", msg.c_str());
+#else
+    (void)priority;
+    (void)msg;
+#endif
+}
+
+void log_peer_diag_info(const std::string& msg) {
+    LOG_INFO(msg);
+    emit_android_p2p_log(ANDROID_LOG_INFO, msg);
+}
+
+void log_peer_diag_warn(const std::string& msg) {
+    LOG_WARN(msg);
+    emit_android_p2p_log(ANDROID_LOG_WARN, msg);
+}
+
+void log_peer_diagnostic_alert(const lt::alert* alert) {
+    if (alert == nullptr) return;
+
+    if (const auto* listen = lt::alert_cast<lt::listen_succeeded_alert>(alert)) {
+        log_peer_diag_info("P2PDownloadManager: listen succeeded endpoint=" +
+                           lt::print_endpoint(lt::tcp::endpoint(listen->address, listen->port)) +
+                           " socket_type=" + std::to_string(static_cast<int>(listen->socket_type)));
+        return;
+    }
+    if (const auto* listen = lt::alert_cast<lt::listen_failed_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: listen failed endpoint=" +
+                           lt::print_endpoint(lt::tcp::endpoint(listen->address, listen->port)) +
+                           " socket_type=" + std::to_string(static_cast<int>(listen->socket_type)) +
+                           " error=" + listen->error.message() +
+                           " msg=" + listen->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_connect_alert>(alert)) {
+        log_peer_diag_info("P2PDownloadManager: peer connected endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " direction=" +
+                           (peer->direction == lt::peer_connect_alert::direction_t::in ? "in" : "out") +
+                           " socket_type=" + std::to_string(static_cast<int>(peer->socket_type)) +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: peer disconnected endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " socket_type=" + std::to_string(static_cast<int>(peer->socket_type)) +
+                           " op=" + std::to_string(static_cast<int>(peer->op)) +
+                           " reason=" + std::to_string(static_cast<int>(peer->reason)) +
+                           " error=" + peer->error.message() +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_error_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: peer error endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " op=" + std::to_string(static_cast<int>(peer->op)) +
+                           " error=" + peer->error.message() +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_blocked_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: peer blocked endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_snubbed_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: peer snubbed endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::peer_unsnubbed_alert>(alert)) {
+        log_peer_diag_info("P2PDownloadManager: peer unsnubbed endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::request_dropped_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: request dropped endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " msg=" + peer->message());
+        return;
+    }
+    if (const auto* peer = lt::alert_cast<lt::block_timeout_alert>(alert)) {
+        log_peer_diag_warn("P2PDownloadManager: block timeout endpoint=" +
+                           lt::print_endpoint(peer->endpoint) +
+                           " msg=" + peer->message());
+        return;
+    }
 }
 
 DownloadProgress make_progress(const lt::torrent_status& status,
@@ -422,12 +587,34 @@ void emit_peer_counter_values(int64_t from_peers, int64_t from_web_seed) {
 PeerCounters emit_peer_counters(const lt::peer_info_alert& alert) {
     PeerCounters counters;
     for (const auto& peer : alert.peer_info) {
+        const bool is_web_seed =
+            peer.connection_type == lt::peer_info::web_seed ||
+            peer.connection_type == lt::peer_info::http_seed;
         if (peer.connection_type == lt::peer_info::web_seed ||
                 peer.connection_type == lt::peer_info::http_seed) {
             counters.from_web_seed += static_cast<int64_t>(peer.total_download);
         } else {
             counters.from_peers += static_cast<int64_t>(peer.total_download);
         }
+        log_peer_diag_info("P2PDownloadManager: peer info endpoint=" +
+                           lt::print_endpoint(peer.ip) +
+                           " type=" + (is_web_seed ? std::string("web_seed") : std::string("p2p")) +
+                           " total_download=" + std::to_string(peer.total_download) +
+                           " total_upload=" + std::to_string(peer.total_upload) +
+                           " down_speed=" + std::to_string(peer.payload_down_speed) +
+                           " up_speed=" + std::to_string(peer.payload_up_speed) +
+                           " queue=" + std::to_string(peer.download_queue_length) +
+                           " timed_out=" + std::to_string(peer.timed_out_requests) +
+                           " request_timeout=" + std::to_string(peer.request_timeout) +
+                           " rtt=" + std::to_string(peer.rtt) +
+                           " remote_choked=" + std::to_string(
+                               static_cast<int>(static_cast<bool>(peer.flags & lt::peer_info::remote_choked))) +
+                           " interesting=" + std::to_string(
+                               static_cast<int>(static_cast<bool>(peer.flags & lt::peer_info::interesting))) +
+                           " seed=" + std::to_string(
+                               static_cast<int>(static_cast<bool>(peer.flags & lt::peer_info::seed))) +
+                           " snubbed=" + std::to_string(
+                               static_cast<int>(static_cast<bool>(peer.flags & lt::peer_info::snubbed))));
     }
 
     emit_peer_counter_values(counters.from_peers, counters.from_web_seed);
@@ -466,6 +653,7 @@ bool wait_for_p2p_peer(lt::session& session,
         std::vector<lt::alert*> alerts;
         session.pop_alerts(&alerts);
         for (const auto* item : alerts) {
+            log_peer_diagnostic_alert(item);
             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                 emit_peer_counters(*peer_info);
                 const int p2p_peers = count_p2p_peers(*peer_info);
@@ -505,6 +693,7 @@ bool wait_for_peer_counters(lt::session& session,
             std::vector<lt::alert*> alerts;
             session.pop_alerts(&alerts);
             for (const auto* item : alerts) {
+                log_peer_diagnostic_alert(item);
                 if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                     const auto counters = emit_peer_counters(*peer_info);
                     last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
@@ -574,6 +763,7 @@ bool wait_for_cache_flush(lt::session& session,
             std::vector<lt::alert*> alerts;
             session.pop_alerts(&alerts);
             for (const auto* item : alerts) {
+                log_peer_diagnostic_alert(item);
                 if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                     emit_peer_counters(*peer_info);
                 }
@@ -918,12 +1108,24 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         params.url_seeds.push_back(req.url);
                         LOG_INFO("P2PDownloadManager: added explicit web seed " + req.url);
                     }
-                    downloaded_path = primary_file_path(*torrent, params.save_path);
-                    if (downloaded_path.empty()) {
-                        error = "p2p alpha supports single-file torrents only";
-                    } else if (callbacks_.on_started) {
-                        callbacks_.on_started(req, downloaded_path);
-                    }
+	                    downloaded_path = primary_file_path(*torrent, params.save_path);
+	                    if (downloaded_path.empty()) {
+	                        error = "p2p alpha supports single-file torrents only";
+	                    } else if (!req.expected_sha256.empty() && file_exists(downloaded_path)) {
+	                        std::string seed_verify_error;
+	                        if (verify_sha256_with_retry(downloaded_path,
+	                                                      req.expected_sha256,
+	                                                      seed_verify_error)) {
+	                            params.flags |= lt::torrent_flags::seed_mode;
+	                            LOG_INFO("P2PDownloadManager: existing file verified; enabling seed_mode");
+	                        } else {
+	                            LOG_WARN("P2PDownloadManager: existing file not trusted for seed_mode: " +
+	                                     seed_verify_error);
+	                        }
+	                    }
+	                    if (error.empty() && callbacks_.on_started) {
+	                        callbacks_.on_started(req, downloaded_path);
+	                    }
                 }
             }
             if (error.empty()) {
@@ -937,9 +1139,11 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 ensure_session_locked();
                 session = session_.get();
             }
-            if (error.empty()) {
-                handle = session->add_torrent(std::move(params), ec);
-                if (ec) {
+	            if (error.empty()) {
+	                const bool seed_role = static_cast<bool>(params.flags & lt::torrent_flags::seed_mode);
+	                apply_peer_role_settings(*session, seed_role);
+	                handle = session->add_torrent(std::move(params), ec);
+	                if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
                     std::lock_guard<std::mutex> lock(mu_);
@@ -981,6 +1185,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         std::vector<lt::alert*> alerts;
                         session->pop_alerts(&alerts);
                         for (const auto* item : alerts) {
+                            log_peer_diagnostic_alert(item);
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                                 const auto counters = emit_peer_counters(*peer_info);
                                 last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
@@ -1174,6 +1379,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         std::vector<lt::alert*> alerts;
                         session->pop_alerts(&alerts);
                         for (const auto* item : alerts) {
+                            log_peer_diagnostic_alert(item);
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
                                 emit_peer_counters(*peer_info);
                             }

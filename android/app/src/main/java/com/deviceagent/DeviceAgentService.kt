@@ -9,6 +9,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -48,6 +49,12 @@ private const val P2P_SLOW_START_TIMEOUT_MS = 75_000L
 private const val P2P_SLOW_START_BYTES = 5L * 1024L * 1024L
 private const val TRANSIENT_NOTIFICATION_MS = 10_000L
 private const val IDLE_NOTIFICATION_TEXT = "device-agent running"
+
+internal fun refreshRunningDeviceAgentService(): Boolean {
+    val service = mainServiceRef?.get() ?: return false
+    service.refreshForegroundFromLauncher()
+    return true
+}
 
 internal fun shouldReportProgress(
     lastReportTimeMs: Long,
@@ -421,6 +428,7 @@ class DeviceAgentService : Service() {
         val sha256: String,
         val localPath: String,
         val fileType: String,
+        val downloadUrl: String,
         var lastReportTimeMs: Long = 0L,
         var lastReportBytes: Long = 0L,
         var fallbackStarted: Boolean = false
@@ -457,7 +465,8 @@ class DeviceAgentService : Service() {
         try { File(filesDir, "upgrading").delete(); File(filesDir, "upgrading.tmp").delete(); File(filesDir, "skip_cmds.txt").delete(); File(filesDir, "pending_upgrade").delete() } catch (e: Exception) {}
         // 取消可能残留的重启闹钟（上次启动成功，不需要了）
         RestartReceiver.cancelRestart(this)
-        mkChannel(); startForeground(NOTIFICATION_ID, mkNotification(IDLE_NOTIFICATION_TEXT))
+        mkChannel()
+        startAsForeground()
         // 方案 B: gRPC streaming 替代 HTTP polling
         val (parsedHost, _) = try {
             val u = java.net.URL(cfgServerUrl)
@@ -549,6 +558,9 @@ class DeviceAgentService : Service() {
     }
     override fun onBind(i: Intent?): IBinder? = null
     override fun onDestroy() {
+        if (mainServiceRef?.get() === this) {
+            mainServiceRef = null
+        }
         if (::connectivityManager.isInitialized && networkCallbackRegistered) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback)
@@ -625,10 +637,10 @@ class DeviceAgentService : Service() {
         Thread { handleDownloadAndInstall(batchId, fileId, commandId, downloadUrl, sha256) }.start()
     }
 
-    fun onP2PStarted(batchId: String, fileId: String, commandId: String, sha256: String, localPath: String, fileType: String) {
+    fun onP2PStarted(batchId: String, fileId: String, commandId: String, sha256: String, localPath: String, fileType: String, downloadUrl: String) {
         android.util.Log.i(TAG, "onP2PStarted: cmd=$commandId batch=$batchId file=$fileId type=$fileType path=$localPath")
         synchronized(p2pLock) {
-            activeP2PContext = P2PDownloadContext(batchId, fileId, commandId, sha256, localPath, fileType)
+            activeP2PContext = P2PDownloadContext(batchId, fileId, commandId, sha256, localPath, fileType, downloadUrl)
         }
         reportReleaseStatus(batchId, fileId, "downloading")
         updateNotification("⏬ P2P 下载中...")
@@ -725,7 +737,14 @@ class DeviceAgentService : Service() {
                     }
                 }
                 if (!shouldFallback) return@Thread
-                val fallbackUrl = "${cfgServerUrl.trimEnd('/')}/api/v1/files/$fileId/download"
+                val payloadDownloadUrl = synchronized(p2pLock) {
+                    activeP2PContext?.takeIf { it.fileId == fileId }?.downloadUrl.orEmpty()
+                }
+                if (payloadDownloadUrl.isBlank()) {
+                    android.util.Log.w(TAG, "P2P slow start fallback skipped: missing payload download_url cmd=$commandId file=$fileId")
+                    return@Thread
+                }
+                val fallbackUrl = payloadDownloadUrl
                 android.util.Log.w(TAG, "P2P slow start fallback: cmd=$commandId file=$fileId url=$fallbackUrl")
                 if (fileType.equals("apk", ignoreCase = true)) {
                     handleDownloadAndInstall(batchId, fileId, commandId, fallbackUrl, sha256, completionPath = COMPLETION_PATH_HTTP_FALLBACK_STALL)
@@ -1014,13 +1033,48 @@ class DeviceAgentService : Service() {
     }
 
     private fun mkNotification(text: String): Notification {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            Notification.Builder(this, CHANNEL_ID).setContentTitle("device-agent").setContentText(text)
-                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_HIGH).build()
-        else
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
             @Suppress("DEPRECATION")
-            Notification.Builder(this).setContentTitle("device-agent").setContentText(text)
-                .setSmallIcon(R.drawable.ic_notification).setPriority(Notification.PRIORITY_HIGH).build()
+            Notification.Builder(this)
+        }
+        builder
+            .setContentTitle("device-agent")
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .setPriority(Notification.PRIORITY_HIGH)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+        return builder.build()
+    }
+
+    internal fun refreshForegroundFromLauncher() {
+        startAsForeground()
+    }
+
+    private fun startAsForeground() {
+        val notification = mkNotification(IDLE_NOTIFICATION_TEXT)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            android.util.Log.i(TAG, "foreground service started")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "startForeground failed: ${e.message}", e)
+            throw e
+        }
     }
 
     /** 更新前景通知文字 */

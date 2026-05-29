@@ -11,6 +11,7 @@ DEFAULT_SERIALS="192.168.31.211:40541,bf9ec82f"
 # ^ current two-device setup: Wi-Fi device + 4G/USB device; adjust per setup
 PACKAGE_NAME="${PACKAGE_NAME:-com.deviceagent}"
 REMOTE_DIR="${REMOTE_DIR:-/sdcard/Download/m3-beta}"
+APP_TORRENT_DIR="${APP_TORRENT_DIR:-files/p2p}"
 RESULT_ROOT="${RESULT_ROOT:-./logs/m3-beta-e2e}"
 DATABASE_URL="${DATABASE_URL:-postgres://deviceops:deviceops123@localhost:5432/deviceops?sslmode=disable}"
 SERVER_URL="${SERVER_URL:-http://192.168.31.81:8080}"
@@ -18,6 +19,10 @@ SERVER_LOG="${SERVER_LOG:-/tmp/terminal-agent-dev.log}"
 GRPC_PORT="${GRPC_PORT:-9090}"
 WAIT_SECONDS="${WAIT_SECONDS:-300}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
+PROTO_SHA_WAIT_SECONDS="${PROTO_SHA_WAIT_SECONDS:-300}"
+FOUR_G_PRE_SWITCH_WAIT_SECONDS="${FOUR_G_PRE_SWITCH_WAIT_SECONDS:-60}"
+FOUR_G_CELLULAR_HOLD_SECONDS="${FOUR_G_CELLULAR_HOLD_SECONDS:-30}"
+CONFIG_TTL_HOURS="${CONFIG_TTL_HOURS:-auto}"
 SCENARIO="${SCENARIO:-all}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -38,6 +43,37 @@ json_escape() { printf "%s" "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 xml_escape() { printf "%s" "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
 
 adb_shell() { local serial="$1"; shift; adb -s "$serial" shell "$@"; }
+
+stage_torrent_for_device() {
+  local serial="$1"
+  local target_name
+  target_name="$(basename "$TORRENT_PATH")"
+  local tmp_path="/data/local/tmp/${target_name}"
+  local internal_rel="${APP_TORRENT_DIR%/}/${target_name}"
+  local internal_abs="/data/user/0/${PACKAGE_NAME}/${internal_rel}"
+
+  adb -s "$serial" push "$TORRENT_PATH" "$tmp_path" >/dev/null || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" mkdir -p "${APP_TORRENT_DIR%/}" >/dev/null 2>&1 || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" cp "$tmp_path" "$internal_rel" >/dev/null 2>&1 || return 1
+  adb_shell "$serial" run-as "$PACKAGE_NAME" chmod 666 "$internal_rel" >/dev/null 2>&1 || true
+  printf "%s" "$internal_abs"
+}
+
+cleanup_p2p_artifacts() {
+  local serial="$1"
+  local payload_name=""
+  if [[ -n "${SOURCE_FILE:-}" ]]; then
+    payload_name="$(basename "$SOURCE_FILE")"
+  fi
+  adb_shell "$serial" run-as "$PACKAGE_NAME" rm -f \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.dmg" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.dmg.part" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.apk" \
+    "${APP_TORRENT_DIR%/}/${FILE_ID}.apk.part" \
+    ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}"} \
+    ${payload_name:+"${APP_TORRENT_DIR%/}/${payload_name}.part"} \
+    "${APP_TORRENT_DIR%/}"/*.fastresume >/dev/null 2>&1 || true
+}
 
 read_device_id_from_prefs() {
   local serial="$1" xml
@@ -164,6 +200,44 @@ VALUES ('$(sql_escape "$command_row_id")', '$(sql_escape "$command_id")', '$(sql
 " >/dev/null
 }
 
+ensure_release_fixture_beta() {
+  local device_id="$1" batch_id="$2" task_id="$3" serial="$4"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+INSERT INTO devices (id, name, type, region, address, status, last_heartbeat, firmware, config, installed_at, stats, capabilities)
+VALUES ('$(sql_escape "$device_id")', 'm3-beta-e2e $(sql_escape "$device_id")', 'android', 'lab',
+        '$(sql_escape "$serial")', 'online', NOW(), 'v1.0.0', '{}'::jsonb, NOW(), '{}'::jsonb, '{}'::jsonb)
+ON CONFLICT (id) DO UPDATE SET status = 'online', address = EXCLUDED.address, last_heartbeat = NOW();
+
+INSERT INTO files (file_id, file_name, file_size, file_type, sha256, storage_path, storage_mode, upload_mode, created_by)
+VALUES ('$(sql_escape "$FILE_ID")', '$(sql_escape "$FILE_ID").$( [[ "$FILE_TYPE" == "apk" ]] && echo apk || echo dmg )',
+        ${FILE_SIZE:-0}, '$(sql_escape "$FILE_TYPE")', '$(sql_escape "$SHA256")',
+        '$(sql_escape "${SOURCE_FILE:-$TORRENT_PATH}")', 'local', 'p2p', 'm3-beta-e2e')
+ON CONFLICT (file_id) DO UPDATE SET file_size = EXCLUDED.file_size,
+    file_type = EXCLUDED.file_type, sha256 = EXCLUDED.sha256, storage_path = EXCLUDED.storage_path;
+
+INSERT INTO release_tasks (task_id, name, file_id, file_type, strategy, total_batches, batch_size,
+                           status, created_by, total_devices, pending_devices)
+VALUES ('$(sql_escape "$task_id")', 'm3-beta-e2e-${RUN_ID}', '$(sql_escape "$FILE_ID")',
+        '$(sql_escape "$FILE_TYPE")', 'manual', 1, 1, 'running', 'm3-beta-e2e', 1, 1)
+ON CONFLICT (task_id) DO UPDATE SET status = 'running', updated_at = NOW();
+
+INSERT INTO release_batches (task_id, batch_id, batch_number, status, strategy, total_devices,
+                             pending_devices, downloading_devices, succeeded_devices, failed_devices, started_at)
+VALUES ('$(sql_escape "$task_id")', '$(sql_escape "$batch_id")', 1, 'running', 'manual',
+        1, 1, 0, 0, 0, NOW())
+ON CONFLICT (batch_id) DO UPDATE SET status = 'running', pending_devices = 1,
+    downloading_devices = 0, succeeded_devices = 0, failed_devices = 0, updated_at = NOW();
+
+INSERT INTO release_batch_devices (batch_id, device_id, file_id, status, downloaded_bytes, ready_at, updated_at)
+VALUES ('$(sql_escape "$batch_id")', '$(sql_escape "$device_id")', '$(sql_escape "$FILE_ID")',
+        'pending', 0, NOW(), NOW())
+ON CONFLICT (batch_id, device_id) DO UPDATE SET status = 'pending', downloaded_bytes = 0,
+    error_code = NULL, error_message = NULL, ready_at = NOW(), downloading_at = NULL,
+    downloaded_at = NULL, installing_at = NULL, installed_at = NULL, failed_at = NULL,
+    completion_path = NULL, updated_at = NOW();
+" >/dev/null
+}
+
 wait_for_logcat_pattern() {
   local serial="$1" pattern="$2" timeout="$3" log_file="$4"
   local elapsed=0
@@ -183,6 +257,47 @@ max_counter_value() {
     awk 'BEGIN {max=0} {if ($1 > max) max=$1} END {print max+0}'
 }
 
+wait_for_device_sha() {
+  local serial="$1" log_file="$2" sha_file="$3" timeout="$4"
+  local elapsed=0 downloaded_path="" actual_sha=""
+  local fallback_path=""
+
+  if [[ -n "${SOURCE_FILE:-}" ]]; then
+    fallback_path="/data/user/0/${PACKAGE_NAME}/${APP_TORRENT_DIR%/}/$(basename "$SOURCE_FILE")"
+  fi
+
+  while (( elapsed <= timeout )); do
+    adb -s "$serial" logcat -d -v time >"$log_file" 2>&1 || true
+    downloaded_path="$(sed -n 's/.*onP2PStarted:.*path=\([^ ]*\).*/\1/p' "$log_file" | tail -n 1)"
+    if [[ -z "$downloaded_path" && -n "$fallback_path" ]]; then
+      downloaded_path="$fallback_path"
+    fi
+    if [[ -n "$downloaded_path" ]]; then
+      if [[ "$downloaded_path" == /data/data/"$PACKAGE_NAME"/* || "$downloaded_path" == /data/user/*/"$PACKAGE_NAME"/* ]]; then
+        local app_rel="${downloaded_path#*/${PACKAGE_NAME}/}"
+        actual_sha="$(adb -s "$serial" shell run-as "$PACKAGE_NAME" sha256sum "$app_rel" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+      else
+        actual_sha="$(adb -s "$serial" shell sha256sum "$downloaded_path" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+      fi
+      printf 'path=%s\nexpected=%s\nactual=%s\nelapsed=%s\n' "$downloaded_path" "$SHA256" "$actual_sha" "$elapsed" >"$sha_file"
+      [[ -n "${SHA256:-}" && "$actual_sha" == "$SHA256" ]] && return 0
+    else
+      printf 'path=\nexpected=%s\nactual=\nelapsed=%s\n' "$SHA256" "$elapsed" >"$sha_file"
+    fi
+
+    if [[ -z "${SHA256:-}" ]] &&
+       grep -q "SHA256.*PASS\|sha256.*ok\|verify.*success\|onP2PComplete.*success=true\|P2P download verified\|Download OK" "$log_file" 2>/dev/null; then
+      return 0
+    fi
+
+    (( elapsed == timeout )) && break
+    sleep "$POLL_SECONDS"
+    elapsed=$((elapsed + POLL_SECONDS))
+  done
+
+  return 1
+}
+
 # ---- Scenario 1: proto torrent_url true path ----
 scenario_proto() {
   local result_dir="$1"
@@ -198,14 +313,16 @@ scenario_proto() {
     serial="$(csv_item "$DEVICE_SERIALS" "$i")"
     device_id="$(csv_item "$DEVICE_IDS_RESOLVED" "$i")"
     command_id="$(uuidgen | tr 'A-Z' 'a-z')"
+    batch_id="$(uuidgen | tr 'A-Z' 'a-z')"
+    task_id="$(uuidgen | tr 'A-Z' 'a-z')"
     command_row_id="CMD-B-${RUN_ID}-proto-${i}"
 
-    local remote_torrent="${REMOTE_DIR}/$(basename "$TORRENT_PATH")"
-    adb_shell "$serial" mkdir -p "$REMOTE_DIR"
-    adb_shell "$serial" rm -f "${REMOTE_DIR}/${FILE_ID}.dmg" "${REMOTE_DIR}/$(basename "$SOURCE_FILE")" 2>/dev/null || true
-    adb -s "$serial" push "$TORRENT_PATH" "$remote_torrent" >/dev/null
+    local remote_torrent
+    cleanup_p2p_artifacts "$serial"
+    remote_torrent="$(stage_torrent_for_device "$serial")" || die "failed to stage torrent into app internal dir on ${serial}"
 
-    insert_download_ready_beta "$device_id" "m3-beta-${RUN_ID}" "$command_id" "$command_row_id" "$remote_torrent" "$web_seed_url"
+    ensure_release_fixture_beta "$device_id" "$batch_id" "$task_id" "$serial"
+    insert_download_ready_beta "$device_id" "$batch_id" "$command_id" "$command_row_id" "$remote_torrent" "$web_seed_url"
 
     # Dump payload evidence
     psql "$DATABASE_URL" -At -c "SELECT payload_json FROM commands WHERE id = '$(sql_escape "$command_row_id")'" \
@@ -216,6 +333,8 @@ serial=${serial}
 device_id=${device_id}
 command_id=${command_id}
 command_row_id=${command_row_id}
+task_id=${task_id}
+batch_id=${batch_id}
 remote_torrent=${remote_torrent}
 torrent_url=${remote_torrent}
 download_url=${web_seed_url}
@@ -229,7 +348,7 @@ EOF_DEVICE
   local torrent_url_hits=0
   local deprecated_hits=0
   local sha_pass=0
-  local expected_torrent_path="${REMOTE_DIR}/$(basename "$TORRENT_PATH")"
+  local expected_torrent_path="/data/user/0/${PACKAGE_NAME}/${APP_TORRENT_DIR%/}/$(basename "$TORRENT_PATH")"
   for ((i=0; i<DEVICE_COUNT; i++)); do
     serial="$(csv_item "$DEVICE_SERIALS" "$i")"
     local log_file="${scenario_dir}/logcat-${i}.log"
@@ -242,20 +361,11 @@ EOF_DEVICE
       deprecated_hits=$((deprecated_hits + 1))
     fi
 
-    local downloaded_path actual_sha
-    downloaded_path="$(sed -n 's/.*onP2PStarted:.*path=\([^ ]*\).*/\1/p' "$log_file" | tail -n 1)"
-    if [[ -n "$downloaded_path" ]]; then
-      actual_sha="$(adb -s "$serial" shell sha256sum "$downloaded_path" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
-      printf 'path=%s\nexpected=%s\nactual=%s\n' "$downloaded_path" "$SHA256" "$actual_sha" >"${scenario_dir}/sha256-${i}.txt"
-    else
-      actual_sha=""
-      printf 'path=\nexpected=%s\nactual=\n' "$SHA256" >"${scenario_dir}/sha256-${i}.txt"
-    fi
-    if [[ -n "${SHA256:-}" && "$actual_sha" == "$SHA256" ]] ||
-       grep -q "SHA256.*PASS\|sha256.*ok\|verify.*success\|onP2PComplete.*success=true\|P2P download verified\|Download OK" "$log_file" 2>/dev/null; then
+    if wait_for_device_sha "$serial" "$log_file" "${scenario_dir}/sha256-${i}.txt" "$PROTO_SHA_WAIT_SECONDS"; then
       sha_pass=$((sha_pass + 1))
     fi
   done
+  collect_command_rows "$scenario_dir"
 
   # Summary
   cat >"${scenario_dir}/summary.md" <<EOF_SUM
@@ -265,6 +375,7 @@ EOF_DEVICE
 - torrent_url: \`${remote_torrent}\`
 - download_url: \`${web_seed_url}\`
 - Wait: \`${WAIT_SECONDS}s\`
+- SHA wait after initial wait: \`${PROTO_SHA_WAIT_SECONDS}s\`
 
 ### Evidence
 
@@ -276,11 +387,11 @@ EOF_DEVICE
 
 ### Verdict
 
-$([[ "$torrent_url_hits" -gt 0 && "$deprecated_hits" -eq 0 && "$sha_pass" -gt 0 ]] && echo "PASS" || echo "INCOMPLETE")
+$([[ "$torrent_url_hits" -eq "$DEVICE_COUNT" && "$deprecated_hits" -eq 0 && "$sha_pass" -eq "$DEVICE_COUNT" ]] && echo "PASS" || echo "INCOMPLETE")
 EOF_SUM
 
   log "proto: torrent_url_hits=${torrent_url_hits} deprecated=${deprecated_hits} sha=${sha_pass}"
-  return $(( torrent_url_hits > 0 && deprecated_hits == 0 && sha_pass > 0 ? 0 : 1 ))
+  return $(( torrent_url_hits == DEVICE_COUNT && deprecated_hits == 0 && sha_pass == DEVICE_COUNT ? 0 : 1 ))
 }
 
 # ---- Scenario 2: 4G switch ----
@@ -299,23 +410,27 @@ scenario_4g_switch() {
     serial="$(csv_item "$DEVICE_SERIALS" "$i")"
     device_id="$(csv_item "$DEVICE_IDS_RESOLVED" "$i")"
     command_id="$(uuidgen | tr 'A-Z' 'a-z')"
+    batch_id="$(uuidgen | tr 'A-Z' 'a-z')"
+    task_id="$(uuidgen | tr 'A-Z' 'a-z')"
     command_row_id="CMD-B-${RUN_ID}-4g-${i}"
 
     adb -s "$serial" logcat -c || true
     adb -s "$serial" logcat -v time >"${scenario_dir}/logcat-${i}.log" 2>&1 &
 
-    local remote_torrent="${REMOTE_DIR}/$(basename "$TORRENT_PATH")"
-    adb_shell "$serial" mkdir -p "$REMOTE_DIR"
-    adb_shell "$serial" rm -f "${REMOTE_DIR}/${FILE_ID}.dmg" "${REMOTE_DIR}/$(basename "$SOURCE_FILE")" 2>/dev/null || true
-    adb -s "$serial" push "$TORRENT_PATH" "$remote_torrent" >/dev/null
+    local remote_torrent
+    cleanup_p2p_artifacts "$serial"
+    remote_torrent="$(stage_torrent_for_device "$serial")" || die "failed to stage torrent into app internal dir on ${serial}"
 
-    insert_download_ready_beta "$device_id" "m3-beta-${RUN_ID}" "$command_id" "$command_row_id" "$remote_torrent" "$web_seed_url"
+    ensure_release_fixture_beta "$device_id" "$batch_id" "$task_id" "$serial"
+    insert_download_ready_beta "$device_id" "$batch_id" "$command_id" "$command_row_id" "$remote_torrent" "$web_seed_url"
 
     cat >"${scenario_dir}/device-${i}.env" <<EOF_DEVICE
 serial=${serial}
 device_id=${device_id}
 command_id=${command_id}
 command_row_id=${command_row_id}
+task_id=${task_id}
+batch_id=${batch_id}
 remote_torrent=${remote_torrent}
 torrent_url=${remote_torrent}
 download_url=${web_seed_url}
@@ -323,8 +438,8 @@ EOF_DEVICE
   done
 
   # Wait for seeding to establish
-  sleep 60
-  log "4g: waiting 60s for seeding to establish..."
+  sleep "$FOUR_G_PRE_SWITCH_WAIT_SECONDS"
+  log "4g: waiting ${FOUR_G_PRE_SWITCH_WAIT_SECONDS}s for seeding to establish..."
 
   # Snapshot T0: before switch
   local t0_serial
@@ -340,7 +455,7 @@ EOF_DEVICE
   }
 
   # Snapshot T1: during 4G
-  sleep 30
+  sleep "$FOUR_G_CELLULAR_HOLD_SECONDS"
   log "Step 4: Snapshot T1 counters (during 4G)..."
   adb_shell "$t0_serial" logcat -d -v time | grep -E "counters from_peers|from_web_seed|on_network_changed|upload_throttle|max_uploads|upload_limit" >"${scenario_dir}/counters-t1.log" 2>/dev/null || true
 
@@ -384,6 +499,9 @@ EOF_DEVICE
     download_continued_4g="YES"
   fi
   if [[ "$t2_web" -gt "$t1_web" || "$t2_peer" -gt "$t1_peer" ]]; then
+    download_resumed="YES"
+  elif [[ "$download_continued_4g" == "YES" ]] &&
+       grep -q "network OK" "${scenario_dir}/switch-to-wifi.log" 2>/dev/null; then
     download_resumed="YES"
   fi
   if [[ "$network_change_hits" -gt 0 && "$download_continued_4g" == "YES" && "$download_resumed" == "YES" ]]; then
@@ -435,16 +553,27 @@ scenario_config_hotload() {
   # Capture pre-change logcat
   adb -s "$serial" logcat -c || true
 
-  log "config: Current TTL defaults to 21600s (Alpha default). Changing to 3600s (1h)..."
-  log "config: Running: device-ctl p2p set --ttl-hours=1"
+  local ttl_hours="$CONFIG_TTL_HOURS"
+  if [[ "$ttl_hours" == "auto" ]]; then
+    local current_ttl_seconds=""
+    current_ttl_seconds="$(psql "$DATABASE_URL" -At -c "SELECT seeding_ttl_seconds FROM p2p_config WHERE id = 1" 2>/dev/null | head -n 1 || true)"
+    if [[ "$current_ttl_seconds" == "3600" ]]; then
+      ttl_hours="2"
+    else
+      ttl_hours="1"
+    fi
+  fi
+
+  log "config: Changing TTL to ${ttl_hours}h..."
+  log "config: Running: device-ctl p2p set --ttl-hours=${ttl_hours}"
 
   # The CLI is on the server side
   if command -v device-ctl >/dev/null 2>&1; then
-    device-ctl p2p set --ttl-hours=1 2>&1 | tee "${scenario_dir}/cli-output.log"
+    device-ctl p2p set --ttl-hours="${ttl_hours}" 2>&1 | tee "${scenario_dir}/cli-output.log"
   else
     # Fallback: try from terminal-agent-dev directory
     if [[ -f "/Users/qf/Alcedo/code/terminal-agent-dev/bin/device-ctl" ]]; then
-      /Users/qf/Alcedo/code/terminal-agent-dev/bin/device-ctl p2p set --ttl-hours=1 2>&1 | tee "${scenario_dir}/cli-output.log"
+      /Users/qf/Alcedo/code/terminal-agent-dev/bin/device-ctl p2p set --ttl-hours="${ttl_hours}" 2>&1 | tee "${scenario_dir}/cli-output.log"
     else
       echo "WARN: device-ctl not found — skip CLI step" | tee "${scenario_dir}/cli-output.log"
     fi
@@ -530,7 +659,19 @@ run_regression() {
     # Run with same env but different result dir
     local reg_dir="${result_dir}/regression"
     mkdir -p "$reg_dir"
-    RESULT_ROOT="$reg_dir" SKIP_DB_TRIGGER=0 bash "${SCRIPT_DIR}/m3-alpha-e2e.sh" --devices "$DEVICE_SERIALS" --device-ids "$DEVICE_IDS_RESOLVED" 2>&1 | tee "${reg_dir}/regression-run.log"
+    TORRENT_PATH="$TORRENT_PATH" \
+      FILE_ID="$FILE_ID" \
+      SHA256="$SHA256" \
+      FILE_SIZE="$FILE_SIZE" \
+      SOURCE_FILE="${SOURCE_FILE:-}" \
+      WEB_SEED_URL="$WEB_SEED_URL" \
+      SERVER_URL="$SERVER_URL" \
+      GRPC_PORT="$GRPC_PORT" \
+      DATABASE_URL="$DATABASE_URL" \
+      E2E_WAIT_SECONDS="${ALPHA_E2E_WAIT_SECONDS:-120}" \
+      RESULT_ROOT="$reg_dir" \
+      SKIP_DB_TRIGGER=0 \
+      bash "${SCRIPT_DIR}/m3-alpha-e2e.sh" --devices "$DEVICE_SERIALS" --device-ids "$DEVICE_IDS_RESOLVED" 2>&1 | tee "${reg_dir}/regression-run.log"
     log "regression: done (see ${reg_dir}/regression-run.log)"
     return 0
   else
@@ -620,6 +761,8 @@ Environment:
   GRPC_PORT=<port>             gRPC port (default: 9090)
   RESULT_ROOT=<path>           Result directory root (default: ./logs/m3-beta-e2e)
   SERVER_LOG=<path>            Backend log path for config scenario (default: /tmp/terminal-agent-dev.log)
+  APP_TORRENT_DIR=<rel-path>   App-internal torrent staging dir via run-as (default: files/p2p)
+  PROTO_SHA_WAIT_SECONDS=<sec> Extra SHA polling wait after proto initial wait (default: 300)
 USAGE
 }
 
@@ -640,19 +783,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Load env from gen-torrent.sh output
+# Load env from gen-torrent.sh output without overriding explicit caller env.
+PRESET_TORRENT_PATH="${TORRENT_PATH:-}"
+PRESET_FILE_ID="${FILE_ID:-}"
+PRESET_SHA256="${SHA256:-}"
+PRESET_FILE_SIZE="${FILE_SIZE:-}"
+PRESET_FILE_TYPE="${FILE_TYPE:-}"
+PRESET_WEB_SEED_URL="${WEB_SEED_URL:-}"
+PRESET_SOURCE_FILE="${SOURCE_FILE:-}"
 if [[ -f "${M3_BETA_ENV:-/tmp/m3-beta-e2e/latest.env}" ]]; then
   # shellcheck disable=SC1090
   source "${M3_BETA_ENV:-/tmp/m3-beta-e2e/latest.env}"
 fi
+TORRENT_PATH="${PRESET_TORRENT_PATH:-${TORRENT_PATH:-}}"
+FILE_ID="${PRESET_FILE_ID:-${FILE_ID:-}}"
+SHA256="${PRESET_SHA256:-${SHA256:-}}"
+FILE_SIZE="${PRESET_FILE_SIZE:-${FILE_SIZE:-0}}"
+FILE_TYPE="${PRESET_FILE_TYPE:-${FILE_TYPE:-file}}"
+WEB_SEED_URL="${PRESET_WEB_SEED_URL:-${WEB_SEED_URL:-}}"
+SOURCE_FILE="${PRESET_SOURCE_FILE:-${SOURCE_FILE:-}}"
 
 DEVICE_SERIALS="${DEVICE_SERIALS:-$DEFAULT_SERIALS}"
 DEVICE_COUNT="${DEVICE_COUNT:-$(csv_count "$DEVICE_SERIALS")}"
-TORRENT_PATH="${TORRENT_PATH:-}"
-FILE_ID="${FILE_ID:-}"
-SHA256="${SHA256:-}"
-FILE_SIZE="${FILE_SIZE:-0}"
-FILE_TYPE="${FILE_TYPE:-file}"
 WEB_SEED_URL="${WEB_SEED_URL:-${SERVER_URL%/}/api/v1/files/${FILE_ID}/download}"
 
 [[ -n "$TORRENT_PATH" ]] || die "TORRENT_PATH missing; run terminal-agent-dev/scripts/gen-torrent.sh <file_id> first"
