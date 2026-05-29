@@ -17,7 +17,9 @@
 namespace {
 
 constexpr int kLibtorrentMaxUploadsUnlimited = 16777215;
-constexpr int kThrottledUploadLimitBytesPerSecond = 5120;
+constexpr int kLibtorrentUploadLimitUnlimited = -1;
+constexpr int kConfiguredUploadLimitBytesPerSecond = 7 * 1024;
+constexpr int kCellularSuppressedUploadLimitBytesPerSecond = 5120;
 
 std::string bencoded_string(const std::string& value) {
     return std::to_string(value.size()) + ":" + value;
@@ -120,11 +122,15 @@ int main() {
 
     auto config_store = std::make_shared<P2PConfigStore>();
     std::string config_error;
-    assert(config_store->apply(R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25})", &config_error));
+    assert(config_store->apply(
+        R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25,"max_upload_kbps":7,"cellular_seeding_enabled":true})",
+        &config_error));
     P2PConfigStore::set_global(config_store);
     const auto alpha_policy = P2PSeedingPolicy::alpha_defaults();
     assert(alpha_policy.ttl == std::chrono::seconds(3));
     assert(alpha_policy.ratio_limit == 1.25);
+    assert(alpha_policy.max_upload_kbps == 7);
+    assert(alpha_policy.cellular_seeding_enabled);
     P2PConfigStore::set_global(nullptr);
 
     P2PDownloadManager empty_url_manager;
@@ -154,6 +160,20 @@ int main() {
     assert(invalid_magnet_complete);
     assert(!invalid_magnet_manager.is_downloading());
 
+    P2PDownloadManager url_torrent_fallback_manager;
+    bool url_torrent_fallback_complete = false;
+    DownloadRequest url_torrent_fallback_req;
+    url_torrent_fallback_req.url = "/tmp/legacy-url-source.torrent";
+    url_torrent_fallback_manager.download(url_torrent_fallback_req, nullptr,
+        [&](bool ok, const std::string& err) {
+            assert(!ok);
+            assert(err.find("expected magnet_uri or torrent_url") != std::string::npos);
+            assert(err.find("fallback") == std::string::npos);
+            url_torrent_fallback_complete = true;
+        });
+    assert(url_torrent_fallback_complete);
+    assert(!url_torrent_fallback_manager.is_downloading());
+
     P2PDownloadManager network_change_manager;
     network_change_manager.on_network_changed(NetworkType::CELLULAR);
     network_change_manager.on_network_changed(NetworkType::WIFI);
@@ -166,7 +186,12 @@ int main() {
     mkdir(save_dir.c_str(), 0700);
     write_seedless_torrent(torrent_path);
 
-    P2PDownloadManager manager;
+    auto network_policy = std::make_shared<device_agent::NetworkPolicy>();
+    network_policy->on_network_changed(NetworkType::WIFI);
+    P2PDownloadManager manager(
+        {},
+        P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 7, false},
+        network_policy);
     std::mutex mu;
     std::condition_variable cv;
     bool complete_called = false;
@@ -175,7 +200,8 @@ int main() {
     int progress_calls = 0;
 
     DownloadRequest req;
-    req.url = torrent_path;
+    req.torrent_url = torrent_path;
+    req.url = "http://127.0.0.1:9/test.bin";
     req.dest_path = save_dir;
     req.file_size = 16384;
 
@@ -194,13 +220,15 @@ int main() {
 
     assert(wait_until_downloading(manager));
     assert(wait_until_active_handle(manager));
+    assert(wait_until_upload_throttle(
+        manager, kLibtorrentMaxUploadsUnlimited, kConfiguredUploadLimitBytesPerSecond));
     assert(manager.state() == P2PDownloadState::Downloading);
-    manager.on_network_changed(NetworkType::CELLULAR);
+    network_policy->on_network_changed(NetworkType::CELLULAR);
     assert(wait_until_upload_throttle(
-        manager, 1, kThrottledUploadLimitBytesPerSecond));
-    manager.on_network_changed(NetworkType::WIFI);
+        manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
+    network_policy->on_network_changed(NetworkType::WIFI);
     assert(wait_until_upload_throttle(
-        manager, kLibtorrentMaxUploadsUnlimited, 0));
+        manager, kLibtorrentMaxUploadsUnlimited, kConfiguredUploadLimitBytesPerSecond));
     manager.cancel();
     assert(!manager.is_downloading());
     assert(manager.state() == P2PDownloadState::Idle);
@@ -213,6 +241,41 @@ int main() {
         assert(complete_error.find("cancel") != std::string::npos);
         assert(progress_calls >= 0);
     }
+
+    auto unlimited_policy = std::make_shared<device_agent::NetworkPolicy>();
+    unlimited_policy->on_network_changed(NetworkType::WIFI);
+    P2PDownloadManager unlimited_manager(
+        {},
+        P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 0, true},
+        unlimited_policy);
+    DownloadRequest unlimited_req;
+    unlimited_req.torrent_url = torrent_path;
+    unlimited_req.dest_path = save_dir;
+    unlimited_req.file_size = 16384;
+    unlimited_manager.download(unlimited_req, nullptr, nullptr);
+    assert(wait_until_downloading(unlimited_manager));
+    assert(wait_until_upload_throttle(
+        unlimited_manager, kLibtorrentMaxUploadsUnlimited, kLibtorrentUploadLimitUnlimited));
+    unlimited_manager.cancel();
+    assert(!unlimited_manager.is_downloading());
+
+    auto default_cellular_policy = std::make_shared<device_agent::NetworkPolicy>();
+    default_cellular_policy->on_network_changed(NetworkType::WIFI);
+    P2PDownloadManager default_cellular_manager(
+        {},
+        P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 0, false},
+        default_cellular_policy);
+    DownloadRequest default_cellular_req;
+    default_cellular_req.torrent_url = torrent_path;
+    default_cellular_req.dest_path = save_dir;
+    default_cellular_req.file_size = 16384;
+    default_cellular_manager.download(default_cellular_req, nullptr, nullptr);
+    assert(wait_until_downloading(default_cellular_manager));
+    default_cellular_policy->on_network_changed(NetworkType::CELLULAR);
+    assert(wait_until_upload_throttle(
+        default_cellular_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
+    default_cellular_manager.cancel();
+    assert(!default_cellular_manager.is_downloading());
 
     return 0;
 }

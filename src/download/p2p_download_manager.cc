@@ -52,6 +52,8 @@ constexpr int ANDROID_LOG_WARN = 5;
 namespace device_agent {
 namespace {
 
+constexpr int kCellularSuppressedUploadLimitBytesPerSecond = 5120;
+
 struct PeerCounters {
     int64_t from_peers = 0;
     int64_t from_web_seed = 0;
@@ -286,8 +288,7 @@ struct DownloadSource {
 std::string lowercase(std::string value);
 
 DownloadSource select_download_source(const DownloadRequest& req,
-                                      std::string& error,
-                                      bool emit_deprecated_warning) {
+                                      std::string& error) {
     DownloadSource source;
     if (!req.magnet_uri.empty()) {
         source.value = req.magnet_uri;
@@ -299,15 +300,7 @@ DownloadSource select_download_source(const DownloadRequest& req,
         source.is_magnet = starts_with(req.torrent_url, "magnet:");
         return source;
     }
-    if (!req.url.empty() && ends_with(lowercase(req.url), ".torrent")) {
-        source.value = req.url;
-        if (emit_deprecated_warning) {
-            LOG_WARN("[deprecated] DownloadRequest.url used as torrent source; "
-                     "expected magnet_uri or torrent_url. Remove fallback in M3-GA.");
-        }
-        return source;
-    }
-    error = "no p2p download source: expected magnet_uri, torrent_url, or .torrent url fallback";
+    error = "no p2p download source: expected magnet_uri or torrent_url";
     return source;
 }
 
@@ -846,13 +839,27 @@ double share_ratio(const lt::torrent_status& status) {
 
 // ADR-20260523-02 amendment v2 2026-05-24: upload_mode stops downloads,
 // and max_uploads(0) is treated as unlimited by this libtorrent build.
-void set_upload_throttle(lt::torrent_handle& handle, bool stop_upload) {
+bool seeding_allowed_on_network(NetworkType type, const P2PSeedingPolicy& policy) {
+    return type == NetworkType::WIFI ||
+           (type == NetworkType::CELLULAR && policy.cellular_seeding_enabled);
+}
+
+int upload_limit_bytes_per_second(const P2PSeedingPolicy& policy) {
+    if (policy.max_upload_kbps <= 0) {
+        return 0;
+    }
+    return policy.max_upload_kbps * 1024;
+}
+
+void set_upload_throttle(lt::torrent_handle& handle,
+                         bool stop_upload,
+                         const P2PSeedingPolicy& policy) {
     if (stop_upload) {
         handle.set_max_uploads(1);
-        handle.set_upload_limit(5120);
+        handle.set_upload_limit(kCellularSuppressedUploadLimitBytesPerSecond);
     } else {
         handle.set_max_uploads(-1);
-        handle.set_upload_limit(0);
+        handle.set_upload_limit(upload_limit_bytes_per_second(policy));
     }
 }
 
@@ -860,7 +867,10 @@ void set_upload_throttle(lt::torrent_handle& handle, bool stop_upload) {
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
     const auto cfg = P2PConfigStore::global_snapshot();
-    return P2PSeedingPolicy{std::chrono::seconds(cfg.seeding_ttl_seconds), cfg.max_share_ratio};
+    return P2PSeedingPolicy{std::chrono::seconds(cfg.seeding_ttl_seconds),
+                            cfg.max_share_ratio,
+                            cfg.max_upload_kbps,
+                            cfg.cellular_seeding_enabled};
 }
 
 P2PSeedingStateMachine::P2PSeedingStateMachine(P2PSeedingPolicy policy)
@@ -904,6 +914,7 @@ P2PDownloadManager::P2PDownloadManager(
         P2PSeedingPolicy seeding_policy,
         std::shared_ptr<NetworkPolicy> network_policy)
     : network_policy_(std::move(network_policy)),
+      seeding_policy_(seeding_policy),
       callbacks_(std::move(callbacks)),
       state_machine_(seeding_policy) {
     if (network_policy_) {
@@ -931,7 +942,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
     std::string source_error;
-    select_download_source(req, source_error, false);
+    select_download_source(req, source_error);
     if (!source_error.empty()) {
         if (on_complete) {
             on_complete(false, source_error);
@@ -1004,14 +1015,21 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
 #endif
 
 void P2PDownloadManager::on_network_changed(NetworkType type) {
-    const bool stop_upload = type != NetworkType::WIFI;
-    std::lock_guard<std::mutex> lock(mu_);
-    active_handles_.erase(
-        std::remove_if(active_handles_.begin(), active_handles_.end(),
-                       [](const lt::torrent_handle& handle) { return !handle.is_valid(); }),
-        active_handles_.end());
-    for (auto& handle : active_handles_) {
-        set_upload_throttle(handle, stop_upload);
+    std::vector<lt::torrent_handle> handles;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        network_type_ = type;
+        active_handles_.erase(
+            std::remove_if(active_handles_.begin(), active_handles_.end(),
+                           [](const lt::torrent_handle& handle) { return !handle.is_valid(); }),
+            active_handles_.end());
+        handles = active_handles_;
+    }
+    const bool stop_upload = !seeding_allowed_on_network(type, seeding_policy_);
+    for (auto& handle : handles) {
+        if (handle.is_valid()) {
+            set_upload_throttle(handle, stop_upload, seeding_policy_);
+        }
     }
 }
 
@@ -1081,7 +1099,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     int64_t last_web_seed_bytes = 0;
 
     try {
-        const DownloadSource source = select_download_source(req, error, true);
+        const DownloadSource source = select_download_source(req, error);
         if (error.empty()) {
             LOG_INFO("P2PDownloadManager: loading torrent " + source.value);
 
@@ -1143,13 +1161,22 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 	                const bool seed_role = static_cast<bool>(params.flags & lt::torrent_flags::seed_mode);
 	                apply_peer_role_settings(*session, seed_role);
 	                handle = session->add_torrent(std::move(params), ec);
-	                if (ec) {
+                if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
-                    std::lock_guard<std::mutex> lock(mu_);
-                    active_handles_.push_back(handle);
+                    NetworkType network_type = NetworkType::WIFI;
+                    {
+                        std::lock_guard<std::mutex> lock(mu_);
+                        active_handles_.push_back(handle);
+                        network_type = network_policy_ ? network_type_ : NetworkType::WIFI;
+                    }
                     if (network_policy_) {
-                        set_upload_throttle(handle, !network_policy_->should_seed());
+                        bool should_seed = network_policy_->should_seed();
+                        if (!should_seed && network_type == NetworkType::CELLULAR &&
+                                seeding_policy_.cellular_seeding_enabled) {
+                            should_seed = true;
+                        }
+                        set_upload_throttle(handle, !should_seed, seeding_policy_);
                     }
                 }
             }

@@ -33,8 +33,10 @@ enum class CompletionPathTelemetry {
 };
 
 struct P2PSeedingPolicy {
-    std::chrono::seconds ttl;
-    double ratio_limit;
+    std::chrono::seconds ttl{0};
+    double ratio_limit = 0.0;
+    int max_upload_kbps = 0;
+    bool cellular_seeding_enabled = false;
 
     static P2PSeedingPolicy alpha_defaults();
 };
@@ -106,6 +108,8 @@ private:
     std::unique_ptr<lt::session> session_;
     std::vector<lt::torrent_handle> active_handles_;
     std::shared_ptr<NetworkPolicy> network_policy_;
+    P2PSeedingPolicy seeding_policy_;
+    NetworkType network_type_{NetworkType::NONE};
     std::atomic<bool> downloading_{false};
     std::atomic<bool> cancel_requested_{false};
     Callbacks callbacks_;
