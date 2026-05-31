@@ -21,7 +21,7 @@
 #ifdef __ANDROID__
 #include <android/log.h>
 #else
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 constexpr int ANDROID_LOG_INFO = 4;
 constexpr int ANDROID_LOG_WARN = 5;
 #endif
@@ -419,18 +419,26 @@ void log_peer_diag_warn(const std::string& msg) {
     emit_android_p2p_log(ANDROID_LOG_WARN, msg);
 }
 
+std::string endpoint_to_string(const lt::tcp::endpoint& endpoint) {
+    const std::string address = endpoint.address().to_string();
+    if (endpoint.address().is_v6()) {
+        return "[" + address + "]:" + std::to_string(endpoint.port());
+    }
+    return address + ":" + std::to_string(endpoint.port());
+}
+
 void log_peer_diagnostic_alert(const lt::alert* alert) {
     if (alert == nullptr) return;
 
     if (const auto* listen = lt::alert_cast<lt::listen_succeeded_alert>(alert)) {
         log_peer_diag_info("P2PDownloadManager: listen succeeded endpoint=" +
-                           lt::print_endpoint(lt::tcp::endpoint(listen->address, listen->port)) +
+                           endpoint_to_string(lt::tcp::endpoint(listen->address, listen->port)) +
                            " socket_type=" + std::to_string(static_cast<int>(listen->socket_type)));
         return;
     }
     if (const auto* listen = lt::alert_cast<lt::listen_failed_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: listen failed endpoint=" +
-                           lt::print_endpoint(lt::tcp::endpoint(listen->address, listen->port)) +
+                           endpoint_to_string(lt::tcp::endpoint(listen->address, listen->port)) +
                            " socket_type=" + std::to_string(static_cast<int>(listen->socket_type)) +
                            " error=" + listen->error.message() +
                            " msg=" + listen->message());
@@ -438,7 +446,7 @@ void log_peer_diagnostic_alert(const lt::alert* alert) {
     }
     if (const auto* peer = lt::alert_cast<lt::peer_connect_alert>(alert)) {
         log_peer_diag_info("P2PDownloadManager: peer connected endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " direction=" +
                            (peer->direction == lt::peer_connect_alert::direction_t::in ? "in" : "out") +
                            " socket_type=" + std::to_string(static_cast<int>(peer->socket_type)) +
@@ -447,7 +455,7 @@ void log_peer_diagnostic_alert(const lt::alert* alert) {
     }
     if (const auto* peer = lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: peer disconnected endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " socket_type=" + std::to_string(static_cast<int>(peer->socket_type)) +
                            " op=" + std::to_string(static_cast<int>(peer->op)) +
                            " reason=" + std::to_string(static_cast<int>(peer->reason)) +
@@ -457,7 +465,7 @@ void log_peer_diagnostic_alert(const lt::alert* alert) {
     }
     if (const auto* peer = lt::alert_cast<lt::peer_error_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: peer error endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " op=" + std::to_string(static_cast<int>(peer->op)) +
                            " error=" + peer->error.message() +
                            " msg=" + peer->message());
@@ -465,31 +473,31 @@ void log_peer_diagnostic_alert(const lt::alert* alert) {
     }
     if (const auto* peer = lt::alert_cast<lt::peer_blocked_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: peer blocked endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " msg=" + peer->message());
         return;
     }
     if (const auto* peer = lt::alert_cast<lt::peer_snubbed_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: peer snubbed endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " msg=" + peer->message());
         return;
     }
     if (const auto* peer = lt::alert_cast<lt::peer_unsnubbed_alert>(alert)) {
         log_peer_diag_info("P2PDownloadManager: peer unsnubbed endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " msg=" + peer->message());
         return;
     }
     if (const auto* peer = lt::alert_cast<lt::request_dropped_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: request dropped endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " msg=" + peer->message());
         return;
     }
     if (const auto* peer = lt::alert_cast<lt::block_timeout_alert>(alert)) {
         log_peer_diag_warn("P2PDownloadManager: block timeout endpoint=" +
-                           lt::print_endpoint(peer->endpoint) +
+                           endpoint_to_string(peer->endpoint) +
                            " msg=" + peer->message());
         return;
     }
@@ -537,8 +545,16 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
     lt::sha256_ctx ctx;
     lt::SHA256_init(ctx);
 #else
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(
+        EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    if (!ctx) {
+        error = "failed to allocate sha256 context";
+        return false;
+    }
+    if (EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr) != 1) {
+        error = "failed to initialize sha256 context";
+        return false;
+    }
 #endif
     std::array<std::uint8_t, 8192> buffer{};
     while (input.good()) {
@@ -548,7 +564,10 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
 #ifdef __ANDROID__
             lt::SHA256_update(ctx, buffer.data(), static_cast<int>(n));
 #else
-            SHA256_Update(&ctx, buffer.data(), static_cast<std::size_t>(n));
+            if (EVP_DigestUpdate(ctx.get(), buffer.data(), static_cast<std::size_t>(n)) != 1) {
+                error = "failed to update sha256 context";
+                return false;
+            }
 #endif
         }
     }
@@ -561,7 +580,12 @@ bool sha256_file(const std::string& path, std::string& out_hex, std::string& err
 #ifdef __ANDROID__
     lt::SHA256_final(digest.data(), ctx);
 #else
-    SHA256_Final(digest.data(), &ctx);
+    unsigned int digest_len = 0;
+    if (EVP_DigestFinal_ex(ctx.get(), digest.data(), &digest_len) != 1 ||
+            digest_len != digest.size()) {
+        error = "failed to finalize sha256 digest";
+        return false;
+    }
 #endif
     out_hex = hex_encode(digest.data(), digest.size());
     return true;
@@ -590,7 +614,7 @@ PeerCounters emit_peer_counters(const lt::peer_info_alert& alert) {
             counters.from_peers += static_cast<int64_t>(peer.total_download);
         }
         log_peer_diag_info("P2PDownloadManager: peer info endpoint=" +
-                           lt::print_endpoint(peer.ip) +
+                           endpoint_to_string(peer.ip) +
                            " type=" + (is_web_seed ? std::string("web_seed") : std::string("p2p")) +
                            " total_download=" + std::to_string(peer.total_download) +
                            " total_upload=" + std::to_string(peer.total_upload) +
@@ -864,6 +888,12 @@ void set_upload_throttle(lt::torrent_handle& handle,
 }
 
 }  // namespace
+
+#ifdef DEVICE_AGENT_TESTING
+bool sha256_file_for_test(const std::string& path, std::string& out_hex, std::string& error) {
+    return sha256_file(path, out_hex, error);
+}
+#endif
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
     const auto cfg = P2PConfigStore::global_snapshot();

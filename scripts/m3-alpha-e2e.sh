@@ -13,6 +13,10 @@ GRPC_PORT="${GRPC_PORT:-9090}"
 WAIT_SECONDS="${E2E_WAIT_SECONDS:-${WAIT_SECONDS:-600}}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
 HEADLESS_PM_INSTALL="${HEADLESS_PM_INSTALL:-1}"
+P2P_SEEDING_TTL="${P2P_SEEDING_TTL:-120}"
+if [[ "$P2P_SEEDING_TTL" =~ ^[0-9]+$ ]] && (( WAIT_SECONDS <= P2P_SEEDING_TTL )); then
+  WAIT_SECONDS=$((P2P_SEEDING_TTL + 60))
+fi
 
 usage() {
   cat <<'USAGE'
@@ -35,6 +39,7 @@ Environment:
   RESULT_ROOT=<path>           Defaults to ./logs/m3-alpha-s4.
   APP_TORRENT_DIR=<rel-path>   App-internal torrent staging dir via run-as. Defaults to files/p2p.
   E2E_WAIT_SECONDS=<seconds>   Download evidence wait window. Defaults to 600.
+  P2P_SEEDING_TTL=<seconds>    Native seeding TTL override for AC5. Defaults to 120.
   HEADLESS_PM_INSTALL=0        Disable adb pm install helper after APK P2P completion.
   SKIP_DB_TRIGGER=1            Push torrent and collect logs without inserting commands.
 USAGE
@@ -265,7 +270,7 @@ run_native_test() {
   adb -s "$serial" push "$bin_path" /data/local/tmp/p2p_download_manager_test >>"$out_file" 2>&1
   adb -s "$serial" push "$cxx_shared" /data/local/tmp/libc++_shared.so >>"$out_file" 2>&1
   adb_shell "$serial" chmod 755 /data/local/tmp/p2p_download_manager_test >>"$out_file" 2>&1
-  adb_shell "$serial" "LD_LIBRARY_PATH=/data/local/tmp TMPDIR=/data/local/tmp /data/local/tmp/p2p_download_manager_test" >>"$out_file" 2>&1
+  adb_shell "$serial" "LD_LIBRARY_PATH=/data/local/tmp TMPDIR=/data/local/tmp P2P_SEEDING_TTL=$P2P_SEEDING_TTL /data/local/tmp/p2p_download_manager_test" >>"$out_file" 2>&1
 }
 
 insert_download_ready() {
@@ -381,6 +386,7 @@ write_summary() {
 - Device serials: \`${DEVICE_SERIALS}\`
 - Device ids: \`${DEVICE_IDS_RESOLVED}\`
 - Wait seconds: \`${WAIT_SECONDS}\`
+- P2P seeding TTL: \`${P2P_SEEDING_TTL}\`
 
 ## Evidence
 

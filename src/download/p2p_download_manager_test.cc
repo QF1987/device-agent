@@ -20,6 +20,9 @@ constexpr int kLibtorrentMaxUploadsUnlimited = 16777215;
 constexpr int kLibtorrentUploadLimitUnlimited = -1;
 constexpr int kConfiguredUploadLimitBytesPerSecond = 7 * 1024;
 constexpr int kCellularSuppressedUploadLimitBytesPerSecond = 5120;
+constexpr const char* kShaFixture = "device-agent sha256 fixture\n";
+constexpr const char* kShaFixtureDigest =
+    "a71202f43a7a48d735443b705a52c0acb30bb1084854969c9f557ba3f72d7a98";
 
 std::string bencoded_string(const std::string& value) {
     return std::to_string(value.size()) + ":" + value;
@@ -94,6 +97,10 @@ bool wait_until_upload_throttle(device_agent::P2PDownloadManager& manager,
 }
 
 }  // namespace
+
+namespace device_agent {
+bool sha256_file_for_test(const std::string& path, std::string& out_hex, std::string& error);
+}
 
 int main() {
     using device_agent::DownloadRequest;
@@ -185,6 +192,16 @@ int main() {
     const std::string save_dir = dir + "/save";
     mkdir(save_dir.c_str(), 0700);
     write_seedless_torrent(torrent_path);
+
+    const std::string sha_path = dir + "/sha-fixture.bin";
+    {
+        std::ofstream out(sha_path, std::ios::binary);
+        out << kShaFixture;
+    }
+    std::string sha_hex;
+    std::string sha_error;
+    assert(device_agent::sha256_file_for_test(sha_path, sha_hex, sha_error));
+    assert(sha_hex == kShaFixtureDigest);
 
     auto network_policy = std::make_shared<device_agent::NetworkPolicy>();
     network_policy->on_network_changed(NetworkType::WIFI);

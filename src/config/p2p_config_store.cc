@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <limits>
 #include <mutex>
 
 namespace device_agent {
@@ -9,6 +10,7 @@ namespace {
 
 std::mutex g_store_mu;
 std::shared_ptr<P2PConfigStore> g_store;
+constexpr int kDefaultSeedingTTLSeconds = 21600;
 
 bool extract_number_token(const std::string& json, const std::string& key, std::string& out) {
     const std::string q = "\"" + key + "\"";
@@ -98,7 +100,29 @@ void set_error(std::string* error, const std::string& message) {
     }
 }
 
+int env_seeding_ttl_seconds() {
+    const char* value = std::getenv("P2P_SEEDING_TTL");
+    if (value == nullptr || *value == '\0') {
+        return kDefaultSeedingTTLSeconds;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0' || parsed <= 0 ||
+        parsed > std::numeric_limits<int>::max()) {
+        return kDefaultSeedingTTLSeconds;
+    }
+    return static_cast<int>(parsed);
+}
+
+P2PConfigSnapshot default_snapshot() {
+    P2PConfigSnapshot snapshot;
+    snapshot.seeding_ttl_seconds = env_seeding_ttl_seconds();
+    return snapshot;
+}
+
 }  // namespace
+
+P2PConfigStore::P2PConfigStore() : snapshot_(default_snapshot()) {}
 
 bool P2PConfigStore::apply(const std::string& json, std::string* error) {
     P2PConfigSnapshot next;
@@ -172,7 +196,7 @@ P2PConfigSnapshot P2PConfigStore::global_snapshot() {
         store = g_store;
     }
     if (!store) {
-        return P2PConfigSnapshot{};
+        return default_snapshot();
     }
     return store->snapshot();
 }

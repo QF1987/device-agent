@@ -15,7 +15,7 @@ struct P2PConfigSnapshot {
 
 class P2PConfigStore {
 public:
-    P2PConfigStore() = default;
+    P2PConfigStore();
 
     bool apply(const std::string& json, std::string* error = nullptr);
     P2PConfigSnapshot snapshot() const;
