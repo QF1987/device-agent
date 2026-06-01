@@ -42,12 +42,26 @@ void DeviceClient::start() {
     command_stream_thread_ = std::thread(&DeviceClient::command_stream_loop, this);
 }
 
+void DeviceClient::interruptible_sleep(std::chrono::seconds duration) {
+    std::unique_lock<std::mutex> lk(stop_mu_);
+    // running_ 变 false 时立即返回;否则最多等 duration
+    stop_cv_.wait_for(lk, duration, [this] { return !running_.load(); });
+}
+
 void DeviceClient::stop() {
     if (!running_.exchange(false)) {
         return;
     }
 
     LOG_INFO("DeviceClient stopping...");
+
+    // RV-20260602-20: 唤醒 sleep 在心跳/状态/重连退避里的线程(否则 join 要等满 30s/300s)。
+    stop_cv_.notify_all();
+    // RV-20260602-20: 取消阻塞在 reader->Read() 的 CommandStream,否则 command_stream_thread_ join 卡死。
+    {
+        std::lock_guard<std::mutex> l(cmd_ctx_mu_);
+        if (cmd_ctx_) cmd_ctx_->TryCancel();
+    }
 
     if (heartbeat_thread_.joinable()) heartbeat_thread_.join();
     if (status_report_thread_.joinable()) status_report_thread_.join();
@@ -107,15 +121,13 @@ void DeviceClient::heartbeat_loop() {
             }
         }
 
-        std::this_thread::sleep_for(
-            std::chrono::seconds(config_.heartbeat.interval_seconds));
+        interruptible_sleep(std::chrono::seconds(config_.heartbeat.interval_seconds));
     }
 }
 
 void DeviceClient::status_report_loop() {
     while (running_) {
-        std::this_thread::sleep_for(
-            std::chrono::seconds(config_.status_report.interval_seconds));
+        interruptible_sleep(std::chrono::seconds(config_.status_report.interval_seconds));
 
         if (!connected_.load()) continue;
 
@@ -155,7 +167,7 @@ void DeviceClient::command_stream_loop() {
 
         // Wait before reconnecting (exponential backoff handled in reconnect)
         if (running_) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            interruptible_sleep(std::chrono::seconds(1));
         }
     }
 }
@@ -173,6 +185,20 @@ void DeviceClient::reconnect_command_stream() {
 
     // gRPC keepalive for long-lived stream
     ctx.AddMetadata("x-keepalive", "true");
+
+    // RV-20260602-20: 暴露本 ctx 给 stop() 以便 TryCancel;RAII 在 ctx 析构前置空(声明在 ctx 之后
+    // → 先于 ctx 析构),保证 cancel-vs-destroy 不发生 UAF。
+    {
+        std::lock_guard<std::mutex> l(cmd_ctx_mu_);
+        cmd_ctx_ = &ctx;
+    }
+    struct CmdCtxGuard {
+        DeviceClient* self;
+        ~CmdCtxGuard() {
+            std::lock_guard<std::mutex> l(self->cmd_ctx_mu_);
+            self->cmd_ctx_ = nullptr;
+        }
+    } cmd_ctx_guard{this};
 
     std::unique_ptr<grpc::ClientReader<terminal_agent::v1::Command>> reader(
         command_stub_->CommandStream(&ctx, req));

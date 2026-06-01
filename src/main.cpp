@@ -267,8 +267,10 @@ int main(int argc, char* argv[]) {
     // 目前是 TODO：等业务应用接入后实现
     std::thread metrics_thread([&]() {
         while (g_running.load()) {
-            // sleep_for 是标准库的时间工具
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            // RV-20260602-20: 按 1s 粒度检查 g_running,SIGTERM 后 join 不必等满 10s(优雅退出)
+            for (int i = 0; i < 10 && g_running.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
             (void)bridge;  // 暂时不用，避免编译警告
         }
     });

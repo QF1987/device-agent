@@ -36,6 +36,9 @@
 #include <functional>
 #include <thread>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 
 #include <grpcpp/grpcpp.h>
 
@@ -119,6 +122,19 @@ private:
     // stub_mu_：保护 stub 重连时的并发访问
     // 只有在重连时需要锁，正常运行时只有对应线程访问
     mutable std::mutex stub_mu_;
+
+    // RV-20260602-20: CommandStream 的 ClientContext 句柄，供 stop() 取消阻塞的 Read()。
+    // cmd_ctx_ 指向 reconnect_command_stream() 栈上的局部 ctx;读写/取消均持 cmd_ctx_mu_,
+    // 且在该 ctx 析构前由 RAII 置空,避免 cancel-vs-destroy 的 UAF。
+    std::mutex cmd_ctx_mu_;
+    grpc::ClientContext* cmd_ctx_ = nullptr;
+
+    // RV-20260602-20: 可中断 sleep —— 心跳/状态/重连退避循环用 stop_cv_ 等待,
+    // stop() 置 running_=false 后 notify_all 立即唤醒,使 join 不必等满 30s/300s 间隔。
+    std::mutex stop_mu_;
+    std::condition_variable stop_cv_;
+    // duration 内等待,期间 running_ 变 false 立即返回(优雅退出)
+    void interruptible_sleep(std::chrono::seconds duration);
 };
 
 }  // namespace device_agent
