@@ -37,7 +37,7 @@ void usage(const char* argv0) {
         << "[--url <web-seed>] [--sha256 <hex>] [--file-size <bytes>] "
         << "[--keep-seeding-seconds <seconds>] [--self-test] "
         << "[--log-format <json|text>] [--runner-id <id>] "
-        << "[--tracker-url <url>] [--peer-wait-seconds <n>] "
+        << "[--tracker-url <url>] [--peer-wait-seconds <n> (deprecated: ignored)] "
         << "[--retry-count <n>] [--metric-port <n>]\n";
 }
 
@@ -206,8 +206,11 @@ int run_download_once(const Args& args, device_agent::RunnerLogger& logger) {
         logger.log("tracker_config", {{"tracker_url", args.tracker_url}});
     }
     if (args.peer_wait_seconds > 0) {
-        logger.log("peer_wait_config",
-                   {{"peer_wait_seconds", std::to_string(args.peer_wait_seconds)}});
+        // RV-20260531-17: peer-wait gate removed (false-negative on fast P2P).
+        // Flag kept for CLI compat but is a no-op; log so operators see it's ignored.
+        logger.log("peer_wait_config_ignored",
+                   {{"peer_wait_seconds", std::to_string(args.peer_wait_seconds)},
+                    {"note", "deprecated; download success gated on torrent finished + SHA"}});
     }
 
     device_agent::DownloadRequest req;
