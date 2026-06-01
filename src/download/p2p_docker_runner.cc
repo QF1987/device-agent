@@ -189,7 +189,9 @@ void apply_runtime_env(const Args& args) {
     } else {
         unsetenv("P2P_TRACKER_URL");
     }
-    set_env_int("P2P_PEER_WAIT_SECONDS", args.peer_wait_seconds);
+    // Runner peer-wait is a smoke observation gate. The download manager should
+    // still report success once torrent completion and SHA verification succeed.
+    unsetenv("P2P_PEER_WAIT_SECONDS");
 }
 
 std::string attempt_label(int attempt, int retry_count) {

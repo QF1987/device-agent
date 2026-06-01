@@ -107,6 +107,7 @@ int main() {
     using device_agent::NetworkType;
     using device_agent::P2PDownloadState;
     using device_agent::P2PDownloadManager;
+    using device_agent::CompletionPathTelemetry;
     using device_agent::P2PConfigStore;
     using device_agent::P2PSeedingPolicy;
     using device_agent::P2PSeedingStateMachine;
@@ -139,6 +140,19 @@ int main() {
     assert(alpha_policy.max_upload_kbps == 7);
     assert(alpha_policy.cellular_seeding_enabled);
     P2PConfigStore::set_global(nullptr);
+
+    assert(device_agent::completion_path_for_test(
+        false, false, 4096, 0, 4096, false) == CompletionPathTelemetry::P2PPrimary);
+    assert(device_agent::completion_path_for_test(
+        false, false, 0, 0, 4096, false) == CompletionPathTelemetry::P2PPrimary);
+    assert(device_agent::completion_path_for_test(
+        false, false, 0, 0, 4096, true) == CompletionPathTelemetry::WebSeedPrimary);
+    assert(device_agent::completion_path_for_test(
+        false, false, 0, 0, 0, false) == CompletionPathTelemetry::Unspecified);
+    assert(device_agent::completion_path_for_test(
+        true, false, 4096, 0, 4096, false) == CompletionPathTelemetry::HttpFallbackStall);
+    assert(device_agent::completion_path_for_test(
+        false, true, 4096, 0, 4096, false) == CompletionPathTelemetry::HttpFallbackShaMismatch);
 
     P2PDownloadManager empty_url_manager;
     bool empty_complete = false;

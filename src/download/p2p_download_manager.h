@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -115,5 +116,14 @@ private:
     Callbacks callbacks_;
     P2PSeedingStateMachine state_machine_;
 };
+
+#ifdef DEVICE_AGENT_TESTING
+CompletionPathTelemetry completion_path_for_test(bool stall_fallback,
+                                                 bool sha_fallback,
+                                                 int64_t peer_bytes,
+                                                 int64_t web_seed_bytes,
+                                                 int64_t total_payload_download,
+                                                 bool has_web_seed_hint);
+#endif
 
 }  // namespace device_agent

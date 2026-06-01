@@ -40,6 +40,7 @@ constexpr int ANDROID_LOG_WARN = 5;
 #include <random>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -58,6 +59,13 @@ struct PeerCounters {
     int64_t from_peers = 0;
     int64_t from_web_seed = 0;
 };
+
+struct PeerCounterSample {
+    int64_t total_download = 0;
+    bool is_web_seed = false;
+};
+
+using PeerCounterLedger = std::unordered_map<std::string, PeerCounterSample>;
 
 std::string dirname_or_current(const std::string& path) {
     const auto slash = path.find_last_of('/');
@@ -357,7 +365,9 @@ lt::session make_session() {
         lt::alert_category::connect |
         lt::alert_category::status |
         lt::alert_category::storage |
-        lt::alert_category::tracker;
+        lt::alert_category::tracker |
+        lt::alert_category::piece_progress |
+        lt::alert_category::block_progress;
     pack.set_int(lt::settings_pack::alert_mask,
                  static_cast<int>(static_cast<std::uint32_t>(alert_mask)));
 
@@ -601,17 +611,43 @@ void emit_peer_counter_values(int64_t from_peers, int64_t from_web_seed) {
 #endif
 }
 
-PeerCounters emit_peer_counters(const lt::peer_info_alert& alert) {
+bool is_web_seed_peer(const lt::peer_info& peer) {
+    return peer.connection_type == lt::peer_info::web_seed ||
+           peer.connection_type == lt::peer_info::http_seed;
+}
+
+std::string peer_counter_key(const lt::peer_info& peer) {
+    const bool web_seed = is_web_seed_peer(peer);
+    return std::string(web_seed ? "web:" : "peer:") + endpoint_to_string(peer.ip);
+}
+
+PeerCounters peer_counter_totals(const PeerCounterLedger& ledger) {
     PeerCounters counters;
-    for (const auto& peer : alert.peer_info) {
-        const bool is_web_seed =
-            peer.connection_type == lt::peer_info::web_seed ||
-            peer.connection_type == lt::peer_info::http_seed;
-        if (peer.connection_type == lt::peer_info::web_seed ||
-                peer.connection_type == lt::peer_info::http_seed) {
-            counters.from_web_seed += static_cast<int64_t>(peer.total_download);
+    for (const auto& item : ledger) {
+        if (item.second.is_web_seed) {
+            counters.from_web_seed += item.second.total_download;
         } else {
-            counters.from_peers += static_cast<int64_t>(peer.total_download);
+            counters.from_peers += item.second.total_download;
+        }
+    }
+    return counters;
+}
+
+PeerCounters emit_peer_counters(const lt::peer_info_alert& alert,
+                                PeerCounterLedger* ledger = nullptr) {
+    PeerCounters snapshot;
+    for (const auto& peer : alert.peer_info) {
+        const bool is_web_seed = is_web_seed_peer(peer);
+        const int64_t total_download = static_cast<int64_t>(peer.total_download);
+        if (is_web_seed) {
+            snapshot.from_web_seed += total_download;
+        } else {
+            snapshot.from_peers += total_download;
+        }
+        if (ledger != nullptr) {
+            auto& sample = (*ledger)[peer_counter_key(peer)];
+            sample.is_web_seed = is_web_seed;
+            sample.total_download = std::max(sample.total_download, total_download);
         }
         log_peer_diag_info("P2PDownloadManager: peer info endpoint=" +
                            endpoint_to_string(peer.ip) +
@@ -634,6 +670,7 @@ PeerCounters emit_peer_counters(const lt::peer_info_alert& alert) {
                                static_cast<int>(static_cast<bool>(peer.flags & lt::peer_info::snubbed))));
     }
 
+    const PeerCounters counters = ledger != nullptr ? peer_counter_totals(*ledger) : snapshot;
     emit_peer_counter_values(counters.from_peers, counters.from_web_seed);
     return counters;
 }
@@ -647,6 +684,11 @@ int count_p2p_peers(const lt::peer_info_alert& alert) {
         }
     }
     return count;
+}
+
+bool should_refresh_peer_info_after_alert(const lt::alert* alert) {
+    return lt::alert_cast<lt::piece_finished_alert>(alert) != nullptr ||
+           lt::alert_cast<lt::block_finished_alert>(alert) != nullptr;
 }
 
 bool wait_for_p2p_peer(lt::session& session,
@@ -680,6 +722,10 @@ bool wait_for_p2p_peer(lt::session& session,
                     return true;
                 }
             }
+            if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
+                LOG_INFO("P2PDownloadManager: peer wait observed torrent finished");
+                return true;
+            }
             if (is_piece_hash_failure(item)) {
                 log_piece_hash_failure(item);
                 continue;
@@ -693,6 +739,11 @@ bool wait_for_p2p_peer(lt::session& session,
                 return false;
             }
         }
+        const auto status = handle.status();
+        if (status.is_finished || status.is_seeding) {
+            LOG_INFO("P2PDownloadManager: peer wait completed by torrent status");
+            return true;
+        }
     }
     error = "peer wait timed out after " + std::to_string(timeout.count()) + " seconds";
     return false;
@@ -701,8 +752,8 @@ bool wait_for_p2p_peer(lt::session& session,
 bool wait_for_peer_counters(lt::session& session,
                             std::chrono::milliseconds timeout,
                             int64_t fallback_web_seed_bytes,
-                            int64_t& last_peer_bytes,
-                            int64_t& last_web_seed_bytes,
+                            PeerCounterLedger& ledger,
+                            int64_t& fallback_reported_web_seed_bytes,
                             std::string& error) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -712,9 +763,7 @@ bool wait_for_peer_counters(lt::session& session,
             for (const auto* item : alerts) {
                 log_peer_diagnostic_alert(item);
                 if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
-                    const auto counters = emit_peer_counters(*peer_info);
-                    last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
-                    last_web_seed_bytes = std::max(last_web_seed_bytes, counters.from_web_seed);
+                    emit_peer_counters(*peer_info, &ledger);
                     return true;
                 }
                 if (is_piece_hash_failure(item)) {
@@ -728,8 +777,13 @@ bool wait_for_peer_counters(lt::session& session,
             }
         }
     }
-    if (fallback_web_seed_bytes > 0) {
-        emit_peer_counter_values(0, fallback_web_seed_bytes);
+    const auto counters = peer_counter_totals(ledger);
+    if (fallback_web_seed_bytes > 0 &&
+            counters.from_peers == 0 &&
+            counters.from_web_seed == 0) {
+        fallback_reported_web_seed_bytes =
+            std::max(fallback_reported_web_seed_bytes, fallback_web_seed_bytes);
+        emit_peer_counter_values(0, fallback_reported_web_seed_bytes);
     }
     return true;
 }
@@ -737,7 +791,9 @@ bool wait_for_peer_counters(lt::session& session,
 CompletionPathTelemetry choose_completion_path(bool stall_fallback,
                                                bool sha_fallback,
                                                int64_t peer_bytes,
-                                               int64_t web_seed_bytes) {
+                                               int64_t web_seed_bytes,
+                                               int64_t total_payload_download,
+                                               bool has_web_seed_hint) {
     if (sha_fallback) {
         return CompletionPathTelemetry::HttpFallbackShaMismatch;
     }
@@ -749,6 +805,11 @@ CompletionPathTelemetry choose_completion_path(bool stall_fallback,
     }
     if (web_seed_bytes > 0) {
         return CompletionPathTelemetry::WebSeedPrimary;
+    }
+    if (total_payload_download > 0) {
+        return has_web_seed_hint
+            ? CompletionPathTelemetry::WebSeedPrimary
+            : CompletionPathTelemetry::P2PPrimary;
     }
     return CompletionPathTelemetry::Unspecified;
 }
@@ -892,6 +953,20 @@ void set_upload_throttle(lt::torrent_handle& handle,
 #ifdef DEVICE_AGENT_TESTING
 bool sha256_file_for_test(const std::string& path, std::string& out_hex, std::string& error) {
     return sha256_file(path, out_hex, error);
+}
+
+CompletionPathTelemetry completion_path_for_test(bool stall_fallback,
+                                                 bool sha_fallback,
+                                                 int64_t peer_bytes,
+                                                 int64_t web_seed_bytes,
+                                                 int64_t total_payload_download,
+                                                 bool has_web_seed_hint) {
+    return choose_completion_path(stall_fallback,
+                                  sha_fallback,
+                                  peer_bytes,
+                                  web_seed_bytes,
+                                  total_payload_download,
+                                  has_web_seed_hint);
 }
 #endif
 
@@ -1125,8 +1200,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     std::string downloaded_path;
     bool completed_by_stall_fallback = false;
     bool completed_by_sha_fallback = false;
-    int64_t last_peer_bytes = 0;
-    int64_t last_web_seed_bytes = 0;
+    PeerCounterLedger peer_counter_ledger;
+    int64_t fallback_reported_web_seed_bytes = 0;
+    int64_t last_total_payload_download = 0;
+    bool has_web_seed_hint = false;
 
     try {
         const DownloadSource source = select_download_source(req, error);
@@ -1156,6 +1233,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         params.url_seeds.push_back(req.url);
                         LOG_INFO("P2PDownloadManager: added explicit web seed " + req.url);
                     }
+                    has_web_seed_hint = !fallback_web_seed_url.empty();
 	                    downloaded_path = primary_file_path(*torrent, params.save_path);
 	                    if (downloaded_path.empty()) {
 	                        error = "p2p alpha supports single-file torrents only";
@@ -1177,6 +1255,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 }
             }
             if (error.empty()) {
+                has_web_seed_hint = !fallback_web_seed_url.empty();
                 add_tracker_helper(params, env_or_empty("P2P_TRACKER_URL"));
             }
 
@@ -1224,6 +1303,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                          params.save_path);
 
                 const auto peer_info_interval = std::chrono::seconds(5);
+                const auto event_peer_info_floor = std::chrono::milliseconds(250);
                 auto last_peer_info_post = std::chrono::steady_clock::now() - peer_info_interval;
                 const auto stall_timeout = std::chrono::seconds(60);
                 const auto slow_start_timeout = std::chrono::seconds(60);
@@ -1244,9 +1324,13 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         for (const auto* item : alerts) {
                             log_peer_diagnostic_alert(item);
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
-                                const auto counters = emit_peer_counters(*peer_info);
-                                last_peer_bytes = std::max(last_peer_bytes, counters.from_peers);
-                                last_web_seed_bytes = std::max(last_web_seed_bytes, counters.from_web_seed);
+                                emit_peer_counters(*peer_info, &peer_counter_ledger);
+                            }
+                            const auto event_now = std::chrono::steady_clock::now();
+                            if (should_refresh_peer_info_after_alert(item) &&
+                                    event_now - last_peer_info_post >= event_peer_info_floor) {
+                                handle.post_peer_info();
+                                last_peer_info_post = event_now;
                             }
                             if (lt::alert_cast<lt::torrent_finished_alert>(item) != nullptr) {
                                 if (!is_http_url(req.url)) {
@@ -1283,6 +1367,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
 
                     lt::torrent_status status = handle.status();
+                    last_total_payload_download = std::max<int64_t>(
+                        last_total_payload_download,
+                        static_cast<int64_t>(status.total_payload_download));
                     if (source.is_magnet && status.has_metadata && downloaded_path.empty()) {
                         if (resolve_primary_file_path(handle, params.save_path,
                                                       downloaded_path, error)) {
@@ -1355,14 +1442,17 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     std::string verify_error;
                     handle.post_peer_info();
                     const auto final_status = handle.status();
+                    last_total_payload_download = std::max<int64_t>(
+                        last_total_payload_download,
+                        static_cast<int64_t>(final_status.total_payload_download));
                     const int64_t fallback_web_seed_bytes =
-                        final_status.total_wanted_done > 0
+                        has_web_seed_hint && final_status.total_wanted_done > 0
                             ? final_status.total_wanted_done
-                            : std::max<int64_t>(req.file_size, 0);
+                            : (has_web_seed_hint ? std::max<int64_t>(req.file_size, 0) : 0);
                     if (!wait_for_peer_counters(*session, std::chrono::milliseconds(1000),
                                                 fallback_web_seed_bytes,
-                                                last_peer_bytes,
-                                                last_web_seed_bytes,
+                                                peer_counter_ledger,
+                                                fallback_reported_web_seed_bytes,
                                                 verify_error)) {
                         success = false;
                         error = verify_error;
@@ -1385,11 +1475,11 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                                         verify_sha256_with_retry(downloaded_path,
                                                                  req.expected_sha256,
                                                                  verify_error)) {
-                                    emit_peer_counter_values(0, std::max<int64_t>(req.file_size, 0));
-                                    completed_by_sha_fallback = true;
-                                    last_web_seed_bytes = std::max<int64_t>(
-                                        last_web_seed_bytes,
+                                    fallback_reported_web_seed_bytes = std::max<int64_t>(
+                                        fallback_reported_web_seed_bytes,
                                         std::max<int64_t>(req.file_size, 0));
+                                    emit_peer_counter_values(0, fallback_reported_web_seed_bytes);
+                                    completed_by_sha_fallback = true;
                                 } else {
                                     success = false;
                                     error = fallback_error.empty() ? verify_error : fallback_error;
@@ -1404,6 +1494,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
                 if (success) {
                     set_state_seeding();
+                    const auto final_counters = peer_counter_totals(peer_counter_ledger);
+                    const int64_t final_web_seed_bytes =
+                        std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
                     if (on_complete) {
                         on_complete(true, "");
                     }
@@ -1416,8 +1509,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             "",
                             choose_completion_path(completed_by_stall_fallback,
                                                    completed_by_sha_fallback,
-                                                   last_peer_bytes,
-                                                   last_web_seed_bytes));
+                                                   final_counters.from_peers,
+                                                   final_web_seed_bytes,
+                                                   last_total_payload_download,
+                                                   has_web_seed_hint));
                     }
                     complete_sent = true;
 
@@ -1438,7 +1533,13 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         for (const auto* item : alerts) {
                             log_peer_diagnostic_alert(item);
                             if (const auto* peer_info = lt::alert_cast<lt::peer_info_alert>(item)) {
-                                emit_peer_counters(*peer_info);
+                                emit_peer_counters(*peer_info, &peer_counter_ledger);
+                            }
+                            const auto event_now = std::chrono::steady_clock::now();
+                            if (should_refresh_peer_info_after_alert(item) &&
+                                    event_now - last_peer_info_post >= event_peer_info_floor) {
+                                handle.post_peer_info();
+                                last_peer_info_post = event_now;
                             }
                             if (is_piece_hash_failure(item)) {
                                 log_piece_hash_failure(item);
@@ -1477,6 +1578,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
         on_complete(success, success ? std::string() : error);
     }
     if (!complete_sent && (callbacks_.on_complete || callbacks_.on_complete_with_path)) {
+        const auto final_counters = peer_counter_totals(peer_counter_ledger);
+        const int64_t final_web_seed_bytes =
+            std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
         emit_complete_callback(
             callbacks_,
             req,
@@ -1485,8 +1589,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
             success ? std::string() : error,
             choose_completion_path(completed_by_stall_fallback,
                                    completed_by_sha_fallback,
-                                   last_peer_bytes,
-                                   last_web_seed_bytes));
+                                   final_counters.from_peers,
+                                   final_web_seed_bytes,
+                                   last_total_payload_download,
+                                   has_web_seed_hint));
     }
     set_state_idle();
 }
