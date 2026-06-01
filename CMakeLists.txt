@@ -218,6 +218,10 @@ else()
     message(STATUS "=== Building device-agent for desktop ===")
     option(BUILD_P2P_DOCKER_TOOLS "Build Linux P2P Docker spike tools" ON)
 
+    find_package(Threads REQUIRED)
+    find_package(protobuf CONFIG REQUIRED)
+    find_package(gRPC CONFIG REQUIRED)
+
     # Proto files for Desktop: gen-desktop/ (v34.1, pre-generated)
     # gen/ is only used by Android (gen-android/)
     set(GEN_DESKTOP_DIR "${CMAKE_SOURCE_DIR}/gen-desktop")
@@ -238,114 +242,16 @@ else()
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
         ${GEN_DESKTOP_DIR}
-        /opt/homebrew/Cellar/grpc/1.80.0/include
-        /opt/homebrew/Cellar/protobuf/34.1/include
-        /opt/homebrew/Cellar/abseil/20260107.1/include
     )
 
-    # Library paths
-    set(GRPC_LIB_DIR "/opt/homebrew/Cellar/grpc/1.80.0/lib")
-    set(PROTOBUF_LIB_DIR "/opt/homebrew/Cellar/protobuf/34.1/lib")
-    set(ABSEIL_LIB_DIR "/opt/homebrew/Cellar/abseil/20260107.1/lib")
-    set(CARES_LIB_DIR "/opt/homebrew/Cellar/c-ares/1.34.6/lib")
-    set(OPENSSL_LIB_DIR "/opt/homebrew/Cellar/openssl@3/3.6.1/lib")
-    set(RE2_LIB_DIR "/opt/homebrew/Cellar/re2/2025-11-05/lib")
-
-    link_directories(
-        ${GRPC_LIB_DIR} ${PROTOBUF_LIB_DIR} ${ABSEIL_LIB_DIR}
-        ${CARES_LIB_DIR} ${OPENSSL_LIB_DIR} ${RE2_LIB_DIR}
-    )
-
-    # Link libraries
     target_link_libraries(device-agent PRIVATE
-        ${GRPC_LIB_DIR}/libgrpc++_unsecure.dylib
-        ${GRPC_LIB_DIR}/libgrpc_unsecure.dylib
-        ${PROTOBUF_LIB_DIR}/libprotobuf.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_statusor.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_check_op.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_marshalling.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_reflection.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_commandlineflag.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_commandlineflag_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_config.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_flags_program_name.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_raw_hash_set.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_hashtablez_sampler.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_exponential_biased.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_distributions.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_seed_sequences.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_entropy_pool.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_randen.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_randen_hwaes.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_randen_hwaes_impl.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_randen_slow.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_platform.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_internal_seed_material.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_random_seed_gen_exception.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_status.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_cord.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_cordz_info.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_cord_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_cordz_functions.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_cordz_handle.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_crc_cord_state.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_crc32c.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_crc_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_crc_cpu_detect.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_leak_check.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_strerror.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_str_format_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_synchronization.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_graphcycles_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_kernel_timeout_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_stacktrace.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_borrowed_fixup_buffer.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_hash.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_city.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_symbolize.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_debugging_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_demangle_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_decode_rust_punycode.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_utf8_for_code_point.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_malloc_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_time.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_civil_time.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_strings.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_strings_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_int128.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_throw_delegate.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_time_zone.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_tracing_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_base.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_raw_logging_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_severity.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_spinlock_wait.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_vlog_config_internal.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_globals.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_globals.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_initialize.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_fnmatch.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_format.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_message.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_conditions.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_nullguard.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_structured_proto.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_log_sink_set.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_sink.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_entry.dylib
-        ${ABSEIL_LIB_DIR}/libabsl_log_internal_proto.dylib
-        ${CARES_LIB_DIR}/libcares.dylib
-        ${OPENSSL_LIB_DIR}/libssl.dylib
-        ${OPENSSL_LIB_DIR}/libcrypto.dylib
-        ${RE2_LIB_DIR}/libre2.dylib
-        ${GRPC_LIB_DIR}/libgpr.dylib
-        pthread
+        Threads::Threads
+        protobuf::libprotobuf
+        gRPC::grpc++
         z
     )
 
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
-        find_package(Threads REQUIRED)
         find_package(OpenSSL REQUIRED)
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(LIBTORRENT_RASTERBAR REQUIRED IMPORTED_TARGET libtorrent-rasterbar)

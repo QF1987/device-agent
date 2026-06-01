@@ -2,20 +2,20 @@
 # ============================================================
 # 统一 Proto 代码生成脚本
 #
-# 因为 Android gRPC prebuilt（protobuf v31.1）和桌面 Homebrew（v34.1）
+# 因为 Android gRPC prebuilt（protobuf v31.1）和桌面 Homebrew
 # 版本不同，无法用一个 protoc 生成兼容两边的代码。
 #
 # 此脚本用各自的 protoc 生成，但保证 proto 定义一致。
 # 改 proto 后运行此脚本即可。
 #
 # 默认工具路径（可用环境变量覆盖）：
-# - protoc v34.1: /Users/qf/Software/protobuf/34.1/bin/protoc（desktop stub）
+# - Homebrew protoc: $(command -v protoc)（desktop stub, must match desktop runtime）
 # - protoc v31.1: /Users/qf/Software/protobuf/31.1/bin/protoc（Android stub）
 # ============================================================
 set -e
 cd "$(dirname "$0")/.."
 
-DEFAULT_PROTOC_DESKTOP="/Users/qf/Software/protobuf/34.1/bin/protoc"
+DEFAULT_PROTOC_DESKTOP="$(command -v protoc || true)"
 DEFAULT_PROTOC_ANDROID="/Users/qf/Software/protobuf/31.1/bin/protoc"
 
 PROTOC_DESKTOP="${PROTOC_DESKTOP:-${PROTOC:-$DEFAULT_PROTOC_DESKTOP}}"
@@ -45,7 +45,8 @@ if [ ! -x "$PROTOC_ANDROID" ]; then
   exit 1
 fi
 
-require_protoc_version "$PROTOC_DESKTOP" "34.1" "DESKTOP"
+PROTOC_DESKTOP_EXPECTED="${PROTOC_DESKTOP_EXPECTED:-$("$PROTOC_DESKTOP" --version | awk '{print $2}')}"
+require_protoc_version "$PROTOC_DESKTOP" "$PROTOC_DESKTOP_EXPECTED" "DESKTOP"
 require_protoc_version "$PROTOC_ANDROID" "31.1" "ANDROID"
 
 GRPC_CPP_PLUGIN="${GRPC_CPP_PLUGIN:-$(command -v grpc_cpp_plugin || true)}"

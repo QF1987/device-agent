@@ -31,7 +31,7 @@ device-agent (this repo)
 sudo apt install cmake build-essential libgrpc++-dev libprotobuf-dev protobuf-compiler
 
 # macOS
-brew install cmake grpc protobuf
+brew install cmake grpc protobuf abseil c-ares re2 openssl@3
 
 # or install vcpkg and:
 vcpkg install grpc protobuf
@@ -40,12 +40,15 @@ vcpkg install grpc protobuf
 ### Build
 
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target device-agent
 ```
 
 Output: `build/bin/device-agent`
+
+The desktop CMake target uses `find_package(protobuf CONFIG)` and
+`find_package(gRPC CONFIG)`, so Homebrew upgrades do not require editing
+versioned Cellar paths by hand.
 
 ## Config
 
