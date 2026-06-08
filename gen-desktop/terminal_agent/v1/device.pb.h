@@ -58,6 +58,8 @@ namespace terminal_agent {
 namespace v1 {
 enum CompletionPath : int;
 extern const uint32_t CompletionPath_internal_data_[];
+enum NetworkType : int;
+extern const uint32_t NetworkType_internal_data_[];
 enum ReleaseDeviceStatus : int;
 extern const uint32_t ReleaseDeviceStatus_internal_data_[];
 enum ReleaseErrorCode : int;
@@ -158,6 +160,14 @@ extern const ::google::protobuf::internal::ClassDataFull HeartbeatResponse_class
 #else
 extern const HeartbeatResponseGlobalsTypeInternal HeartbeatResponse_globals_;
 #endif  // PROTOBUF_MESSAGE_GLOBALS
+class NetworkInfo;
+struct NetworkInfoGlobalsTypeInternal;
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+extern NetworkInfoGlobalsTypeInternal NetworkInfo_globals_;
+extern const ::google::protobuf::internal::ClassDataFull NetworkInfo_class_data_;
+#else
+extern const NetworkInfoGlobalsTypeInternal NetworkInfo_globals_;
+#endif  // PROTOBUF_MESSAGE_GLOBALS
 class ReleaseStatusRequest;
 struct ReleaseStatusRequestGlobalsTypeInternal;
 #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -198,6 +208,9 @@ template <>
 internal::EnumTraitsT<::terminal_agent::v1::CompletionPath_internal_data_>
     internal::EnumTraitsImpl::value<::terminal_agent::v1::CompletionPath>;
 template <>
+internal::EnumTraitsT<::terminal_agent::v1::NetworkType_internal_data_>
+    internal::EnumTraitsImpl::value<::terminal_agent::v1::NetworkType>;
+template <>
 internal::EnumTraitsT<::terminal_agent::v1::ReleaseDeviceStatus_internal_data_>
     internal::EnumTraitsImpl::value<::terminal_agent::v1::ReleaseDeviceStatus>;
 template <>
@@ -208,6 +221,48 @@ internal::EnumTraitsT<::terminal_agent::v1::ReleaseErrorCode_internal_data_>
 
 namespace terminal_agent {
 namespace v1 {
+enum NetworkType : int {
+  NET_UNKNOWN = 0,
+  CELLULAR = 1,
+  WIFI = 2,
+  ETHERNET = 3,
+  NetworkType_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::min(),
+  NetworkType_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::max(),
+};
+
+extern const uint32_t NetworkType_internal_data_[];
+inline constexpr NetworkType NetworkType_MIN =
+    static_cast<NetworkType>(0);
+inline constexpr NetworkType NetworkType_MAX =
+    static_cast<NetworkType>(3);
+[[nodiscard]] inline bool NetworkType_IsValid(int value) {
+  return 0 <= value && value <= 3;
+}
+inline constexpr int NetworkType_ARRAYSIZE = 3 + 1;
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+NetworkType_descriptor();
+[[nodiscard]] inline auto ProtobufInternalGetEnumDescriptor(NetworkType) {
+  return NetworkType_descriptor();
+}
+template <typename T>
+[[nodiscard]] const ::std::string& NetworkType_Name(T value) {
+  static_assert(::std::is_same<T, NetworkType>::value ||
+                    ::std::is_integral<T>::value,
+                "Incorrect type passed to NetworkType_Name().");
+  return NetworkType_Name(static_cast<NetworkType>(value));
+}
+template <>
+[[nodiscard]] inline const ::std::string& NetworkType_Name(NetworkType value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<NetworkType_descriptor, 0, 3>(
+      static_cast<int>(value));
+}
+[[nodiscard]] inline bool NetworkType_Parse(
+    ::absl::string_view name, NetworkType* PROTOBUF_NONNULL value) {
+  return ::google::protobuf::internal::ParseNamedEnum<NetworkType>(NetworkType_descriptor(), name,
+                                           value);
+}
 enum ReleaseDeviceStatus : int {
   RELEASE_DEVICE_STATUS_UNSPECIFIED = 0,
   RELEASE_DEVICE_STATUS_PENDING = 1,
@@ -409,7 +464,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReportResponse final : public
   [[nodiscard]] static const StatusReportResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<StatusReportResponse>(&StatusReportResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 7;
+  static constexpr int kIndexInFileMessages = 8;
   friend void swap(StatusReportResponse& a, StatusReportResponse& b) { a.Swap(&b); }
   inline void Swap(StatusReportResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -627,7 +682,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusResponse final : publi
   [[nodiscard]] static const ReleaseStatusResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<ReleaseStatusResponse>(&ReleaseStatusResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 15;
+  static constexpr int kIndexInFileMessages = 16;
   friend void swap(ReleaseStatusResponse& a, ReleaseStatusResponse& b) { a.Swap(&b); }
   inline void Swap(ReleaseStatusResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -845,7 +900,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   [[nodiscard]] static const ReleaseStatusRequest& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<ReleaseStatusRequest>(&ReleaseStatusRequest_globals_);
   }
-  static constexpr int kIndexInFileMessages = 14;
+  static constexpr int kIndexInFileMessages = 15;
   friend void swap(ReleaseStatusRequest& a, ReleaseStatusRequest& b) { a.Swap(&b); }
   inline void Swap(ReleaseStatusRequest* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1099,6 +1154,316 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
     int error_code_;
     ::int64_t timestamp_;
     int completion_path_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto;
+};
+// -------------------------------------------------------------------
+
+class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED NetworkInfo final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:terminal_agent.v1.NetworkInfo) */ {
+ public:
+  inline NetworkInfo() : NetworkInfo(nullptr) {}
+  ~NetworkInfo() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(NetworkInfo* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(NetworkInfo));
+  }
+#endif
+
+  template <typename = void>
+  explicit constexpr NetworkInfo(::google::protobuf::internal::ConstantInitialized,
+                           const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+                               class_data);
+
+  inline NetworkInfo(const NetworkInfo& from) : NetworkInfo(nullptr, from) {}
+  inline NetworkInfo(NetworkInfo&& from) noexcept : NetworkInfo(nullptr, ::std::move(from)) {}
+  inline NetworkInfo& operator=(const NetworkInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline NetworkInfo& operator=(NetworkInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  [[nodiscard]] inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  [[nodiscard]] inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL
+  mutable_unknown_fields() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL
+  GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  [[nodiscard]] static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  [[nodiscard]] static const NetworkInfo& default_instance() {
+    return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<NetworkInfo>(&NetworkInfo_globals_);
+  }
+  static constexpr int kIndexInFileMessages = 6;
+  friend void swap(NetworkInfo& a, NetworkInfo& b) { a.Swap(&b); }
+  inline void Swap(NetworkInfo* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(NetworkInfo* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  [[nodiscard]] NetworkInfo* PROTOBUF_NONNULL
+  New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<NetworkInfo>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const NetworkInfo& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const NetworkInfo& from) { NetworkInfo::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  [[nodiscard]] bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  [[nodiscard]] static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  [[nodiscard]] static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  [[nodiscard]] ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] ::size_t ByteSizeLong() const final;
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] int GetCachedSize() const {
+    return _impl_._cached_size_.Get();
+  }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(NetworkInfo* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "terminal_agent.v1.NetworkInfo"; }
+
+  explicit NetworkInfo(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  NetworkInfo(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const NetworkInfo& from);
+  NetworkInfo(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, NetworkInfo&& from) noexcept
+      : NetworkInfo(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_(
+      const MessageLite& prototype,
+      const ::google::protobuf::internal::TcParseTableBase* PROTOBUF_NULLABLE tc_table = nullptr);
+
+  [[nodiscard]] ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kGatewayMacFieldNumber = 1,
+    kBssidFieldNumber = 2,
+    kLanIpFieldNumber = 3,
+    kLanCidrFieldNumber = 4,
+    kPublicIpFieldNumber = 5,
+    kNetTypeFieldNumber = 6,
+    kIsMeteredFieldNumber = 7,
+    kIsRoamingFieldNumber = 8,
+  };
+  // string gateway_mac = 1;
+  void clear_gateway_mac() ;
+  [[nodiscard]] const ::std::string& gateway_mac() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_gateway_mac(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_gateway_mac();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_gateway_mac();
+  void set_allocated_gateway_mac(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_gateway_mac() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_gateway_mac(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_gateway_mac();
+
+  public:
+  // string bssid = 2;
+  void clear_bssid() ;
+  [[nodiscard]] const ::std::string& bssid() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_bssid(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_bssid();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_bssid();
+  void set_allocated_bssid(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_bssid() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_bssid(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_bssid();
+
+  public:
+  // string lan_ip = 3;
+  void clear_lan_ip() ;
+  [[nodiscard]] const ::std::string& lan_ip() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_lan_ip(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_lan_ip();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_lan_ip();
+  void set_allocated_lan_ip(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_lan_ip() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_lan_ip(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_lan_ip();
+
+  public:
+  // string lan_cidr = 4;
+  void clear_lan_cidr() ;
+  [[nodiscard]] const ::std::string& lan_cidr() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_lan_cidr(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_lan_cidr();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_lan_cidr();
+  void set_allocated_lan_cidr(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_lan_cidr() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_lan_cidr(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_lan_cidr();
+
+  public:
+  // string public_ip = 5;
+  void clear_public_ip() ;
+  [[nodiscard]] const ::std::string& public_ip() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_public_ip(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_public_ip();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_public_ip();
+  void set_allocated_public_ip(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_public_ip() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_public_ip(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_public_ip();
+
+  public:
+  // .terminal_agent.v1.NetworkType net_type = 6;
+  void clear_net_type() ;
+  [[nodiscard]] ::terminal_agent::v1::NetworkType net_type() const;
+  void set_net_type(::terminal_agent::v1::NetworkType value);
+
+  private:
+  ::terminal_agent::v1::NetworkType _internal_net_type() const;
+  void _internal_set_net_type(::terminal_agent::v1::NetworkType value);
+
+  public:
+  // bool is_metered = 7;
+  void clear_is_metered() ;
+  [[nodiscard]] bool is_metered() const;
+  void set_is_metered(bool value);
+
+  private:
+  bool _internal_is_metered() const;
+  void _internal_set_is_metered(bool value);
+
+  public:
+  // bool is_roaming = 8;
+  void clear_is_roaming() ;
+  [[nodiscard]] bool is_roaming() const;
+  void set_is_roaming(bool value);
+
+  private:
+  bool _internal_is_roaming() const;
+  void _internal_set_is_roaming(bool value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:terminal_agent.v1.NetworkInfo)
+ private:
+  class _Internal;
+  using ParseTableT_ =
+      ::google::protobuf::internal::TcParseTable<3, 8,
+                          0, 85,
+                          2>;
+  static constexpr ParseTableT_ InternalGenerateParseTable_(
+      const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
+  friend class ::google::protobuf::internal::TcParser;
+  #ifndef PROTOBUF_MESSAGE_GLOBALS
+  static const ParseTableT_ _table_;
+  #endif
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  friend ::google::protobuf::internal::PrivateAccess;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                                    ::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const NetworkInfo& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::internal::ArenaStringPtr gateway_mac_;
+    ::google::protobuf::internal::ArenaStringPtr bssid_;
+    ::google::protobuf::internal::ArenaStringPtr lan_ip_;
+    ::google::protobuf::internal::ArenaStringPtr lan_cidr_;
+    ::google::protobuf::internal::ArenaStringPtr public_ip_;
+    int net_type_;
+    bool is_metered_;
+    bool is_roaming_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -1375,7 +1740,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EventReportResponse final : public 
   [[nodiscard]] static const EventReportResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<EventReportResponse>(&EventReportResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 9;
+  static constexpr int kIndexInFileMessages = 10;
   friend void swap(EventReportResponse& a, EventReportResponse& b) { a.Swap(&b); }
   inline void Swap(EventReportResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1593,7 +1958,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EventReport final : public ::google
   [[nodiscard]] static const EventReport& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<EventReport>(&EventReport_globals_);
   }
-  static constexpr int kIndexInFileMessages = 8;
+  static constexpr int kIndexInFileMessages = 9;
   friend void swap(EventReport& a, EventReport& b) { a.Swap(&b); }
   inline void Swap(EventReport* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1879,7 +2244,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
   [[nodiscard]] static const DownloadReadyCommand& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<DownloadReadyCommand>(&DownloadReadyCommand_globals_);
   }
-  static constexpr int kIndexInFileMessages = 10;
+  static constexpr int kIndexInFileMessages = 11;
   friend void swap(DownloadReadyCommand& a, DownloadReadyCommand& b) { a.Swap(&b); }
   inline void Swap(DownloadReadyCommand* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -2966,7 +3331,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommandStreamRequest final : public
   [[nodiscard]] static const CommandStreamRequest& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<CommandStreamRequest>(&CommandStreamRequest_globals_);
   }
-  static constexpr int kIndexInFileMessages = 12;
+  static constexpr int kIndexInFileMessages = 13;
   friend void swap(CommandStreamRequest& a, CommandStreamRequest& b) { a.Swap(&b); }
   inline void Swap(CommandStreamRequest* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3172,7 +3537,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommandResult final : public ::goog
   [[nodiscard]] static const CommandResult& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<CommandResult>(&CommandResult_globals_);
   }
-  static constexpr int kIndexInFileMessages = 13;
+  static constexpr int kIndexInFileMessages = 14;
   friend void swap(CommandResult& a, CommandResult& b) { a.Swap(&b); }
   inline void Swap(CommandResult* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3441,7 +3806,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Command final : public ::google::pr
   [[nodiscard]] static const Command& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Command>(&Command_globals_);
   }
-  static constexpr int kIndexInFileMessages = 11;
+  static constexpr int kIndexInFileMessages = 12;
   friend void swap(Command& a, Command& b) { a.Swap(&b); }
   inline void Swap(Command* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3945,7 +4310,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
   [[nodiscard]] static const StatusReport& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<StatusReport>(&StatusReport_globals_);
   }
-  static constexpr int kIndexInFileMessages = 6;
+  static constexpr int kIndexInFileMessages = 7;
   friend void swap(StatusReport& a, StatusReport& b) { a.Swap(&b); }
   inline void Swap(StatusReport* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -4042,6 +4407,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
     kFirmwareVersionFieldNumber = 4,
     kMetricsFieldNumber = 5,
     kConfigFieldNumber = 6,
+    kNetworkInfoFieldNumber = 7,
     kTimestampFieldNumber = 2,
   };
   // string device_id = 1;
@@ -4121,6 +4487,22 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
   ::terminal_agent::v1::DeviceConfig* PROTOBUF_NONNULL _internal_mutable_config();
 
   public:
+  // .terminal_agent.v1.NetworkInfo network_info = 7;
+  [[nodiscard]] bool has_network_info()
+      const;
+  void clear_network_info() ;
+  [[nodiscard]] const ::terminal_agent::v1::NetworkInfo& network_info() const;
+  [[nodiscard]] ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE release_network_info();
+  ::terminal_agent::v1::NetworkInfo* PROTOBUF_NONNULL mutable_network_info();
+  void set_allocated_network_info(::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE value);
+  void unsafe_arena_set_allocated_network_info(::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE value);
+  ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE unsafe_arena_release_network_info();
+
+  private:
+  const ::terminal_agent::v1::NetworkInfo& _internal_network_info() const;
+  ::terminal_agent::v1::NetworkInfo* PROTOBUF_NONNULL _internal_mutable_network_info();
+
+  public:
   // int64 timestamp = 2;
   void clear_timestamp() ;
   [[nodiscard]] ::int64_t timestamp() const;
@@ -4135,8 +4517,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<3, 6,
-                          2, 70,
+      ::google::protobuf::internal::TcParseTable<3, 7,
+                          3, 70,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -4169,6 +4551,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
     ::google::protobuf::internal::ArenaStringPtr firmware_version_;
     ::terminal_agent::v1::DeviceMetrics* PROTOBUF_NULLABLE metrics_;
     ::terminal_agent::v1::DeviceConfig* PROTOBUF_NULLABLE config_;
+    ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE network_info_;
     ::int64_t timestamp_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -5460,6 +5843,402 @@ inline void DeviceConfig::set_allocated_custom_config_json(::std::string* PROTOB
 
 // -------------------------------------------------------------------
 
+// NetworkInfo
+
+// string gateway_mac = 1;
+inline void NetworkInfo::clear_gateway_mac() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.gateway_mac_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+}
+inline const ::std::string& NetworkInfo::gateway_mac() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.gateway_mac)
+  return _internal_gateway_mac();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void NetworkInfo::set_gateway_mac(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  _impl_.gateway_mac_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.gateway_mac)
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::mutable_gateway_mac()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ::std::string* _s = _internal_mutable_gateway_mac();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.NetworkInfo.gateway_mac)
+  return _s;
+}
+inline const ::std::string& NetworkInfo::_internal_gateway_mac() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.gateway_mac_.Get();
+}
+inline void NetworkInfo::_internal_set_gateway_mac(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.gateway_mac_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::_internal_mutable_gateway_mac() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.gateway_mac_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE NetworkInfo::release_gateway_mac() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.NetworkInfo.gateway_mac)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000001U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  auto* released = _impl_.gateway_mac_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.gateway_mac_.Set("", GetArena());
+  }
+  return released;
+}
+inline void NetworkInfo::set_allocated_gateway_mac(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  }
+  _impl_.gateway_mac_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.gateway_mac_.IsDefault()) {
+    _impl_.gateway_mac_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.NetworkInfo.gateway_mac)
+}
+
+// string bssid = 2;
+inline void NetworkInfo::clear_bssid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.bssid_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+}
+inline const ::std::string& NetworkInfo::bssid() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.bssid)
+  return _internal_bssid();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void NetworkInfo::set_bssid(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  _impl_.bssid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.bssid)
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::mutable_bssid()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ::std::string* _s = _internal_mutable_bssid();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.NetworkInfo.bssid)
+  return _s;
+}
+inline const ::std::string& NetworkInfo::_internal_bssid() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.bssid_.Get();
+}
+inline void NetworkInfo::_internal_set_bssid(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.bssid_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::_internal_mutable_bssid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.bssid_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE NetworkInfo::release_bssid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.NetworkInfo.bssid)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000002U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  auto* released = _impl_.bssid_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.bssid_.Set("", GetArena());
+  }
+  return released;
+}
+inline void NetworkInfo::set_allocated_bssid(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  }
+  _impl_.bssid_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.bssid_.IsDefault()) {
+    _impl_.bssid_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.NetworkInfo.bssid)
+}
+
+// string lan_ip = 3;
+inline void NetworkInfo::clear_lan_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.lan_ip_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+}
+inline const ::std::string& NetworkInfo::lan_ip() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.lan_ip)
+  return _internal_lan_ip();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void NetworkInfo::set_lan_ip(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  _impl_.lan_ip_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.lan_ip)
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::mutable_lan_ip()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  ::std::string* _s = _internal_mutable_lan_ip();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.NetworkInfo.lan_ip)
+  return _s;
+}
+inline const ::std::string& NetworkInfo::_internal_lan_ip() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.lan_ip_.Get();
+}
+inline void NetworkInfo::_internal_set_lan_ip(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.lan_ip_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::_internal_mutable_lan_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.lan_ip_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE NetworkInfo::release_lan_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.NetworkInfo.lan_ip)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000004U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  auto* released = _impl_.lan_ip_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.lan_ip_.Set("", GetArena());
+  }
+  return released;
+}
+inline void NetworkInfo::set_allocated_lan_ip(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  }
+  _impl_.lan_ip_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.lan_ip_.IsDefault()) {
+    _impl_.lan_ip_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.NetworkInfo.lan_ip)
+}
+
+// string lan_cidr = 4;
+inline void NetworkInfo::clear_lan_cidr() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.lan_cidr_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+}
+inline const ::std::string& NetworkInfo::lan_cidr() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.lan_cidr)
+  return _internal_lan_cidr();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void NetworkInfo::set_lan_cidr(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  _impl_.lan_cidr_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.lan_cidr)
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::mutable_lan_cidr()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  ::std::string* _s = _internal_mutable_lan_cidr();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.NetworkInfo.lan_cidr)
+  return _s;
+}
+inline const ::std::string& NetworkInfo::_internal_lan_cidr() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.lan_cidr_.Get();
+}
+inline void NetworkInfo::_internal_set_lan_cidr(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.lan_cidr_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::_internal_mutable_lan_cidr() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.lan_cidr_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE NetworkInfo::release_lan_cidr() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.NetworkInfo.lan_cidr)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000008U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  auto* released = _impl_.lan_cidr_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.lan_cidr_.Set("", GetArena());
+  }
+  return released;
+}
+inline void NetworkInfo::set_allocated_lan_cidr(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  }
+  _impl_.lan_cidr_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.lan_cidr_.IsDefault()) {
+    _impl_.lan_cidr_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.NetworkInfo.lan_cidr)
+}
+
+// string public_ip = 5;
+inline void NetworkInfo::clear_public_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.public_ip_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+}
+inline const ::std::string& NetworkInfo::public_ip() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.public_ip)
+  return _internal_public_ip();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void NetworkInfo::set_public_ip(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  _impl_.public_ip_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.public_ip)
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::mutable_public_ip()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  ::std::string* _s = _internal_mutable_public_ip();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.NetworkInfo.public_ip)
+  return _s;
+}
+inline const ::std::string& NetworkInfo::_internal_public_ip() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.public_ip_.Get();
+}
+inline void NetworkInfo::_internal_set_public_ip(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.public_ip_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL NetworkInfo::_internal_mutable_public_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.public_ip_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE NetworkInfo::release_public_ip() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.NetworkInfo.public_ip)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000010U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+  auto* released = _impl_.public_ip_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.public_ip_.Set("", GetArena());
+  }
+  return released;
+}
+inline void NetworkInfo::set_allocated_public_ip(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+  }
+  _impl_.public_ip_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.public_ip_.IsDefault()) {
+    _impl_.public_ip_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.NetworkInfo.public_ip)
+}
+
+// .terminal_agent.v1.NetworkType net_type = 6;
+inline void NetworkInfo::clear_net_type() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.net_type_ = 0;
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+}
+inline ::terminal_agent::v1::NetworkType NetworkInfo::net_type() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.net_type)
+  return _internal_net_type();
+}
+inline void NetworkInfo::set_net_type(::terminal_agent::v1::NetworkType value) {
+  _internal_set_net_type(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.net_type)
+}
+inline ::terminal_agent::v1::NetworkType NetworkInfo::_internal_net_type() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return static_cast<::terminal_agent::v1::NetworkType>(_impl_.net_type_);
+}
+inline void NetworkInfo::_internal_set_net_type(::terminal_agent::v1::NetworkType value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.net_type_ = value;
+}
+
+// bool is_metered = 7;
+inline void NetworkInfo::clear_is_metered() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.is_metered_ = false;
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+}
+inline bool NetworkInfo::is_metered() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.is_metered)
+  return _internal_is_metered();
+}
+inline void NetworkInfo::set_is_metered(bool value) {
+  _internal_set_is_metered(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.is_metered)
+}
+inline bool NetworkInfo::_internal_is_metered() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.is_metered_;
+}
+inline void NetworkInfo::_internal_set_is_metered(bool value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.is_metered_ = value;
+}
+
+// bool is_roaming = 8;
+inline void NetworkInfo::clear_is_roaming() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.is_roaming_ = false;
+  ClearHasBit(_impl_._has_bits_[0], 0x00000080U);
+}
+inline bool NetworkInfo::is_roaming() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.NetworkInfo.is_roaming)
+  return _internal_is_roaming();
+}
+inline void NetworkInfo::set_is_roaming(bool value) {
+  _internal_set_is_roaming(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000080U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.NetworkInfo.is_roaming)
+}
+inline bool NetworkInfo::_internal_is_roaming() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.is_roaming_;
+}
+inline void NetworkInfo::_internal_set_is_roaming(bool value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.is_roaming_ = value;
+}
+
+// -------------------------------------------------------------------
+
 // StatusReport
 
 // string device_id = 1;
@@ -5530,7 +6309,7 @@ inline void StatusReport::set_allocated_device_id(::std::string* PROTOBUF_NULLAB
 inline void StatusReport::clear_timestamp() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.timestamp_ = ::int64_t{0};
-  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
 }
 inline ::int64_t StatusReport::timestamp() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.StatusReport.timestamp)
@@ -5538,7 +6317,7 @@ inline ::int64_t StatusReport::timestamp() const {
 }
 inline void StatusReport::set_timestamp(::int64_t value) {
   _internal_set_timestamp(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.StatusReport.timestamp)
 }
 inline ::int64_t StatusReport::_internal_timestamp() const {
@@ -5872,6 +6651,104 @@ inline void StatusReport::set_allocated_config(::terminal_agent::v1::DeviceConfi
 
   _impl_.config_ = reinterpret_cast<::terminal_agent::v1::DeviceConfig*>(value);
   // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.StatusReport.config)
+}
+
+// .terminal_agent.v1.NetworkInfo network_info = 7;
+inline bool StatusReport::has_network_info() const {
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000020U);
+  PROTOBUF_ASSUME(!value || _impl_.network_info_ != nullptr);
+  return value;
+}
+inline void StatusReport::clear_network_info() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.network_info_ != nullptr) _impl_.network_info_->Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+}
+inline const ::terminal_agent::v1::NetworkInfo& StatusReport::_internal_network_info() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  const ::terminal_agent::v1::NetworkInfo* p = _impl_.network_info_;
+  return p != nullptr ? *p : *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<::terminal_agent::v1::NetworkInfo>(&::terminal_agent::v1::NetworkInfo_globals_);
+}
+inline const ::terminal_agent::v1::NetworkInfo& StatusReport::network_info() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.StatusReport.network_info)
+  return _internal_network_info();
+}
+inline void StatusReport::unsafe_arena_set_allocated_network_info(
+    ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.network_info_);
+  }
+  _impl_.network_info_ = reinterpret_cast<::terminal_agent::v1::NetworkInfo*>(value);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:terminal_agent.v1.StatusReport.network_info)
+}
+inline ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE StatusReport::release_network_info() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ::terminal_agent::v1::NetworkInfo* released = _impl_.network_info_;
+  _impl_.network_info_ = nullptr;
+  if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
+    auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    if (GetArena() == nullptr) {
+      delete old;
+    }
+  } else {
+    if (GetArena() != nullptr) {
+      released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    }
+  }
+  return released;
+}
+inline ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE StatusReport::unsafe_arena_release_network_info() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.StatusReport.network_info)
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ::terminal_agent::v1::NetworkInfo* temp = _impl_.network_info_;
+  _impl_.network_info_ = nullptr;
+  return temp;
+}
+inline ::terminal_agent::v1::NetworkInfo* PROTOBUF_NONNULL StatusReport::_internal_mutable_network_info() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.network_info_ == nullptr) {
+    auto* p = ::google::protobuf::Message::DefaultConstruct<::terminal_agent::v1::NetworkInfo>(GetArena());
+    _impl_.network_info_ = reinterpret_cast<::terminal_agent::v1::NetworkInfo*>(p);
+  }
+  return _impl_.network_info_;
+}
+inline ::terminal_agent::v1::NetworkInfo* PROTOBUF_NONNULL StatusReport::mutable_network_info()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ::terminal_agent::v1::NetworkInfo* _msg = _internal_mutable_network_info();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.StatusReport.network_info)
+  return _msg;
+}
+inline void StatusReport::set_allocated_network_info(::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.network_info_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = value->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  }
+
+  _impl_.network_info_ = reinterpret_cast<::terminal_agent::v1::NetworkInfo*>(value);
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.StatusReport.network_info)
 }
 
 // -------------------------------------------------------------------
@@ -8026,6 +8903,12 @@ inline void ReleaseStatusResponse::set_allocated_message(::std::string* PROTOBUF
 namespace google {
 namespace protobuf {
 
+template <>
+struct is_proto_enum<::terminal_agent::v1::NetworkType> : std::true_type {};
+template <>
+inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::terminal_agent::v1::NetworkType>() {
+  return ::terminal_agent::v1::NetworkType_descriptor();
+}
 template <>
 struct is_proto_enum<::terminal_agent::v1::ReleaseDeviceStatus> : std::true_type {};
 template <>

@@ -11,8 +11,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.DhcpInfo
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
@@ -25,6 +27,8 @@ import com.deviceagent.install.CustomInstaller
 import com.deviceagent.install.NormalInstaller
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.net.URL
 import java.security.MessageDigest
 import java.lang.ref.WeakReference
@@ -446,6 +450,98 @@ class DeviceAgentService : Service() {
 
         override fun onLost(network: Network) {
             nativeOnNetworkChanged(false, false)
+        }
+    }
+
+    fun collectNetworkInfoSnapshot(): Array<String> {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork
+            val caps = if (network != null) cm.getNetworkCapabilities(network) else null
+            val isWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+            val isEthernet = caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+            val netType = when {
+                isWifi -> "WIFI"
+                isCellular -> "CELLULAR"
+                isEthernet -> "ETHERNET"
+                else -> "NET_UNKNOWN"
+            }
+            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val bssid = if (isWifi) {
+                wifi?.connectionInfo?.bssid?.takeUnless { it == "02:00:00:00:00:00" } ?: ""
+            } else {
+                ""
+            }
+            val gateway = if (isWifi) gatewayMacFromDhcp(wifi?.dhcpInfo) else ""
+            val lanIp = firstNonLoopbackIpv4()
+            val prefix = ipv4PrefixLength()
+            val lanCidr = if (lanIp.isNotEmpty() && prefix > 0) networkCidr(lanIp, prefix) else ""
+            val roaming = isCellular && (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING) == false)
+            arrayOf(gateway, bssid, lanIp, lanCidr, "", netType, cm.isActiveNetworkMetered.toString(), roaming.toString())
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "collectNetworkInfoSnapshot failed: ${e.message}")
+            arrayOf("", "", "", "", "", "NET_UNKNOWN", "false", "false")
+        }
+    }
+
+    private fun gatewayMacFromDhcp(dhcp: DhcpInfo?): String {
+        if (dhcp == null || dhcp.gateway == 0) return ""
+        val gatewayIp = intToIpv4(dhcp.gateway)
+        return try {
+            java.io.BufferedReader(java.io.FileReader("/proc/net/arp")).useLines { lines ->
+                lines.drop(1).firstNotNullOfOrNull { line ->
+                    val parts = line.trim().split(Regex("\\s+"))
+                    if (parts.size >= 4 && parts[0] == gatewayIp) parts[3] else null
+                }
+            } ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun intToIpv4(value: Int): String {
+        return "${value and 0xff}.${value shr 8 and 0xff}.${value shr 16 and 0xff}.${value shr 24 and 0xff}"
+    }
+
+    private fun firstNonLoopbackIpv4(): String {
+        return try {
+            NetworkInterface.getNetworkInterfaces().toList()
+                .flatMap { it.inetAddresses.toList() }
+                .filterIsInstance<Inet4Address>()
+                .firstOrNull { !it.isLoopbackAddress }?.hostAddress ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun ipv4PrefixLength(): Int {
+        return try {
+            NetworkInterface.getNetworkInterfaces().toList()
+                .flatMap { it.interfaceAddresses.toList() }
+                .firstOrNull { it.address is Inet4Address && !it.address.isLoopbackAddress }
+                ?.networkPrefixLength?.toInt() ?: 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun networkCidr(ip: String, prefix: Int): String {
+        return try {
+            val parts = ip.split(".").map { it.toInt() }
+            if (parts.size != 4 || prefix !in 1..32) return ""
+            val addr = parts.fold(0) { acc, part -> (acc shl 8) or (part and 0xff) }
+            val mask = -1 shl (32 - prefix)
+            val network = addr and mask
+            val networkIp = listOf(
+                network ushr 24,
+                network ushr 16,
+                network ushr 8,
+                network
+            ).joinToString(".") { ((it and 0xff).toString()) }
+            "$networkIp/$prefix"
+        } catch (_: Exception) {
+            ""
         }
     }
 

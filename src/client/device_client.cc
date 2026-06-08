@@ -1,4 +1,5 @@
 #include "client/device_client.h"
+#include "client/network_info.h"
 #include "logger/logger.h"
 #include <chrono>
 #include <cmath>
@@ -146,6 +147,7 @@ void DeviceClient::status_report_loop() {
         metrics->set_network_rx_bytes(0);
         metrics->set_network_tx_bytes(0);
         metrics->set_uptime_seconds(0);
+        populate_network_info_proto(status.mutable_network_info());
 
         terminal_agent::v1::StatusReportResponse resp;
         grpc::ClientContext ctx;

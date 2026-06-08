@@ -16,6 +16,7 @@ class P2PJniCallbackTest {
                 String::class.java,
                 String::class.java,
                 String::class.java,
+                String::class.java,
                 String::class.java
             )
         )
@@ -45,7 +46,8 @@ class P2PJniCallbackTest {
             commandId = "cmd-p2p",
             sha256 = "abc123",
             localPath = "/data/data/com.deviceagent/files/downloads/file-p2p.apk",
-            fileType = "apk"
+            fileType = "apk",
+            downloadUrl = "https://example.invalid/file-p2p.apk"
         )
 
         assertEquals("batch-p2p", ctx.batchId)

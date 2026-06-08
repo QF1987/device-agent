@@ -208,6 +208,26 @@ message DeviceConfig {
   string custom_config_json = 5;
 }
 
+// 网络类型。用于 NetworkInfo 上报 LAN / Wi-Fi / 蜂窝等链路语义。
+enum NetworkType {
+  NET_UNKNOWN = 0;
+  CELLULAR = 1;
+  WIFI = 2;
+  ETHERNET = 3;
+}
+
+// 网络指纹快照。采不到的字段保持空字符串 / 默认值。
+message NetworkInfo {
+  string gateway_mac = 1;
+  string bssid = 2;
+  string lan_ip = 3;
+  string lan_cidr = 4;
+  string public_ip = 5;
+  NetworkType net_type = 6;
+  bool is_metered = 7;
+  bool is_roaming = 8;
+}
+
 // 状态上报（完整快照）
 // 与心跳的区别：心跳是轻量存活信号，状态上报是完整运行状态
 // 建议频率：每 5 分钟一次，或在状态发生重大变化时立即上报
@@ -241,6 +261,9 @@ message StatusReport {
 
   // 当前生效的配置
   DeviceConfig config = 6;
+
+  // 网络指纹快照。用于后续 LAN 自动归簇和 P2P 策略层。
+  NetworkInfo network_info = 7;
 }
 
 // 状态上报响应

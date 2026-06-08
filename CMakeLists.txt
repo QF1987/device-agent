@@ -12,6 +12,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
+    src/client/network_info.cc
     src/client/command_handler.cc
     src/config/config.cc
     src/config/p2p_config_store.cc
@@ -26,6 +27,7 @@ set(COMMON_SOURCES
 
 set(COMMON_HEADERS
     src/client/device_client.h
+    src/client/network_info.h
     src/client/command_handler.h
     src/config/config.h
     src/config/p2p_config_store.h
@@ -213,6 +215,18 @@ extern "C" const char* device_agent_libtorrent_version() {
         ${CMAKE_SOURCE_DIR}/src
     )
 
+    add_executable(network_info_test
+        src/client/network_info_test.cc
+        src/client/network_info.cc
+        "${GEN_ANDROID_DIR}/terminal_agent/v1/device.pb.cc"
+    )
+    target_include_directories(network_info_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_ANDROID_DIR}
+        ${GRPC_ANDROID_INSTALL_DIR}/include
+    )
+    target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
+
 # ─── Desktop (Linux/macOS): build as standalone executable ─
 else()
     message(STATUS "=== Building device-agent for desktop ===")
@@ -250,6 +264,17 @@ else()
         gRPC::grpc++
         z
     )
+
+    add_executable(network_info_test
+        src/client/network_info_test.cc
+        src/client/network_info.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+    )
+    target_include_directories(network_info_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
 
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         find_package(OpenSSL REQUIRED)

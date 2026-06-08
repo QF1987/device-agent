@@ -19,6 +19,7 @@
 #include <android/log.h>
 #include "client/device_client.h"
 #include "client/command_handler.h"
+#include "client/network_info.h"
 #include "config/config.h"
 #include "config/p2p_config_store.h"
 #include "logger/logger.h"
@@ -245,6 +246,66 @@ static void clear_jni_exception(JNIEnv* env, const char* label) {
     }
 }
 
+static std::string jstring_to_std(JNIEnv* env, jstring value) {
+    if (env == nullptr || value == nullptr) {
+        return "";
+    }
+    const char* raw = env->GetStringUTFChars(value, nullptr);
+    if (raw == nullptr) {
+        return "";
+    }
+    std::string out(raw);
+    env->ReleaseStringUTFChars(value, raw);
+    return out;
+}
+
+static terminal_agent::v1::NetworkType proto_network_type_from_string(const std::string& value) {
+    if (value == "WIFI") return terminal_agent::v1::WIFI;
+    if (value == "CELLULAR") return terminal_agent::v1::CELLULAR;
+    if (value == "ETHERNET") return terminal_agent::v1::ETHERNET;
+    return terminal_agent::v1::NET_UNKNOWN;
+}
+
+static device_agent::NetworkInfoSnapshot collect_android_network_info() {
+    device_agent::NetworkInfoSnapshot info;
+    JNIEnv* env = getJNIEnv();
+    jclass clazz = get_service_class(env);
+    if (clazz == nullptr) {
+        return info;
+    }
+    jmethodID method = env->GetMethodID(clazz, "collectNetworkInfoSnapshot", "()[Ljava/lang/String;");
+    if (method == nullptr) {
+        clear_jni_exception(env, "collectNetworkInfoSnapshot.GetMethodID");
+        env->DeleteLocalRef(clazz);
+        return info;
+    }
+    auto array = static_cast<jobjectArray>(env->CallObjectMethod(g_java_service, method));
+    if (env->ExceptionCheck() || array == nullptr) {
+        clear_jni_exception(env, "collectNetworkInfoSnapshot.CallObjectMethod");
+        env->DeleteLocalRef(clazz);
+        return info;
+    }
+    auto get = [&](jsize index) -> std::string {
+        jstring item = static_cast<jstring>(env->GetObjectArrayElement(array, index));
+        std::string value = jstring_to_std(env, item);
+        if (item != nullptr) env->DeleteLocalRef(item);
+        return value;
+    };
+    if (env->GetArrayLength(array) >= 8) {
+        info.gateway_mac = get(0);
+        info.bssid = get(1);
+        info.lan_ip = get(2);
+        info.lan_cidr = get(3);
+        info.public_ip = get(4);
+        info.net_type = proto_network_type_from_string(get(5));
+        info.is_metered = get(6) == "true";
+        info.is_roaming = get(7) == "true";
+    }
+    env->DeleteLocalRef(array);
+    env->DeleteLocalRef(clazz);
+    return info;
+}
+
 static void call_p2p_started(const device_agent::DownloadRequest& req, const std::string& localPath) {
     ScopedJniEnv scoped = ScopedJniEnv::current();
     JNIEnv* env = scoped.get();
@@ -383,6 +444,7 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
     if (config.auth.token.empty()) {
         config.auth.token = "test-token-123";
     }
+    device_agent::set_network_info_provider(collect_android_network_info);
 
     LOGI("nativeStart: server=%s:%d, device=%s",
          config.server.host.c_str(), config.server.port,
@@ -462,6 +524,7 @@ static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(
         g_network_policy.reset();
         g_executor.reset();
     }
+    device_agent::set_network_info_provider(nullptr);
     if (g_java_service != nullptr) {
         JNIEnv* env_local = getJNIEnv();
         if (env_local != nullptr) {

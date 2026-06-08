@@ -41,6 +41,8 @@ PROTOBUF_CONSTINIT ::google::protobuf::internal::ReflectionData
         {&::_pbi::kDescriptorMethods, &::descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto, /* tracker*/ nullptr,},
         // ::terminal_agent::v1::DeviceConfig
         {&::_pbi::kDescriptorMethods, &::descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto, /* tracker*/ nullptr,},
+        // ::terminal_agent::v1::NetworkInfo
+        {&::_pbi::kDescriptorMethods, &::descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto, /* tracker*/ nullptr,},
         // ::terminal_agent::v1::StatusReport
         {&::_pbi::kDescriptorMethods, &::descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto, /* tracker*/ nullptr,},
         // ::terminal_agent::v1::StatusReportResponse
@@ -168,7 +170,7 @@ constexpr auto StatusReportResponse::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[7],
+      &file_reflection_data[8],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -321,7 +323,7 @@ constexpr auto ReleaseStatusResponse::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[15],
+      &file_reflection_data[16],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -539,7 +541,7 @@ constexpr auto ReleaseStatusRequest::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[14],
+      &file_reflection_data[15],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -586,6 +588,213 @@ const ::_pbi::ClassData* ReleaseStatusRequest_get_class_data() {
   return ReleaseStatusRequest_globals_.GetClassData();
 #else
   return ReleaseStatusRequest_class_data_.base();
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+}
+}  // namespace
+#endif  // PROTOBUF_CUSTOM_VTABLE
+class NetworkInfo::_Internal {
+ public:
+  using HasBits = decltype(::std::declval<NetworkInfo>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_._has_bits_);
+};
+
+constexpr NetworkInfo::ParseTableT_ NetworkInfo::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
+  return ParseTableT_{
+    {
+      PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_._has_bits_),
+      0, // no _extensions_
+      8, 56,  // max_field_number, fast_idx_mask
+      offsetof(ParseTableT_, field_lookup_table),
+      4294967040,  // skipmap
+      offsetof(ParseTableT_, field_entries),
+      8,  // num_field_entries
+      0,  // num_aux_entries
+      offsetof(ParseTableT_, field_names),  // no aux_entries
+      class_data,
+      nullptr,  // post_loop_handler
+      ::_pbi::TcParser::GenericFallback,  // fallback
+      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+      ::_pbi::TcParser::GetTable<::terminal_agent::v1::NetworkInfo>(),  // to_prefetch
+      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+    }, {{
+      // bool is_roaming = 8;
+      {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(NetworkInfo, _impl_.is_roaming_), 7>(),
+       {64, 7, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.is_roaming_)}},
+      // string gateway_mac = 1;
+      {::_pbi::TcParser::FastUS1,
+       {10, 0, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.gateway_mac_)}},
+      // string bssid = 2;
+      {::_pbi::TcParser::FastUS1,
+       {18, 1, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.bssid_)}},
+      // string lan_ip = 3;
+      {::_pbi::TcParser::FastUS1,
+       {26, 2, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.lan_ip_)}},
+      // string lan_cidr = 4;
+      {::_pbi::TcParser::FastUS1,
+       {34, 3, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.lan_cidr_)}},
+      // string public_ip = 5;
+      {::_pbi::TcParser::FastUS1,
+       {42, 4, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.public_ip_)}},
+      // .terminal_agent.v1.NetworkType net_type = 6;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(NetworkInfo, _impl_.net_type_), 5>(),
+       {48, 5, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.net_type_)}},
+      // bool is_metered = 7;
+      {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(NetworkInfo, _impl_.is_metered_), 6>(),
+       {56, 6, 0,
+        PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.is_metered_)}},
+    }}, {{
+      65535, 65535
+    }}, {{
+      // string gateway_mac = 1;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.gateway_mac_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string bssid = 2;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.bssid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string lan_ip = 3;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.lan_ip_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string lan_cidr = 4;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.lan_cidr_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string public_ip = 5;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.public_ip_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // .terminal_agent.v1.NetworkType net_type = 6;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.net_type_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+      // bool is_metered = 7;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.is_metered_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
+      // bool is_roaming = 8;
+      {PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.is_roaming_), _Internal::kHasBitsOffset + 7, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
+    }},
+    // no aux_entries
+    {{
+      "\35\13\5\6\10\11\0\0\0\0\0\0\0\0\0\0"
+      "terminal_agent.v1.NetworkInfo"
+      "gateway_mac"
+      "bssid"
+      "lan_ip"
+      "lan_cidr"
+      "public_ip"
+    }},
+  };
+}
+
+
+inline constexpr NetworkInfo::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        gateway_mac_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        bssid_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        lan_ip_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        lan_cidr_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        public_ip_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        net_type_{static_cast< ::terminal_agent::v1::NetworkType >(0)},
+        is_metered_{false},
+        is_roaming_{false} {}
+
+template <typename>
+constexpr NetworkInfo::NetworkInfo(::_pbi::ConstantInitialized,
+                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
+    : ::google::protobuf::Message(
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          class_data
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          ),
+      _impl_(internal_visibility(), ::_pbi::ConstantInitialized()) {
+}
+inline void* PROTOBUF_NONNULL NetworkInfo::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) NetworkInfo(arena);
+}
+constexpr auto NetworkInfo::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(NetworkInfo), alignof(NetworkInfo));
+}
+constexpr auto NetworkInfo::InternalGenerateClassData_(
+    const MessageLite& prototype,
+    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+          &_table_.header,
+#else
+          tc_table,
+#endif
+          nullptr,  // IsInitialized
+          &NetworkInfo::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<NetworkInfo>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &NetworkInfo::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<NetworkInfo>(), &NetworkInfo::ByteSizeLong,
+              &NetworkInfo::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_._cached_size_),
+          false,
+      },
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+      &file_reflection_data[6],
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+      &::_pbi::kDescriptorMethods,
+      &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
+      nullptr,  // tracker
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  };
+}
+struct NetworkInfoGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
+  constexpr NetworkInfoGlobalsTypeInternal()
+      :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+        _default(::_pbi::ConstantInitialized{},
+                 NetworkInfo_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+        MessageGlobalsBase(NetworkInfo::InternalGenerateClassData_(
+            _default, &NetworkInfo_globals_._table.header)),
+        _default(::_pbi::ConstantInitialized{}, GetClassData()),
+        _table(::_pbi::PrivateAccess::GenerateParseTable<NetworkInfo>(
+            GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  {
+  }
+  ~NetworkInfoGlobalsTypeInternal() {}
+  union {
+    alignas(::_pbi::kMaxMessageAlignment) NetworkInfo _default;
+  };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  decltype(::_pbi::PrivateAccess::GenerateParseTable<NetworkInfo>(
+      ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+};
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+static_assert(PROTOBUF_FIELD_OFFSET(NetworkInfoGlobalsTypeInternal, _default) ==
+              ::_pbi::MessageGlobalsBase::OffsetToDefault());
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST NetworkInfoGlobalsTypeInternal NetworkInfo_globals_
+        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+namespace {
+const ::_pbi::ClassData* NetworkInfo_get_class_data() {
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  return NetworkInfo_globals_.GetClassData();
+#else
+  return NetworkInfo_class_data_.base();
 #endif  // PROTOBUF_MESSAGE_GLOBALS
 }
 }  // namespace
@@ -840,7 +1049,7 @@ constexpr auto EventReportResponse::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[9],
+      &file_reflection_data[10],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -1035,7 +1244,7 @@ constexpr auto EventReport::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[8],
+      &file_reflection_data[9],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -1248,7 +1457,7 @@ constexpr auto DownloadReadyCommand::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[10],
+      &file_reflection_data[11],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -1918,7 +2127,7 @@ constexpr auto CommandStreamRequest::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[12],
+      &file_reflection_data[13],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -2104,7 +2313,7 @@ constexpr auto CommandResult::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[13],
+      &file_reflection_data[14],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -2296,7 +2505,7 @@ constexpr auto Command::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[11],
+      &file_reflection_data[12],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -2515,12 +2724,12 @@ constexpr StatusReport::ParseTableT_ StatusReport::InternalGenerateParseTable_(c
     {
       PROTOBUF_FIELD_OFFSET(StatusReport, _impl_._has_bits_),
       0, // no _extensions_
-      6, 56,  // max_field_number, fast_idx_mask
+      7, 56,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967232,  // skipmap
+      4294967168,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      6,  // num_field_entries
-      2,  // num_aux_entries
+      7,  // num_field_entries
+      3,  // num_aux_entries
       offsetof(ParseTableT_, aux_entries),
       class_data,
       nullptr,  // post_loop_handler
@@ -2535,8 +2744,8 @@ constexpr StatusReport::ParseTableT_ StatusReport::InternalGenerateParseTable_(c
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.device_id_)}},
       // int64 timestamp = 2;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(StatusReport, _impl_.timestamp_), 5>(),
-       {16, 5, 0,
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(StatusReport, _impl_.timestamp_), 6>(),
+       {16, 6, 0,
         PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_)}},
       // string status = 3;
       {::_pbi::TcParser::FastUS1,
@@ -2554,14 +2763,17 @@ constexpr StatusReport::ParseTableT_ StatusReport::InternalGenerateParseTable_(c
       {::_pbi::TcParser::FastMtS1,
        {50, 4, 1,
         PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.config_)}},
-      {::_pbi::TcParser::MiniParse, {}},
+      // .terminal_agent.v1.NetworkInfo network_info = 7;
+      {::_pbi::TcParser::FastMtS1,
+       {58, 5, 2,
+        PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.network_info_)}},
     }}, {{
       65535, 65535
     }}, {{
       // string device_id = 1;
       {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.device_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // int64 timestamp = 2;
-      {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+      {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
       // string status = 3;
       {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.status_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // string firmware_version = 4;
@@ -2570,6 +2782,8 @@ constexpr StatusReport::ParseTableT_ StatusReport::InternalGenerateParseTable_(c
       {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.metrics_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
       // .terminal_agent.v1.DeviceConfig config = 6;
       {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.config_), _Internal::kHasBitsOffset + 4, 1, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      // .terminal_agent.v1.NetworkInfo network_info = 7;
+      {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.network_info_), _Internal::kHasBitsOffset + 5, 2, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -2581,6 +2795,11 @@ constexpr StatusReport::ParseTableT_ StatusReport::InternalGenerateParseTable_(c
         {::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceConfig>()},
         #else
         {::_pbi::FieldAuxMessageGlobals(), &::terminal_agent::v1::DeviceConfig_globals_},
+        #endif
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::terminal_agent::v1::NetworkInfo>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::terminal_agent::v1::NetworkInfo_globals_},
         #endif
     }},
     {{
@@ -2609,6 +2828,7 @@ inline constexpr StatusReport::Impl_::Impl_(
             ::_pbi::ConstantInitialized()),
         metrics_{nullptr},
         config_{nullptr},
+        network_info_{nullptr},
         timestamp_{::int64_t{0}} {}
 
 template <typename>
@@ -2652,7 +2872,7 @@ constexpr auto StatusReport::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[6],
+      &file_reflection_data[7],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
@@ -2901,7 +3121,7 @@ const ::_pbi::ClassData* HeartbeatRequest_get_class_data() {
 }  // namespace v1
 }  // namespace terminal_agent
 static const ::_pb::EnumDescriptor* PROTOBUF_NONNULL
-    file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[3];
+    file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[4];
 static constexpr const ::_pb::ServiceDescriptor* PROTOBUF_NONNULL* PROTOBUF_NULLABLE
     file_level_service_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto = nullptr;
 const ::uint32_t
@@ -2976,20 +3196,41 @@ const ::uint32_t
         0,
         1,
         0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_._has_bits_),
+        11, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.gateway_mac_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.bssid_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.lan_ip_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.lan_cidr_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.public_ip_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.net_type_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.is_metered_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::NetworkInfo, _impl_.is_roaming_),
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_._has_bits_),
-        9, // hasbit index offset
+        10, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.device_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.timestamp_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.status_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.firmware_version_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.metrics_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.config_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.network_info_),
         0,
-        5,
+        6,
         1,
         2,
         3,
         4,
+        5,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReportResponse, _impl_._has_bits_),
         5, // hasbit index offset
@@ -3109,16 +3350,17 @@ static const ::_pbi::MigrationSchema
         {33, sizeof(::terminal_agent::v1::HeartbeatResponse)},
         {40, sizeof(::terminal_agent::v1::DeviceMetrics)},
         {55, sizeof(::terminal_agent::v1::DeviceConfig)},
-        {68, sizeof(::terminal_agent::v1::StatusReport)},
-        {83, sizeof(::terminal_agent::v1::StatusReportResponse)},
-        {90, sizeof(::terminal_agent::v1::EventReport)},
-        {105, sizeof(::terminal_agent::v1::EventReportResponse)},
-        {112, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
-        {131, sizeof(::terminal_agent::v1::Command)},
-        {146, sizeof(::terminal_agent::v1::CommandStreamRequest)},
-        {151, sizeof(::terminal_agent::v1::CommandResult)},
-        {164, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
-        {185, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
+        {68, sizeof(::terminal_agent::v1::NetworkInfo)},
+        {87, sizeof(::terminal_agent::v1::StatusReport)},
+        {104, sizeof(::terminal_agent::v1::StatusReportResponse)},
+        {111, sizeof(::terminal_agent::v1::EventReport)},
+        {126, sizeof(::terminal_agent::v1::EventReportResponse)},
+        {133, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
+        {152, sizeof(::terminal_agent::v1::Command)},
+        {167, sizeof(::terminal_agent::v1::CommandStreamRequest)},
+        {172, sizeof(::terminal_agent::v1::CommandResult)},
+        {185, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
+        {206, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
@@ -3128,6 +3370,7 @@ static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
         &::terminal_agent::v1::HeartbeatResponse_globals_,
         &::terminal_agent::v1::DeviceMetrics_globals_,
         &::terminal_agent::v1::DeviceConfig_globals_,
+        &::terminal_agent::v1::NetworkInfo_globals_,
         &::terminal_agent::v1::StatusReport_globals_,
         &::terminal_agent::v1::StatusReportResponse_globals_,
         &::terminal_agent::v1::EventReport_globals_,
@@ -3160,75 +3403,83 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "\014DeviceConfig\022\031\n\021screen_brightness\030\001 \001(\005"
     "\022\024\n\014volume_level\030\002 \001(\005\022\033\n\023auto_reboot_en"
     "abled\030\003 \001(\010\022\030\n\020auto_reboot_time\030\004 \001(\t\022\032\n"
-    "\022custom_config_json\030\005 \001(\t\"\302\001\n\014StatusRepo"
-    "rt\022\021\n\tdevice_id\030\001 \001(\t\022\021\n\ttimestamp\030\002 \001(\003"
-    "\022\016\n\006status\030\003 \001(\t\022\030\n\020firmware_version\030\004 \001"
-    "(\t\0221\n\007metrics\030\005 \001(\0132 .terminal_agent.v1."
-    "DeviceMetrics\022/\n\006config\030\006 \001(\0132\037.terminal"
-    "_agent.v1.DeviceConfig\"9\n\024StatusReportRe"
-    "sponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message\030\002 \001("
-    "\t\"\177\n\013EventReport\022\021\n\tdevice_id\030\001 \001(\t\022\021\n\tt"
-    "imestamp\030\002 \001(\003\022\022\n\nevent_type\030\003 \001(\t\022\020\n\010se"
-    "verity\030\004 \001(\t\022\017\n\007message\030\005 \001(\t\022\023\n\013detail_"
-    "json\030\006 \001(\t\"8\n\023EventReportResponse\022\020\n\010acc"
-    "epted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\256\001\n\024Downloa"
-    "dReadyCommand\022\020\n\010batch_id\030\001 \001(\t\022\017\n\007file_"
-    "id\030\002 \001(\t\022\021\n\tfile_type\030\003 \001(\t\022\024\n\014download_"
-    "url\030\004 \001(\t\022\016\n\006sha256\030\005 \001(\t\022\021\n\tfile_size\030\006"
-    " \001(\003\022\023\n\013torrent_url\030\007 \001(\t\022\022\n\nmagnet_uri\030"
-    "\010 \001(\t\"\210\001\n\007Command\022\021\n\tdevice_id\030\001 \001(\t\022\022\n\n"
-    "command_id\030\002 \001(\t\022\024\n\014command_type\030\003 \001(\t\022\024"
-    "\n\014payload_json\030\004 \001(\t\022\021\n\tissued_at\030\005 \001(\003\022"
-    "\027\n\017timeout_seconds\030\006 \001(\003\")\n\024CommandStrea"
-    "mRequest\022\021\n\tdevice_id\030\001 \001(\t\"l\n\rCommandRe"
-    "sult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 "
-    "\001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013"
-    "executed_at\030\005 \001(\003\"\275\002\n\024ReleaseStatusReque"
-    "st\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022"
-    "\017\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.termi"
-    "nal_agent.v1.ReleaseDeviceStatus\022\030\n\020down"
-    "loaded_bytes\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#"
-    ".terminal_agent.v1.ReleaseErrorCode\022\025\n\re"
-    "rror_message\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\022:\n"
-    "\017completion_path\030\t \001(\0162!.terminal_agent."
-    "v1.CompletionPath\":\n\025ReleaseStatusRespon"
-    "se\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t*\266\003"
-    "\n\023ReleaseDeviceStatus\022%\n!RELEASE_DEVICE_"
-    "STATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_DEVICE_S"
-    "TATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE_STATUS"
-    "_READY\020\002\022%\n!RELEASE_DEVICE_STATUS_DOWNLO"
-    "ADING\020\003\022$\n RELEASE_DEVICE_STATUS_DOWNLOA"
-    "DED\020\004\022$\n RELEASE_DEVICE_STATUS_INSTALLIN"
-    "G\020\005\022#\n\037RELEASE_DEVICE_STATUS_INSTALLED\020\006"
-    "\022)\n%RELEASE_DEVICE_STATUS_DOWNLOAD_FAILE"
-    "D\020\007\022(\n$RELEASE_DEVICE_STATUS_INSTALL_FAI"
-    "LED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CANCELLED"
-    "\020\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRYING\020\n*\234"
-    "\002\n\020ReleaseErrorCode\022\"\n\036RELEASE_ERROR_COD"
-    "E_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_CODE_NE"
-    "TWORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CODE_SERV"
-    "ER_ERROR\020\002\022$\n RELEASE_ERROR_CODE_STORAGE"
-    "_ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CHECKSUM_"
-    "FAILED\020\004\022$\n RELEASE_ERROR_CODE_INSTALL_E"
-    "RROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSINESS_ER"
-    "ROR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPLETION_P"
-    "ATH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n\020WE"
-    "B_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK_STALL\020"
-    "\003\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004B;Z9git"
-    "hub.com/QF1987/terminal-agent-go/gen/ter"
-    "minal_agent/v1b\006proto3"
+    "\022custom_config_json\030\005 \001(\t\"\300\001\n\013NetworkInf"
+    "o\022\023\n\013gateway_mac\030\001 \001(\t\022\r\n\005bssid\030\002 \001(\t\022\016\n"
+    "\006lan_ip\030\003 \001(\t\022\020\n\010lan_cidr\030\004 \001(\t\022\021\n\tpubli"
+    "c_ip\030\005 \001(\t\0220\n\010net_type\030\006 \001(\0162\036.terminal_"
+    "agent.v1.NetworkType\022\022\n\nis_metered\030\007 \001(\010"
+    "\022\022\n\nis_roaming\030\010 \001(\010\"\370\001\n\014StatusReport\022\021\n"
+    "\tdevice_id\030\001 \001(\t\022\021\n\ttimestamp\030\002 \001(\003\022\016\n\006s"
+    "tatus\030\003 \001(\t\022\030\n\020firmware_version\030\004 \001(\t\0221\n"
+    "\007metrics\030\005 \001(\0132 .terminal_agent.v1.Devic"
+    "eMetrics\022/\n\006config\030\006 \001(\0132\037.terminal_agen"
+    "t.v1.DeviceConfig\0224\n\014network_info\030\007 \001(\0132"
+    "\036.terminal_agent.v1.NetworkInfo\"9\n\024Statu"
+    "sReportResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007mes"
+    "sage\030\002 \001(\t\"\177\n\013EventReport\022\021\n\tdevice_id\030\001"
+    " \001(\t\022\021\n\ttimestamp\030\002 \001(\003\022\022\n\nevent_type\030\003 "
+    "\001(\t\022\020\n\010severity\030\004 \001(\t\022\017\n\007message\030\005 \001(\t\022\023"
+    "\n\013detail_json\030\006 \001(\t\"8\n\023EventReportRespon"
+    "se\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\256\001"
+    "\n\024DownloadReadyCommand\022\020\n\010batch_id\030\001 \001(\t"
+    "\022\017\n\007file_id\030\002 \001(\t\022\021\n\tfile_type\030\003 \001(\t\022\024\n\014"
+    "download_url\030\004 \001(\t\022\016\n\006sha256\030\005 \001(\t\022\021\n\tfi"
+    "le_size\030\006 \001(\003\022\023\n\013torrent_url\030\007 \001(\t\022\022\n\nma"
+    "gnet_uri\030\010 \001(\t\"\210\001\n\007Command\022\021\n\tdevice_id\030"
+    "\001 \001(\t\022\022\n\ncommand_id\030\002 \001(\t\022\024\n\014command_typ"
+    "e\030\003 \001(\t\022\024\n\014payload_json\030\004 \001(\t\022\021\n\tissued_"
+    "at\030\005 \001(\003\022\027\n\017timeout_seconds\030\006 \001(\003\")\n\024Com"
+    "mandStreamRequest\022\021\n\tdevice_id\030\001 \001(\t\"l\n\r"
+    "CommandResult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdev"
+    "ice_id\030\002 \001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030"
+    "\004 \001(\t\022\023\n\013executed_at\030\005 \001(\003\"\275\002\n\024ReleaseSt"
+    "atusRequest\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_"
+    "id\030\002 \001(\t\022\017\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001("
+    "\0162&.terminal_agent.v1.ReleaseDeviceStatu"
+    "s\022\030\n\020downloaded_bytes\030\005 \001(\003\0227\n\nerror_cod"
+    "e\030\006 \001(\0162#.terminal_agent.v1.ReleaseError"
+    "Code\022\025\n\rerror_message\030\007 \001(\t\022\021\n\ttimestamp"
+    "\030\010 \001(\003\022:\n\017completion_path\030\t \001(\0162!.termin"
+    "al_agent.v1.CompletionPath\":\n\025ReleaseSta"
+    "tusResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message"
+    "\030\002 \001(\t*D\n\013NetworkType\022\017\n\013NET_UNKNOWN\020\000\022\014"
+    "\n\010CELLULAR\020\001\022\010\n\004WIFI\020\002\022\014\n\010ETHERNET\020\003*\266\003\n"
+    "\023ReleaseDeviceStatus\022%\n!RELEASE_DEVICE_S"
+    "TATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_DEVICE_ST"
+    "ATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE_STATUS_"
+    "READY\020\002\022%\n!RELEASE_DEVICE_STATUS_DOWNLOA"
+    "DING\020\003\022$\n RELEASE_DEVICE_STATUS_DOWNLOAD"
+    "ED\020\004\022$\n RELEASE_DEVICE_STATUS_INSTALLING"
+    "\020\005\022#\n\037RELEASE_DEVICE_STATUS_INSTALLED\020\006\022"
+    ")\n%RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED"
+    "\020\007\022(\n$RELEASE_DEVICE_STATUS_INSTALL_FAIL"
+    "ED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CANCELLED\020"
+    "\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRYING\020\n*\234\002"
+    "\n\020ReleaseErrorCode\022\"\n\036RELEASE_ERROR_CODE"
+    "_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_CODE_NET"
+    "WORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CODE_SERVE"
+    "R_ERROR\020\002\022$\n RELEASE_ERROR_CODE_STORAGE_"
+    "ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CHECKSUM_F"
+    "AILED\020\004\022$\n RELEASE_ERROR_CODE_INSTALL_ER"
+    "ROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSINESS_ERR"
+    "OR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPLETION_PA"
+    "TH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n\020WEB"
+    "_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK_STALL\020\003"
+    "\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004B;Z9gith"
+    "ub.com/QF1987/terminal-agent-go/gen/term"
+    "inal_agent/v1b\006proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    3022,
+    3341,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
     nullptr,
     0,
-    16,
+    17,
     schemas,
     file_message_globals,
     TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto::offsets,
@@ -3238,23 +3489,30 @@ PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fage
 namespace terminal_agent {
 namespace v1 {
 [[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
-ReleaseDeviceStatus_descriptor() {
+NetworkType_descriptor() {
   ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
   return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[0];
+}
+PROTOBUF_CONSTINIT const uint32_t NetworkType_internal_data_[] = {
+    262144u, 0u, };
+[[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
+ReleaseDeviceStatus_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[1];
 }
 PROTOBUF_CONSTINIT const uint32_t ReleaseDeviceStatus_internal_data_[] = {
     720896u, 0u, };
 [[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
 ReleaseErrorCode_descriptor() {
   ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
-  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[1];
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[2];
 }
 PROTOBUF_CONSTINIT const uint32_t ReleaseErrorCode_internal_data_[] = {
     458752u, 0u, };
 [[nodiscard]] const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL
 CompletionPath_descriptor() {
   ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto);
-  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[2];
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fdevice_2eproto[3];
 }
 PROTOBUF_CONSTINIT const uint32_t CompletionPath_internal_data_[] = {
     327680u, 0u, };
@@ -5046,6 +5304,442 @@ void DeviceConfig::InternalSwap(DeviceConfig* PROTOBUF_RESTRICT PROTOBUF_NONNULL
 }
 // ===================================================================
 
+NetworkInfo::NetworkInfo(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, NetworkInfo_get_class_data()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:terminal_agent.v1.NetworkInfo)
+}
+PROTOBUF_NDEBUG_INLINE NetworkInfo::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::terminal_agent::v1::NetworkInfo& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        gateway_mac_(arena, from.gateway_mac_),
+        bssid_(arena, from.bssid_),
+        lan_ip_(arena, from.lan_ip_),
+        lan_cidr_(arena, from.lan_cidr_),
+        public_ip_(arena, from.public_ip_) {}
+
+NetworkInfo::NetworkInfo(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const NetworkInfo& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, NetworkInfo_get_class_data()) {
+
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  NetworkInfo* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::memcpy(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, net_type_),
+           reinterpret_cast<const char*>(&from._impl_) +
+               offsetof(Impl_, net_type_),
+           offsetof(Impl_, is_roaming_) -
+               offsetof(Impl_, net_type_) +
+               sizeof(Impl_::is_roaming_));
+
+  // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.NetworkInfo)
+}
+PROTOBUF_NDEBUG_INLINE NetworkInfo::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        gateway_mac_(arena),
+        bssid_(arena),
+        lan_ip_(arena),
+        lan_cidr_(arena),
+        public_ip_(arena) {}
+
+inline void NetworkInfo::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, net_type_),
+           0,
+           offsetof(Impl_, is_roaming_) -
+               offsetof(Impl_, net_type_) +
+               sizeof(Impl_::is_roaming_));
+}
+NetworkInfo::~NetworkInfo() {
+  // @@protoc_insertion_point(destructor:terminal_agent.v1.NetworkInfo)
+  SharedDtor(*this);
+}
+inline void NetworkInfo::SharedDtor(MessageLite& self) {
+  NetworkInfo& this_ = static_cast<NetworkInfo&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.gateway_mac_.Destroy();
+  this_._impl_.bssid_.Destroy();
+  this_._impl_.lan_ip_.Destroy();
+  this_._impl_.lan_cidr_.Destroy();
+  this_._impl_.public_ip_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull NetworkInfo_class_data_ =
+        NetworkInfo::InternalGenerateClassData_(NetworkInfo_globals_._default);
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+NetworkInfo::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&NetworkInfo_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(NetworkInfo_class_data_.tc_table);
+  return NetworkInfo_class_data_.base();
+}
+#else
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+NetworkInfo::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&NetworkInfo_globals_);
+  ::google::protobuf::internal::PrefetchToLocalCache(
+      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&NetworkInfo_globals_));
+  return NetworkInfo_globals_.GetClassData();
+}
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT
+PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const NetworkInfo::ParseTableT_
+    NetworkInfo::_table_ =
+        NetworkInfo::InternalGenerateParseTable_(NetworkInfo_class_data_.base());
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_NOINLINE void NetworkInfo::Clear() {
+// @@protoc_insertion_point(message_clear_start:terminal_agent.v1.NetworkInfo)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _impl_.gateway_mac_.ClearNonDefaultToEmpty();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      _impl_.bssid_.ClearNonDefaultToEmpty();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      _impl_.lan_ip_.ClearNonDefaultToEmpty();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      _impl_.lan_cidr_.ClearNonDefaultToEmpty();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      _impl_.public_ip_.ClearNonDefaultToEmpty();
+    }
+  }
+  if (BatchCheckHasBit(cached_has_bits, 0x000000e0U)) {
+    ::memset(&_impl_.net_type_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.is_roaming_) -
+        reinterpret_cast<char*>(&_impl_.net_type_)) + sizeof(_impl_.is_roaming_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL NetworkInfo::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const NetworkInfo& this_ = static_cast<const NetworkInfo&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL NetworkInfo::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const NetworkInfo& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:terminal_agent.v1.NetworkInfo)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // string gateway_mac = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (!this_._internal_gateway_mac().empty()) {
+      const ::std::string& _s = this_._internal_gateway_mac();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.NetworkInfo.gateway_mac");
+      target = stream->WriteStringMaybeAliased(1, _s, target);
+    }
+  }
+
+  // string bssid = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (!this_._internal_bssid().empty()) {
+      const ::std::string& _s = this_._internal_bssid();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.NetworkInfo.bssid");
+      target = stream->WriteStringMaybeAliased(2, _s, target);
+    }
+  }
+
+  // string lan_ip = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (!this_._internal_lan_ip().empty()) {
+      const ::std::string& _s = this_._internal_lan_ip();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.NetworkInfo.lan_ip");
+      target = stream->WriteStringMaybeAliased(3, _s, target);
+    }
+  }
+
+  // string lan_cidr = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (!this_._internal_lan_cidr().empty()) {
+      const ::std::string& _s = this_._internal_lan_cidr();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.NetworkInfo.lan_cidr");
+      target = stream->WriteStringMaybeAliased(4, _s, target);
+    }
+  }
+
+  // string public_ip = 5;
+  if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+    if (!this_._internal_public_ip().empty()) {
+      const ::std::string& _s = this_._internal_public_ip();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.NetworkInfo.public_ip");
+      target = stream->WriteStringMaybeAliased(5, _s, target);
+    }
+  }
+
+  // .terminal_agent.v1.NetworkType net_type = 6;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (this_._internal_net_type() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          6, this_._internal_net_type(), target);
+    }
+  }
+
+  // bool is_metered = 7;
+  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+    if (this_._internal_is_metered() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteBoolToArray(
+          7, this_._internal_is_metered(), target);
+    }
+  }
+
+  // bool is_roaming = 8;
+  if (CheckHasBit(cached_has_bits, 0x00000080U)) {
+    if (this_._internal_is_roaming() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteBoolToArray(
+          8, this_._internal_is_roaming(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:terminal_agent.v1.NetworkInfo)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t NetworkInfo::ByteSizeLong(const MessageLite& base) {
+  const NetworkInfo& this_ = static_cast<const NetworkInfo&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t NetworkInfo::ByteSizeLong() const {
+  const NetworkInfo& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:terminal_agent.v1.NetworkInfo)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x000000ffU)) {
+    // string gateway_mac = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!this_._internal_gateway_mac().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_gateway_mac());
+      }
+    }
+    // string bssid = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (!this_._internal_bssid().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_bssid());
+      }
+    }
+    // string lan_ip = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (!this_._internal_lan_ip().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_lan_ip());
+      }
+    }
+    // string lan_cidr = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (!this_._internal_lan_cidr().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_lan_cidr());
+      }
+    }
+    // string public_ip = 5;
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (!this_._internal_public_ip().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_public_ip());
+      }
+    }
+    // .terminal_agent.v1.NetworkType net_type = 6;
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (this_._internal_net_type() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_net_type());
+      }
+    }
+    // bool is_metered = 7;
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (this_._internal_is_metered() != 0) {
+        total_size += 2;
+      }
+    }
+    // bool is_roaming = 8;
+    if (CheckHasBit(cached_has_bits, 0x00000080U)) {
+      if (this_._internal_is_roaming() != 0) {
+        total_size += 2;
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void NetworkInfo::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                      const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this = static_cast<NetworkInfo*>(&to_msg);
+  auto& from = static_cast<const NetworkInfo&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:terminal_agent.v1.NetworkInfo)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x000000ffU)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!from._internal_gateway_mac().empty()) {
+        _this->_internal_set_gateway_mac(from._internal_gateway_mac());
+      } else {
+        if (_this->_impl_.gateway_mac_.IsDefault()) {
+          _this->_internal_set_gateway_mac("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (!from._internal_bssid().empty()) {
+        _this->_internal_set_bssid(from._internal_bssid());
+      } else {
+        if (_this->_impl_.bssid_.IsDefault()) {
+          _this->_internal_set_bssid("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (!from._internal_lan_ip().empty()) {
+        _this->_internal_set_lan_ip(from._internal_lan_ip());
+      } else {
+        if (_this->_impl_.lan_ip_.IsDefault()) {
+          _this->_internal_set_lan_ip("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (!from._internal_lan_cidr().empty()) {
+        _this->_internal_set_lan_cidr(from._internal_lan_cidr());
+      } else {
+        if (_this->_impl_.lan_cidr_.IsDefault()) {
+          _this->_internal_set_lan_cidr("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (!from._internal_public_ip().empty()) {
+        _this->_internal_set_public_ip(from._internal_public_ip());
+      } else {
+        if (_this->_impl_.public_ip_.IsDefault()) {
+          _this->_internal_set_public_ip("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (from._internal_net_type() != 0) {
+        _this->_impl_.net_type_ = from._impl_.net_type_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (from._internal_is_metered() != 0) {
+        _this->_impl_.is_metered_ = from._impl_.is_metered_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000080U)) {
+      if (from._internal_is_roaming() != 0) {
+        _this->_impl_.is_roaming_ = from._impl_.is_roaming_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void NetworkInfo::CopyFrom(const NetworkInfo& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:terminal_agent.v1.NetworkInfo)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void NetworkInfo::InternalSwap(NetworkInfo* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.gateway_mac_, &other->_impl_.gateway_mac_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.bssid_, &other->_impl_.bssid_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.lan_ip_, &other->_impl_.lan_ip_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.lan_cidr_, &other->_impl_.lan_cidr_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.public_ip_, &other->_impl_.public_ip_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.is_roaming_)
+      + sizeof(NetworkInfo::_impl_.is_roaming_)
+      - PROTOBUF_FIELD_OFFSET(NetworkInfo, _impl_.net_type_)>(
+          reinterpret_cast<char*>(&_impl_.net_type_),
+          reinterpret_cast<char*>(&other->_impl_.net_type_));
+}
+
+::google::protobuf::Metadata NetworkInfo::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
 StatusReport::StatusReport(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
 #if defined(PROTOBUF_CUSTOM_VTABLE)
     : ::google::protobuf::Message(arena, StatusReport_get_class_data()) {
@@ -5086,6 +5780,9 @@ StatusReport::StatusReport(
   _impl_.config_ = (CheckHasBit(cached_has_bits, 0x00000010U))
                 ? ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.config_)
                 : nullptr;
+  _impl_.network_info_ = (CheckHasBit(cached_has_bits, 0x00000020U))
+                ? ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.network_info_)
+                : nullptr;
   _impl_.timestamp_ = from._impl_.timestamp_;
 
   // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.StatusReport)
@@ -5123,6 +5820,7 @@ inline void StatusReport::SharedDtor(MessageLite& self) {
   this_._impl_.firmware_version_.Destroy();
   delete this_._impl_.metrics_;
   delete this_._impl_.config_;
+  delete this_._impl_.network_info_;
   this_._impl_.~Impl_();
 }
 
@@ -5160,7 +5858,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       _impl_.device_id_.ClearNonDefaultToEmpty();
     }
@@ -5177,6 +5875,10 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
     if (CheckHasBit(cached_has_bits, 0x00000010U)) {
       ABSL_DCHECK(_impl_.config_ != nullptr);
       _impl_.config_->Clear();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      ABSL_DCHECK(_impl_.network_info_ != nullptr);
+      _impl_.network_info_->Clear();
     }
   }
   _impl_.timestamp_ = ::int64_t{0};
@@ -5214,7 +5916,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
   }
 
   // int64 timestamp = 2;
-  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
     if (this_._internal_timestamp() != 0) {
       target =
           ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<2>(
@@ -5256,6 +5958,13 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
         stream);
   }
 
+  // .terminal_agent.v1.NetworkInfo network_info = 7;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        7, *this_._impl_.network_info_, this_._impl_.network_info_->GetCachedSize(), target,
+        stream);
+  }
+
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -5281,7 +5990,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
     // string device_id = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_device_id().empty()) {
@@ -5313,8 +6022,13 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
       total_size += 1 +
                     ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.config_);
     }
-    // int64 timestamp = 2;
+    // .terminal_agent.v1.NetworkInfo network_info = 7;
     if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      total_size += 1 +
+                    ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.network_info_);
+    }
+    // int64 timestamp = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
       if (this_._internal_timestamp() != 0) {
         total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
             this_._internal_timestamp());
@@ -5339,7 +6053,7 @@ void StatusReport::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!from._internal_device_id().empty()) {
         _this->_internal_set_device_id(from._internal_device_id());
@@ -5384,6 +6098,14 @@ void StatusReport::MergeImpl(::google::protobuf::MessageLite& to_msg,
       }
     }
     if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      ABSL_DCHECK(from._impl_.network_info_ != nullptr);
+      if (_this->_impl_.network_info_ == nullptr) {
+        _this->_impl_.network_info_ = ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.network_info_);
+      } else {
+        _this->_impl_.network_info_->MergeFrom(*from._impl_.network_info_);
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
       if (from._internal_timestamp() != 0) {
         _this->_impl_.timestamp_ = from._impl_.timestamp_;
       }
