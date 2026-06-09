@@ -18,6 +18,8 @@ namespace {
 
 constexpr int kLibtorrentMaxUploadsUnlimited = 16777215;
 constexpr int kLibtorrentUploadLimitUnlimited = -1;
+constexpr int kDefaultMaxUploadPeers = 4;
+constexpr int kLimitedMaxUploadPeers = 2;
 constexpr int kConfiguredUploadLimitBytesPerSecond = 7 * 1024;
 constexpr int kCellularSuppressedUploadLimitBytesPerSecond = 5120;
 constexpr const char* kShaFixture = "device-agent sha256 fixture\n";
@@ -139,6 +141,13 @@ int main() {
     assert(alpha_policy.ratio_limit == 1.25);
     assert(alpha_policy.max_upload_kbps == 7);
     assert(alpha_policy.cellular_seeding_enabled);
+    assert(alpha_policy.p2p_enabled);
+    assert(alpha_policy.seeding_enabled);
+    assert(alpha_policy.max_upload_peers == kDefaultMaxUploadPeers);
+    assert(alpha_policy.lan_upload_enabled);
+    assert(!alpha_policy.wan_upload_enabled);
+    assert(alpha_policy.cellular_download_enabled);
+    assert(alpha_policy.min_file_size_mb_for_p2p == 10);
     P2PConfigStore::set_global(nullptr);
 
     assert(device_agent::completion_path_for_test(
@@ -234,7 +243,7 @@ int main() {
     req.torrent_url = torrent_path;
     req.url = "http://127.0.0.1:9/test.bin";
     req.dest_path = save_dir;
-    req.file_size = 16384;
+    req.file_size = 64 * 1024 * 1024;
 
     manager.download(req,
         [&](const device_agent::DownloadProgress&) {
@@ -252,14 +261,14 @@ int main() {
     assert(wait_until_downloading(manager));
     assert(wait_until_active_handle(manager));
     assert(wait_until_upload_throttle(
-        manager, kLibtorrentMaxUploadsUnlimited, kConfiguredUploadLimitBytesPerSecond));
+        manager, kDefaultMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
     assert(manager.state() == P2PDownloadState::Downloading);
     network_policy->on_network_changed(NetworkType::CELLULAR);
     assert(wait_until_upload_throttle(
         manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     network_policy->on_network_changed(NetworkType::WIFI);
     assert(wait_until_upload_throttle(
-        manager, kLibtorrentMaxUploadsUnlimited, kConfiguredUploadLimitBytesPerSecond));
+        manager, kDefaultMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
     manager.cancel();
     assert(!manager.is_downloading());
     assert(manager.state() == P2PDownloadState::Idle);
@@ -282,11 +291,11 @@ int main() {
     DownloadRequest unlimited_req;
     unlimited_req.torrent_url = torrent_path;
     unlimited_req.dest_path = save_dir;
-    unlimited_req.file_size = 16384;
+    unlimited_req.file_size = 64 * 1024 * 1024;
     unlimited_manager.download(unlimited_req, nullptr, nullptr);
     assert(wait_until_downloading(unlimited_manager));
     assert(wait_until_upload_throttle(
-        unlimited_manager, kLibtorrentMaxUploadsUnlimited, kLibtorrentUploadLimitUnlimited));
+        unlimited_manager, kDefaultMaxUploadPeers, kLibtorrentUploadLimitUnlimited));
     unlimited_manager.cancel();
     assert(!unlimited_manager.is_downloading());
 
@@ -299,7 +308,7 @@ int main() {
     DownloadRequest default_cellular_req;
     default_cellular_req.torrent_url = torrent_path;
     default_cellular_req.dest_path = save_dir;
-    default_cellular_req.file_size = 16384;
+    default_cellular_req.file_size = 64 * 1024 * 1024;
     default_cellular_manager.download(default_cellular_req, nullptr, nullptr);
     assert(wait_until_downloading(default_cellular_manager));
     default_cellular_policy->on_network_changed(NetworkType::CELLULAR);
@@ -307,6 +316,108 @@ int main() {
         default_cellular_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     default_cellular_manager.cancel();
     assert(!default_cellular_manager.is_downloading());
+
+    auto hot_config = std::make_shared<P2PConfigStore>();
+    assert(hot_config->apply(
+        R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25,"max_upload_kbps":7,"max_upload_peers":2})",
+        &config_error));
+    P2PConfigStore::set_global(hot_config);
+    auto hot_policy = std::make_shared<device_agent::NetworkPolicy>();
+    hot_policy->on_network_changed(NetworkType::WIFI);
+    P2PDownloadManager hot_manager({}, P2PSeedingPolicy::alpha_defaults(), hot_policy);
+    DownloadRequest hot_req;
+    hot_req.torrent_url = torrent_path;
+    hot_req.dest_path = save_dir;
+    hot_req.file_size = 64 * 1024 * 1024;
+    hot_manager.download(hot_req, nullptr, nullptr);
+    assert(wait_until_downloading(hot_manager));
+    assert(wait_until_upload_throttle(
+        hot_manager, kLimitedMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
+    hot_manager.cancel();
+    assert(!hot_manager.is_downloading());
+    P2PConfigStore::set_global(nullptr);
+
+    auto disabled_config = std::make_shared<P2PConfigStore>();
+    assert(disabled_config->apply(R"({"p2p_enabled":false})", &config_error));
+    P2PConfigStore::set_global(disabled_config);
+    P2PDownloadManager disabled_manager;
+    bool disabled_complete = false;
+    DownloadRequest disabled_req;
+    disabled_req.torrent_url = torrent_path;
+    disabled_req.file_size = 64 * 1024 * 1024;
+    disabled_manager.download(disabled_req, nullptr,
+        [&](bool ok, const std::string& err) {
+            assert(!ok);
+            assert(err.find("p2p disabled") != std::string::npos);
+            disabled_complete = true;
+        });
+    assert(disabled_complete);
+    assert(!disabled_manager.is_downloading());
+    P2PConfigStore::set_global(nullptr);
+
+    auto min_size_config = std::make_shared<P2PConfigStore>();
+    assert(min_size_config->apply(R"({"min_file_size_mb_for_p2p":64})", &config_error));
+    P2PConfigStore::set_global(min_size_config);
+    P2PDownloadManager min_size_manager;
+    bool min_size_complete = false;
+    DownloadRequest min_size_req;
+    min_size_req.torrent_url = torrent_path;
+    min_size_req.file_size = 16 * 1024 * 1024;
+    min_size_manager.download(min_size_req, nullptr,
+        [&](bool ok, const std::string& err) {
+            assert(!ok);
+            assert(err.find("min_file_size_mb_for_p2p") != std::string::npos);
+            min_size_complete = true;
+        });
+    assert(min_size_complete);
+    assert(!min_size_manager.is_downloading());
+    P2PConfigStore::set_global(nullptr);
+
+    auto cellular_download_config = std::make_shared<P2PConfigStore>();
+    assert(cellular_download_config->apply(
+        R"({"cellular_download_enabled":false,"min_file_size_mb_for_p2p":0})",
+        &config_error));
+    P2PConfigStore::set_global(cellular_download_config);
+    auto cellular_download_policy = std::make_shared<device_agent::NetworkPolicy>();
+    cellular_download_policy->on_network_changed(NetworkType::CELLULAR);
+    P2PDownloadManager cellular_download_manager(
+        {}, P2PSeedingPolicy::alpha_defaults(), cellular_download_policy);
+    bool cellular_download_complete = false;
+    DownloadRequest cellular_download_req;
+    cellular_download_req.torrent_url = torrent_path;
+    cellular_download_req.file_size = 64 * 1024 * 1024;
+    cellular_download_manager.download(cellular_download_req, nullptr,
+        [&](bool ok, const std::string& err) {
+            assert(!ok);
+            assert(err.find("cellular download disabled") != std::string::npos);
+            cellular_download_complete = true;
+        });
+    assert(cellular_download_complete);
+    assert(!cellular_download_manager.is_downloading());
+    P2PConfigStore::set_global(nullptr);
+
+    auto no_seed_config = std::make_shared<P2PConfigStore>();
+    assert(no_seed_config->apply(
+        R"({"seeding_enabled":false,"min_file_size_mb_for_p2p":0})",
+        &config_error));
+    P2PConfigStore::set_global(no_seed_config);
+    auto no_seed_policy = std::make_shared<device_agent::NetworkPolicy>();
+    no_seed_policy->on_network_changed(NetworkType::WIFI);
+    P2PDownloadManager no_seed_manager(
+        {},
+        P2PSeedingPolicy::alpha_defaults(),
+        no_seed_policy);
+    DownloadRequest no_seed_req;
+    no_seed_req.torrent_url = torrent_path;
+    no_seed_req.dest_path = save_dir;
+    no_seed_req.file_size = 64 * 1024 * 1024;
+    no_seed_manager.download(no_seed_req, nullptr, nullptr);
+    assert(wait_until_downloading(no_seed_manager));
+    assert(wait_until_upload_throttle(
+        no_seed_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
+    no_seed_manager.cancel();
+    assert(!no_seed_manager.is_downloading());
+    P2PConfigStore::set_global(nullptr);
 
     return 0;
 }

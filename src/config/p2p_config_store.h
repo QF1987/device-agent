@@ -11,6 +11,13 @@ struct P2PConfigSnapshot {
     double max_share_ratio = 1.0;
     bool cellular_seeding_enabled = false;
     int max_upload_kbps = 0;
+    bool p2p_enabled = true;
+    bool seeding_enabled = true;
+    int max_upload_peers = 4;
+    bool lan_upload_enabled = true;
+    bool wan_upload_enabled = false;
+    bool cellular_download_enabled = true;
+    int min_file_size_mb_for_p2p = 10;
 };
 
 class P2PConfigStore {
@@ -22,6 +29,7 @@ public:
 
     static void set_global(std::shared_ptr<P2PConfigStore> store);
     static P2PConfigSnapshot global_snapshot();
+    static bool has_global();
 
 private:
     mutable std::mutex mu_;

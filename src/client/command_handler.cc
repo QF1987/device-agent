@@ -20,6 +20,8 @@
 #endif
 
 #include <cstring>
+#include <cctype>
+#include <cstdlib>
 #include <sstream>
 #include <thread>
 #include <chrono>
@@ -67,6 +69,35 @@ static bool extract_json_bool(const std::string& json, const std::string& key, b
         return true;
     }
     return false;
+}
+
+static bool extract_json_int64(const std::string& json, const std::string& key, int64_t& out) {
+    std::string q = "\"" + key + "\"";
+    size_t pos = json.find(q);
+    if (pos == std::string::npos) return false;
+
+    size_t colon = json.find(':', pos);
+    if (colon == std::string::npos) return false;
+
+    size_t start = colon + 1;
+    while (start < json.size() && std::isspace(static_cast<unsigned char>(json[start]))) {
+        ++start;
+    }
+    size_t end = start;
+    while (end < json.size()) {
+        const char c = json[end];
+        if (!(std::isdigit(static_cast<unsigned char>(c)) || c == '-' || c == '+')) {
+            break;
+        }
+        ++end;
+    }
+    if (end == start) return false;
+    const std::string token = json.substr(start, end - start);
+    char* parse_end = nullptr;
+    const long long parsed = std::strtoll(token.c_str(), &parse_end, 10);
+    if (parse_end == token.c_str() || *parse_end != '\0') return false;
+    out = static_cast<int64_t>(parsed);
+    return true;
 }
 
 // ─── CommandHandler 实现 ───────────────────────────────────
@@ -196,6 +227,7 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "torrent_url", torrent_url);
         extract_json_string(payload, "magnet_uri", magnet_uri);
         extract_json_string(payload, "sha256", sha256);
+        extract_json_int64(payload, "file_size", file_size);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
         std::shared_ptr<IDownloadManager> dl_mgr;
@@ -230,6 +262,23 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             req.file_id = file_id;
             req.command_id = cmd.command_id();
             req.file_type = file_type;
+
+#ifdef __ANDROID__
+            if (p2p_config_store && !url.empty()) {
+                const auto p2p_cfg = p2p_config_store->snapshot();
+                const int64_t min_bytes =
+                    static_cast<int64_t>(p2p_cfg.min_file_size_mb_for_p2p) * 1024 * 1024;
+                const bool below_min_size =
+                    p2p_cfg.min_file_size_mb_for_p2p > 0 &&
+                    req.file_size > 0 &&
+                    req.file_size < min_bytes;
+                if (!p2p_cfg.p2p_enabled || below_min_size) {
+                    LOG_INFO("CommandHandler: P2P policy selected HTTP download path cmd_id=" +
+                             cmd.command_id());
+                    dl_mgr = std::make_shared<AndroidDownloadManager>();
+                }
+            }
+#endif
 
             LOG_INFO("CommandHandler: dispatching download_ready cmd_id=" + cmd.command_id() +
                      " batch=" + batch_id + " file=" + file_id);

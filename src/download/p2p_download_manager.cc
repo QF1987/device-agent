@@ -925,8 +925,16 @@ double share_ratio(const lt::torrent_status& status) {
 // ADR-20260523-02 amendment v2 2026-05-24: upload_mode stops downloads,
 // and max_uploads(0) is treated as unlimited by this libtorrent build.
 bool seeding_allowed_on_network(NetworkType type, const P2PSeedingPolicy& policy) {
-    return type == NetworkType::WIFI ||
-           (type == NetworkType::CELLULAR && policy.cellular_seeding_enabled);
+    if (!policy.seeding_enabled) {
+        return false;
+    }
+    if (type == NetworkType::WIFI) {
+        return policy.lan_upload_enabled;
+    }
+    if (type == NetworkType::CELLULAR) {
+        return policy.cellular_seeding_enabled;
+    }
+    return policy.wan_upload_enabled;
 }
 
 int upload_limit_bytes_per_second(const P2PSeedingPolicy& policy) {
@@ -936,6 +944,13 @@ int upload_limit_bytes_per_second(const P2PSeedingPolicy& policy) {
     return policy.max_upload_kbps * 1024;
 }
 
+int max_upload_peers_for_policy(const P2PSeedingPolicy& policy) {
+    if (policy.max_upload_peers <= 0) {
+        return -1;
+    }
+    return policy.max_upload_peers;
+}
+
 void set_upload_throttle(lt::torrent_handle& handle,
                          bool stop_upload,
                          const P2PSeedingPolicy& policy) {
@@ -943,7 +958,7 @@ void set_upload_throttle(lt::torrent_handle& handle,
         handle.set_max_uploads(1);
         handle.set_upload_limit(kCellularSuppressedUploadLimitBytesPerSecond);
     } else {
-        handle.set_max_uploads(-1);
+        handle.set_max_uploads(max_upload_peers_for_policy(policy));
         handle.set_upload_limit(upload_limit_bytes_per_second(policy));
     }
 }
@@ -975,7 +990,14 @@ P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
     return P2PSeedingPolicy{std::chrono::seconds(cfg.seeding_ttl_seconds),
                             cfg.max_share_ratio,
                             cfg.max_upload_kbps,
-                            cfg.cellular_seeding_enabled};
+                            cfg.cellular_seeding_enabled,
+                            cfg.p2p_enabled,
+                            cfg.seeding_enabled,
+                            cfg.max_upload_peers,
+                            cfg.lan_upload_enabled,
+                            cfg.wan_upload_enabled,
+                            cfg.cellular_download_enabled,
+                            cfg.min_file_size_mb_for_p2p};
 }
 
 P2PSeedingStateMachine::P2PSeedingStateMachine(P2PSeedingPolicy policy)
@@ -1046,6 +1068,34 @@ P2PDownloadManager::~P2PDownloadManager() {
 void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
+    refresh_policy_from_config();
+    P2PSeedingPolicy policy;
+    NetworkType current_network = NetworkType::WIFI;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        policy = seeding_policy_;
+        current_network = network_policy_ ? network_type_ : NetworkType::WIFI;
+    }
+    if (!policy.p2p_enabled) {
+        if (on_complete) {
+            on_complete(false, "p2p disabled by policy");
+        }
+        return;
+    }
+    const int64_t min_bytes =
+        static_cast<int64_t>(policy.min_file_size_mb_for_p2p) * 1024 * 1024;
+    if (policy.min_file_size_mb_for_p2p > 0 && req.file_size > 0 && req.file_size < min_bytes) {
+        if (on_complete) {
+            on_complete(false, "p2p disabled by min_file_size_mb_for_p2p policy");
+        }
+        return;
+    }
+    if (current_network == NetworkType::CELLULAR && !policy.cellular_download_enabled) {
+        if (on_complete) {
+            on_complete(false, "p2p cellular download disabled by policy");
+        }
+        return;
+    }
     std::string source_error;
     select_download_source(req, source_error);
     if (!source_error.empty()) {
@@ -1121,20 +1171,37 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
 
 void P2PDownloadManager::on_network_changed(NetworkType type) {
     std::vector<lt::torrent_handle> handles;
+    P2PSeedingPolicy policy;
     {
         std::lock_guard<std::mutex> lock(mu_);
         network_type_ = type;
+        policy = seeding_policy_;
         active_handles_.erase(
             std::remove_if(active_handles_.begin(), active_handles_.end(),
                            [](const lt::torrent_handle& handle) { return !handle.is_valid(); }),
             active_handles_.end());
         handles = active_handles_;
     }
-    const bool stop_upload = !seeding_allowed_on_network(type, seeding_policy_);
+    const bool stop_upload = !seeding_allowed_on_network(type, policy);
     for (auto& handle : handles) {
         if (handle.is_valid()) {
-            set_upload_throttle(handle, stop_upload, seeding_policy_);
+            set_upload_throttle(handle, stop_upload, policy);
         }
+    }
+}
+
+void P2PDownloadManager::refresh_policy_from_config() {
+    if (!P2PConfigStore::has_global()) {
+        return;
+    }
+    const auto policy = P2PSeedingPolicy::alpha_defaults();
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        seeding_policy_ = policy;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_mu_);
+        state_machine_ = P2PSeedingStateMachine(policy);
     }
 }
 

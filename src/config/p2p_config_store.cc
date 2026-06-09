@@ -164,6 +164,49 @@ bool P2PConfigStore::apply(const std::string& json, std::string* error) {
         next.max_upload_kbps = max_upload;
         saw_field = true;
     }
+    bool p2p_enabled = false;
+    if (extract_bool(json, "p2p_enabled", p2p_enabled)) {
+        next.p2p_enabled = p2p_enabled;
+        saw_field = true;
+    }
+    bool seeding_enabled = false;
+    if (extract_bool(json, "seeding_enabled", seeding_enabled)) {
+        next.seeding_enabled = seeding_enabled;
+        saw_field = true;
+    }
+    int max_upload_peers = 0;
+    if (extract_int(json, "max_upload_peers", max_upload_peers)) {
+        if (max_upload_peers < 0) {
+            set_error(error, "invalid p2p config: max_upload_peers must be >= 0");
+            return false;
+        }
+		next.max_upload_peers = max_upload_peers;
+        saw_field = true;
+    }
+    bool lan_upload_enabled = false;
+    if (extract_bool(json, "lan_upload_enabled", lan_upload_enabled)) {
+        next.lan_upload_enabled = lan_upload_enabled;
+        saw_field = true;
+    }
+    bool wan_upload_enabled = false;
+    if (extract_bool(json, "wan_upload_enabled", wan_upload_enabled)) {
+        next.wan_upload_enabled = wan_upload_enabled;
+        saw_field = true;
+    }
+    bool cellular_download_enabled = false;
+    if (extract_bool(json, "cellular_download_enabled", cellular_download_enabled)) {
+        next.cellular_download_enabled = cellular_download_enabled;
+        saw_field = true;
+    }
+    int min_file_size = 0;
+    if (extract_int(json, "min_file_size_mb_for_p2p", min_file_size)) {
+        if (min_file_size < 0) {
+            set_error(error, "invalid p2p config: min_file_size_mb_for_p2p must be >= 0");
+            return false;
+        }
+        next.min_file_size_mb_for_p2p = min_file_size;
+        saw_field = true;
+    }
     if (!saw_field) {
         set_error(error, "invalid p2p config: no known fields");
         return false;
@@ -199,6 +242,11 @@ P2PConfigSnapshot P2PConfigStore::global_snapshot() {
         return default_snapshot();
     }
     return store->snapshot();
+}
+
+bool P2PConfigStore::has_global() {
+    std::lock_guard<std::mutex> lock(g_store_mu);
+    return static_cast<bool>(g_store);
 }
 
 }  // namespace device_agent

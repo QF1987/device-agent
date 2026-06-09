@@ -38,6 +38,13 @@ struct P2PSeedingPolicy {
     double ratio_limit = 0.0;
     int max_upload_kbps = 0;
     bool cellular_seeding_enabled = false;
+    bool p2p_enabled = true;
+    bool seeding_enabled = true;
+    int max_upload_peers = 4;
+    bool lan_upload_enabled = true;
+    bool wan_upload_enabled = false;
+    bool cellular_download_enabled = true;
+    int min_file_size_mb_for_p2p = 10;
 
     static P2PSeedingPolicy alpha_defaults();
 };
@@ -102,6 +109,7 @@ private:
     bool should_stop_seeding(double share_ratio) const;
     void ensure_session_locked();
     void remove_active_handle_locked(const lt::torrent_handle& handle);
+    void refresh_policy_from_config();
 
     mutable std::mutex mu_;
     mutable std::mutex state_mu_;
