@@ -41,6 +41,8 @@ class CommandHandler {
 public:
     // ResultReporter：结果回报函数
     using ResultReporter = std::function<bool(const terminal_agent::v1::CommandResult&)>;
+    using ReleaseStatusReporter =
+        std::function<bool(const terminal_agent::v1::ReleaseStatusRequest&)>;
 
     explicit CommandHandler(ResultReporter reporter);
 
@@ -51,6 +53,12 @@ public:
     // 设置下载管理器（AndroidDownloadManager / CurlDownloadManager）
     // 不设置时，download_ready 命令将返回 "not supported"
     void set_download_manager(std::shared_ptr<IDownloadManager> dl_mgr);
+
+    // 设置 release 下载状态上报器。Android 由 Kotlin/JNI 自行上报;desktop 由 C++ 接线。
+    void set_release_status_reporter(ReleaseStatusReporter reporter);
+
+    // 设置桌面下载目录。传空时由下载管理器使用自身默认值。
+    void set_download_directory(std::string directory);
 
     // 设置 P2P 配置存储，用于 update_config kind=p2p_seeding 热更新。
     void set_p2p_config_store(std::shared_ptr<P2PConfigStore> store);
@@ -65,9 +73,11 @@ public:
 
 private:
     ResultReporter reporter_;
+    ReleaseStatusReporter release_status_reporter_;
     std::shared_ptr<Executor> executor_;
     std::shared_ptr<IDownloadManager> dl_mgr_;
     std::shared_ptr<P2PConfigStore> p2p_config_store_;
+    std::string download_directory_;
     std::mutex mu_;
 };
 

@@ -235,6 +235,9 @@ else()
     find_package(Threads REQUIRED)
     find_package(protobuf CONFIG REQUIRED)
     find_package(gRPC CONFIG REQUIRED)
+    find_package(OpenSSL REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBTORRENT_RASTERBAR REQUIRED IMPORTED_TARGET libtorrent-rasterbar)
 
     # Proto files for Desktop: gen-desktop/ (v34.1, pre-generated)
     # gen/ is only used by Android (gen-android/)
@@ -244,6 +247,7 @@ else()
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+        src/download/p2p_download_manager.cc
     )
 
     add_executable(device-agent
@@ -260,6 +264,8 @@ else()
 
     target_link_libraries(device-agent PRIVATE
         Threads::Threads
+        OpenSSL::Crypto
+        PkgConfig::LIBTORRENT_RASTERBAR
         protobuf::libprotobuf
         gRPC::grpc++
         z
@@ -276,11 +282,23 @@ else()
     )
     target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
 
-    if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
-        find_package(OpenSSL REQUIRED)
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(LIBTORRENT_RASTERBAR REQUIRED IMPORTED_TARGET libtorrent-rasterbar)
+    add_executable(command_handler_download_test
+        src/client/command_handler_download_test.cc
+        src/client/command_handler.cc
+        src/config/p2p_config_store.cc
+        src/executor/linux_executor.cc
+        src/logger/logger.cc
+        src/reboot_state/reboot_state.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+    )
+    target_include_directories(command_handler_download_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_link_libraries(command_handler_download_test PRIVATE protobuf::libprotobuf)
 
+    if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
             src/download/p2p_download_manager.cc

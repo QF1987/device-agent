@@ -25,6 +25,8 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
+#include <memory>
+#include <algorithm>
 
 namespace device_agent {
 
@@ -100,6 +102,34 @@ static bool extract_json_int64(const std::string& json, const std::string& key, 
     return true;
 }
 
+static terminal_agent::v1::ReleaseStatusRequest make_release_status(
+        const DownloadRequest& req,
+        terminal_agent::v1::ReleaseDeviceStatus status,
+        int64_t downloaded_bytes,
+        terminal_agent::v1::ReleaseErrorCode error_code =
+            terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+        const std::string& error_message = std::string()) {
+    terminal_agent::v1::ReleaseStatusRequest report;
+    report.set_batch_id(req.batch_id);
+    report.set_file_id(req.file_id);
+    report.set_status(status);
+    report.set_downloaded_bytes(downloaded_bytes);
+    report.set_error_code(error_code);
+    report.set_error_message(error_message);
+    report.set_timestamp(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+    return report;
+}
+
+static int64_t progress_report_step_bytes(int64_t total_bytes) {
+    if (total_bytes <= 0) {
+        return 1024 * 1024;
+    }
+    const int64_t five_percent = total_bytes / 20;
+    return std::max<int64_t>(five_percent, 1);
+}
+
 // ─── CommandHandler 实现 ───────────────────────────────────
 
 CommandHandler::CommandHandler(ResultReporter reporter)
@@ -113,6 +143,16 @@ void CommandHandler::set_executor(std::shared_ptr<Executor> executor) {
 void CommandHandler::set_download_manager(std::shared_ptr<IDownloadManager> dl_mgr) {
     std::lock_guard<std::mutex> lock(mu_);
     dl_mgr_ = std::move(dl_mgr);
+}
+
+void CommandHandler::set_release_status_reporter(ReleaseStatusReporter reporter) {
+    std::lock_guard<std::mutex> lock(mu_);
+    release_status_reporter_ = std::move(reporter);
+}
+
+void CommandHandler::set_download_directory(std::string directory) {
+    std::lock_guard<std::mutex> lock(mu_);
+    download_directory_ = std::move(directory);
 }
 
 void CommandHandler::set_p2p_config_store(std::shared_ptr<P2PConfigStore> store) {
@@ -231,6 +271,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
         std::shared_ptr<IDownloadManager> dl_mgr;
+        ReleaseStatusReporter release_status_reporter;
+        std::string download_directory;
         {
             std::lock_guard<std::mutex> lock(mu_);
             if (!dl_mgr_) {
@@ -239,6 +281,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
 #endif
             }
             dl_mgr = dl_mgr_;
+            release_status_reporter = release_status_reporter_;
+            download_directory = download_directory_;
         }
 
         if (batch_id.empty() || file_id.empty() ||
@@ -255,7 +299,7 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             req.url = url;
             req.torrent_url = torrent_url;
             req.magnet_uri = magnet_uri;
-            req.dest_path = "";  // 由下载管理器自行决定存储路径
+            req.dest_path = download_directory;
             req.expected_sha256 = sha256;
             req.file_size = file_size;
             req.batch_id = batch_id;
@@ -283,13 +327,59 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             LOG_INFO("CommandHandler: dispatching download_ready cmd_id=" + cmd.command_id() +
                      " batch=" + batch_id + " file=" + file_id);
 
-            dl_mgr->download(req, nullptr, [](bool ok, const std::string& err) {
-                if (!ok) {
-                    LOG_ERROR("download_ready: download failed: " + err);
-                } else {
-                    LOG_INFO("download_ready: download dispatched");
-                }
-            });
+            const auto last_downloaded_bytes = std::make_shared<int64_t>(0);
+            const auto last_reported_bytes = std::make_shared<int64_t>(0);
+            if (release_status_reporter) {
+                release_status_reporter(make_release_status(
+                    req, terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADING, 0));
+            }
+
+            dl_mgr->download(
+                req,
+                [req, release_status_reporter, last_downloaded_bytes, last_reported_bytes](
+                        const DownloadProgress& progress) {
+                    *last_downloaded_bytes = progress.downloaded_bytes;
+                    if (release_status_reporter) {
+                        const int64_t step = progress_report_step_bytes(progress.total_bytes);
+                        const bool completed =
+                            progress.total_bytes > 0 &&
+                            progress.downloaded_bytes >= progress.total_bytes;
+                        if (!completed && progress.downloaded_bytes - *last_reported_bytes < step) {
+                            return;
+                        }
+                        *last_reported_bytes = progress.downloaded_bytes;
+                        release_status_reporter(make_release_status(
+                            req,
+                            terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADING,
+                            progress.downloaded_bytes));
+                    }
+                },
+                [req, release_status_reporter, last_downloaded_bytes](
+                        bool ok, const std::string& err) {
+                    if (!ok) {
+                        LOG_ERROR("download_ready: download failed: " + err);
+                        if (release_status_reporter) {
+                            release_status_reporter(make_release_status(
+                                req,
+                                terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED,
+                                *last_downloaded_bytes,
+                                terminal_agent::v1::RELEASE_ERROR_CODE_NETWORK_ERROR,
+                                err));
+                        }
+                    } else {
+                        LOG_INFO("download_ready: download dispatched");
+                        if (release_status_reporter) {
+                            int64_t final_bytes = *last_downloaded_bytes;
+                            if (final_bytes <= 0 && req.file_size > 0) {
+                                final_bytes = req.file_size;
+                            }
+                            release_status_reporter(make_release_status(
+                                req,
+                                terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED,
+                                final_bytes));
+                        }
+                    }
+                });
             result.set_status("success");
             result.set_message("download dispatched");
         }

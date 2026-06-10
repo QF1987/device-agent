@@ -34,6 +34,9 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <cerrno>
+#include <cstring>
+#include <sys/stat.h>
 
 #include "client/device_client.h"
 #include "client/command_handler.h"
@@ -44,6 +47,8 @@
 #include "download/idownload_manager.h"
 #ifdef __ANDROID__
 #include "download/android_download_manager.h"
+#else
+#include "download/p2p_download_manager.h"
 #endif
 #include "reboot_state/reboot_state.h"
 
@@ -74,6 +79,35 @@ void print_usage(const char* prog) {
               << "  -e           Load config from environment variables\n"
               << "  -h           Show this help\n";
 }
+
+#ifndef __ANDROID__
+std::string desktop_download_dir() {
+    const char* configured = std::getenv("DEVICE_AGENT_DOWNLOAD_DIR");
+    if (configured != nullptr && configured[0] != '\0') {
+        return configured;
+    }
+    const char* tmpdir = std::getenv("TMPDIR");
+    if (tmpdir != nullptr && tmpdir[0] != '\0') {
+        std::string dir(tmpdir);
+        if (!dir.empty() && dir.back() == '/') {
+            dir.pop_back();
+        }
+        return dir + "/device-agent-downloads";
+    }
+    return "./device-agent-downloads";
+}
+
+bool ensure_directory(const std::string& path) {
+    if (path.empty()) {
+        return true;
+    }
+    if (::mkdir(path.c_str(), 0755) == 0 || errno == EEXIST) {
+        return true;
+    }
+    LOG_ERROR("Failed to create download directory " + path + ": " + std::strerror(errno));
+    return false;
+}
+#endif
 
 // ============================================================
 // main()：程序入口
@@ -217,21 +251,34 @@ int main(int argc, char* argv[]) {
         [client](const terminal_agent::v1::CommandResult& result) -> bool {
             return client->report_command_result(result);
         });
+    handler.set_release_status_reporter(
+        [client](const terminal_agent::v1::ReleaseStatusRequest& status) -> bool {
+            return client->report_release_status(status);
+        });
 
     // 根据平台选择正确的 Executor（放在配置校验前，确保日志能输出）
 #ifdef __ANDROID__
     handler.set_executor(std::make_shared<device_agent::AndroidExecutor>());
     handler.set_download_manager(std::make_shared<device_agent::AndroidDownloadManager>());
     LOG_INFO("Using AndroidExecutor + AndroidDownloadManager");
-    LOG_INFO("Using AndroidExecutor + AndroidDownloadManager");
 #elif __APPLE__
     handler.set_executor(std::make_shared<device_agent::MacOSExecutor>());
-    // TODO: handler.set_download_manager(std::make_shared<device_agent::CurlDownloadManager>());
-    LOG_INFO("Using MacOSExecutor (download manager not yet implemented)");
+    const std::string download_dir = desktop_download_dir();
+    if (!ensure_directory(download_dir)) {
+        return 1;
+    }
+    handler.set_download_directory(download_dir);
+    handler.set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
+    LOG_INFO("Using MacOSExecutor + P2PDownloadManager download_dir=" + download_dir);
 #else
     handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
-    // TODO: handler.set_download_manager(std::make_shared<device_agent::CurlDownloadManager>());
-    LOG_INFO("Using LinuxExecutor (download manager not yet implemented)");
+    const std::string download_dir = desktop_download_dir();
+    if (!ensure_directory(download_dir)) {
+        return 1;
+    }
+    handler.set_download_directory(download_dir);
+    handler.set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
+    LOG_INFO("Using LinuxExecutor + P2PDownloadManager download_dir=" + download_dir);
 #endif
 
     // ============================================================

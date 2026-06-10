@@ -44,7 +44,7 @@ constexpr int ANDROID_LOG_WARN = 5;
 #include <utility>
 #include <vector>
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__APPLE__) || defined(__linux__)
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -157,7 +157,7 @@ void add_tracker_helper(lt::add_torrent_params& params, const std::string& track
 bool run_web_seed_http_fallback(const std::string& url,
                                 const std::string& output_path,
                                 std::string& error) {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__APPLE__) || defined(__linux__)
     if (!starts_with(url, "http://") || output_path.empty()) {
         error = "web seed fallback missing url or output path";
         return false;
@@ -326,6 +326,40 @@ std::string resolve_save_path(const DownloadRequest& req,
 #endif
     }
     return dirname_or_current(source);
+}
+
+std::string basename_from_url(const std::string& url) {
+    std::string path = url;
+    const auto query = path.find_first_of("?#");
+    if (query != std::string::npos) {
+        path = path.substr(0, query);
+    }
+    const auto slash = path.find_last_of('/');
+    if (slash != std::string::npos && slash + 1 < path.size()) {
+        return path.substr(slash + 1);
+    }
+    return "download.bin";
+}
+
+std::string join_path(const std::string& dir, const std::string& name) {
+    if (dir.empty() || dir == ".") {
+        return "./" + name;
+    }
+    if (dir.back() == '/') {
+        return dir + name;
+    }
+    return dir + "/" + name;
+}
+
+std::string direct_http_output_path(const DownloadRequest& req) {
+    const std::string filename = req.file_id.empty() ? basename_from_url(req.url) : req.file_id;
+    return join_path(req.dest_path.empty() ? "." : req.dest_path, filename);
+}
+
+std::string torrent_metadata_output_path(const DownloadRequest& req) {
+    const std::string filename =
+        (req.file_id.empty() ? basename_from_url(req.torrent_url) : req.file_id) + ".torrent";
+    return join_path(req.dest_path.empty() ? "." : req.dest_path, filename);
 }
 
 lt::session make_session() {
@@ -1098,7 +1132,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
     }
     std::string source_error;
     select_download_source(req, source_error);
-    if (!source_error.empty()) {
+    if (!source_error.empty() && !is_http_url(req.url)) {
         if (on_complete) {
             on_complete(false, source_error);
         }
@@ -1274,13 +1308,53 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
     try {
         const DownloadSource source = select_download_source(req, error);
-        if (error.empty()) {
-            LOG_INFO("P2PDownloadManager: loading torrent " + source.value);
+        if (!error.empty() && is_http_url(req.url)) {
+            error.clear();
+            downloaded_path = direct_http_output_path(req);
+            if (callbacks_.on_started) {
+                callbacks_.on_started(req, downloaded_path);
+            }
+            std::string fallback_error;
+            if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+                success = true;
+                completed_by_stall_fallback = true;
+                has_web_seed_hint = true;
+                if (on_progress) {
+                    on_progress(DownloadProgress{req.file_size, req.file_size, 100});
+                }
+                if (callbacks_.on_progress) {
+                    callbacks_.on_progress(req, DownloadProgress{req.file_size, req.file_size, 100});
+                }
+                if (!req.expected_sha256.empty()) {
+                    std::string verify_error;
+                    if (!verify_sha256_with_retry(downloaded_path, req.expected_sha256, verify_error)) {
+                        success = false;
+                        error = verify_error;
+                    }
+                }
+            } else {
+                error = fallback_error;
+            }
+        } else if (error.empty()) {
+            std::string torrent_source = source.value;
+            if (!source.is_magnet && is_http_url(source.value)) {
+                const std::string metadata_path = torrent_metadata_output_path(req);
+                LOG_INFO("P2PDownloadManager: downloading torrent metadata " + source.value +
+                         " -> " + metadata_path);
+                std::string metadata_error;
+                if (!run_web_seed_http_fallback(source.value, metadata_path, metadata_error)) {
+                    error = "failed to download torrent metadata: " + metadata_error;
+                } else {
+                    torrent_source = metadata_path;
+                }
+            }
+
+            LOG_INFO("P2PDownloadManager: loading torrent " + torrent_source);
 
             lt::error_code ec;
             lt::add_torrent_params params;
             std::string fallback_web_seed_url = is_http_url(req.url) ? req.url : std::string();
-            params.save_path = resolve_save_path(req, source.value, source.is_magnet);
+            params.save_path = resolve_save_path(req, torrent_source, source.is_magnet);
             if (source.is_magnet) {
                 params = lt::parse_magnet_uri(source.value, ec);
                 params.save_path = resolve_save_path(req, source.value, source.is_magnet);
@@ -1288,7 +1362,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     error = "failed to parse magnet URI: " + ec.message();
                 }
             } else {
-                auto torrent = std::make_shared<lt::torrent_info>(source.value, ec);
+                auto torrent = std::make_shared<lt::torrent_info>(torrent_source, ec);
                 if (ec) {
                     error = "failed to load torrent: " + ec.message();
                 } else {
