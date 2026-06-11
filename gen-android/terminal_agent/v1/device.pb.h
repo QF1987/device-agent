@@ -888,6 +888,8 @@ class ReleaseStatusRequest final : public ::google::protobuf::Message
     kStatusFieldNumber = 4,
     kErrorCodeFieldNumber = 6,
     kTimestampFieldNumber = 8,
+    kPeerBytesFieldNumber = 10,
+    kWebSeedBytesFieldNumber = 11,
     kCompletionPathFieldNumber = 9,
   };
   // string device_id = 1;
@@ -990,6 +992,26 @@ class ReleaseStatusRequest final : public ::google::protobuf::Message
   void _internal_set_timestamp(::int64_t value);
 
   public:
+  // int64 peer_bytes = 10;
+  void clear_peer_bytes() ;
+  ::int64_t peer_bytes() const;
+  void set_peer_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_peer_bytes() const;
+  void _internal_set_peer_bytes(::int64_t value);
+
+  public:
+  // int64 web_seed_bytes = 11;
+  void clear_web_seed_bytes() ;
+  ::int64_t web_seed_bytes() const;
+  void set_web_seed_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_web_seed_bytes() const;
+  void _internal_set_web_seed_bytes(::int64_t value);
+
+  public:
   // .terminal_agent.v1.CompletionPath completion_path = 9;
   void clear_completion_path() ;
   ::terminal_agent::v1::CompletionPath completion_path() const;
@@ -1004,7 +1026,7 @@ class ReleaseStatusRequest final : public ::google::protobuf::Message
  private:
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<4, 9,
+  static const ::google::protobuf::internal::TcParseTable<4, 11,
                                    0, 92,
                                    2>
       _table_;
@@ -1034,6 +1056,8 @@ class ReleaseStatusRequest final : public ::google::protobuf::Message
     int status_;
     int error_code_;
     ::int64_t timestamp_;
+    ::int64_t peer_bytes_;
+    ::int64_t web_seed_bytes_;
     int completion_path_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -8546,7 +8570,7 @@ inline void ReleaseStatusRequest::_internal_set_timestamp(::int64_t value) {
 inline void ReleaseStatusRequest::clear_completion_path() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.completion_path_ = 0;
-  _impl_._has_bits_[0] &= ~0x00000100u;
+  _impl_._has_bits_[0] &= ~0x00000400u;
 }
 inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::completion_path() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.completion_path)
@@ -8554,7 +8578,7 @@ inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::completion_pat
 }
 inline void ReleaseStatusRequest::set_completion_path(::terminal_agent::v1::CompletionPath value) {
   _internal_set_completion_path(value);
-  _impl_._has_bits_[0] |= 0x00000100u;
+  _impl_._has_bits_[0] |= 0x00000400u;
   // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.completion_path)
 }
 inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::_internal_completion_path() const {
@@ -8564,6 +8588,54 @@ inline ::terminal_agent::v1::CompletionPath ReleaseStatusRequest::_internal_comp
 inline void ReleaseStatusRequest::_internal_set_completion_path(::terminal_agent::v1::CompletionPath value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.completion_path_ = value;
+}
+
+// int64 peer_bytes = 10;
+inline void ReleaseStatusRequest::clear_peer_bytes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.peer_bytes_ = ::int64_t{0};
+  _impl_._has_bits_[0] &= ~0x00000100u;
+}
+inline ::int64_t ReleaseStatusRequest::peer_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.peer_bytes)
+  return _internal_peer_bytes();
+}
+inline void ReleaseStatusRequest::set_peer_bytes(::int64_t value) {
+  _internal_set_peer_bytes(value);
+  _impl_._has_bits_[0] |= 0x00000100u;
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.peer_bytes)
+}
+inline ::int64_t ReleaseStatusRequest::_internal_peer_bytes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.peer_bytes_;
+}
+inline void ReleaseStatusRequest::_internal_set_peer_bytes(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.peer_bytes_ = value;
+}
+
+// int64 web_seed_bytes = 11;
+inline void ReleaseStatusRequest::clear_web_seed_bytes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.web_seed_bytes_ = ::int64_t{0};
+  _impl_._has_bits_[0] &= ~0x00000200u;
+}
+inline ::int64_t ReleaseStatusRequest::web_seed_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.ReleaseStatusRequest.web_seed_bytes)
+  return _internal_web_seed_bytes();
+}
+inline void ReleaseStatusRequest::set_web_seed_bytes(::int64_t value) {
+  _internal_set_web_seed_bytes(value);
+  _impl_._has_bits_[0] |= 0x00000200u;
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.ReleaseStatusRequest.web_seed_bytes)
+}
+inline ::int64_t ReleaseStatusRequest::_internal_web_seed_bytes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.web_seed_bytes_;
+}
+inline void ReleaseStatusRequest::_internal_set_web_seed_bytes(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.web_seed_bytes_ = value;
 }
 
 // -------------------------------------------------------------------

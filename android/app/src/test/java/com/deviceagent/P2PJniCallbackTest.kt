@@ -33,7 +33,9 @@ class P2PJniCallbackTest {
                 "onP2PComplete",
                 Boolean::class.javaPrimitiveType,
                 String::class.java,
-                Int::class.javaPrimitiveType
+                Int::class.javaPrimitiveType,
+                Long::class.javaPrimitiveType,
+                Long::class.javaPrimitiveType
             )
         )
     }
@@ -68,7 +70,9 @@ class P2PJniCallbackTest {
             String::class.java,
             String::class.java,
             File::class.java,
-            Int::class.javaPrimitiveType
+            Int::class.javaPrimitiveType,
+            Long::class.javaPrimitiveType,
+            Long::class.javaPrimitiveType
         )
         assertNotNull(method)
     }

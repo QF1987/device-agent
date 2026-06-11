@@ -517,6 +517,12 @@ message ReleaseStatusRequest {
 
     // 下载完成路径；旧端不上报时保持 UNSPECIFIED
     CompletionPath completion_path = 9;
+
+    // P2P peer 下载字节数；老端不上报时为 0
+    int64 peer_bytes = 10;
+
+    // Web Seed 下载字节数；老端不上报时为 0
+    int64 web_seed_bytes = 11;
 }
 
 // ReleaseStatusResponse：状态上报响应

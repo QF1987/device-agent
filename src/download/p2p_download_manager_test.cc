@@ -166,7 +166,7 @@ int main() {
     P2PDownloadManager empty_url_manager;
     bool empty_complete = false;
     empty_url_manager.download(DownloadRequest{}, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(!err.empty());
             empty_complete = true;
@@ -179,7 +179,7 @@ int main() {
     DownloadRequest invalid_magnet_req;
     invalid_magnet_req.magnet_uri = "magnet:?xt=urn:btih:invalid";
     invalid_magnet_manager.download(invalid_magnet_req, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(err.find("failed to parse magnet URI") != std::string::npos);
             invalid_magnet_complete = true;
@@ -195,7 +195,7 @@ int main() {
     DownloadRequest url_torrent_fallback_req;
     url_torrent_fallback_req.url = "/tmp/legacy-url-source.torrent";
     url_torrent_fallback_manager.download(url_torrent_fallback_req, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(err.find("expected magnet_uri or torrent_url") != std::string::npos);
             assert(err.find("fallback") == std::string::npos);
@@ -250,7 +250,7 @@ int main() {
             std::lock_guard<std::mutex> lock(mu);
             ++progress_calls;
         },
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             std::lock_guard<std::mutex> lock(mu);
             complete_called = true;
             complete_ok = ok;
@@ -346,7 +346,7 @@ int main() {
     disabled_req.torrent_url = torrent_path;
     disabled_req.file_size = 64 * 1024 * 1024;
     disabled_manager.download(disabled_req, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(err.find("p2p disabled") != std::string::npos);
             disabled_complete = true;
@@ -364,7 +364,7 @@ int main() {
     min_size_req.torrent_url = torrent_path;
     min_size_req.file_size = 16 * 1024 * 1024;
     min_size_manager.download(min_size_req, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(err.find("min_file_size_mb_for_p2p") != std::string::npos);
             min_size_complete = true;
@@ -387,7 +387,7 @@ int main() {
     cellular_download_req.torrent_url = torrent_path;
     cellular_download_req.file_size = 64 * 1024 * 1024;
     cellular_download_manager.download(cellular_download_req, nullptr,
-        [&](bool ok, const std::string& err) {
+        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
             assert(!ok);
             assert(err.find("cellular download disabled") != std::string::npos);
             cellular_download_complete = true;

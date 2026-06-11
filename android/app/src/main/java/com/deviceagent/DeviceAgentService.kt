@@ -413,7 +413,7 @@ class DeviceAgentService : Service() {
         @JvmStatic
         external fun nativeOnNetworkChanged(isCellular: Boolean, isWifi: Boolean)
         @JvmStatic
-        external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String, completionPath: Int): Boolean
+        external fun nativeReportReleaseStatus(batchId: String, fileId: String, status: String, downloadedBytes: Long, errorCode: String, errorMessage: String, completionPath: Int, peerBytes: Long, webSeedBytes: Long): Boolean
 
         /** 根据 BuildConfig flavor 创建对应的安装器 */
         private fun createInstaller(service: DeviceAgentService): IAppInstaller = when (BuildConfig.INSTALL_MODE) {
@@ -768,7 +768,7 @@ class DeviceAgentService : Service() {
         }
     }
 
-    fun onP2PComplete(success: Boolean, errorMsg: String, completionPath: Int) {
+    fun onP2PComplete(success: Boolean, errorMsg: String, completionPath: Int, peerBytes: Long, webSeedBytes: Long) {
         val ctx = synchronized(p2pLock) {
             val current = activeP2PContext
             activeP2PContext = null
@@ -791,7 +791,7 @@ class DeviceAgentService : Service() {
         if (!ctx.fileType.equals("apk", ignoreCase = true)) {
             android.util.Log.i(TAG, "P2P download verified: cmd=${ctx.commandId} batch=${ctx.batchId} file=${ctx.fileId} type=${ctx.fileType}")
             reportCommandStatus(ctx.commandId, "success", "P2P download verified")
-            reportReleaseStatus(ctx.batchId, ctx.fileId, "downloaded", bytes = File(ctx.localPath).length(), completionPath = completionPath)
+            reportReleaseStatus(ctx.batchId, ctx.fileId, "downloaded", bytes = File(ctx.localPath).length(), completionPath = completionPath, peerBytes = peerBytes, webSeedBytes = webSeedBytes)
             updateNotificationTemporarily("✅ P2P 下载完成")
             return
         }
@@ -804,7 +804,9 @@ class DeviceAgentService : Service() {
                 ctx.localPath,
                 ctx.sha256,
                 File(ctx.localPath),
-                completionPath
+                completionPath,
+                peerBytes,
+                webSeedBytes
             )
         }.start()
     }
@@ -912,7 +914,9 @@ class DeviceAgentService : Service() {
         url: String,
         sha: String,
         predownloadedApk: File? = null,
-        completionPath: Int = COMPLETION_PATH_UNSPECIFIED
+        completionPath: Int = COMPLETION_PATH_UNSPECIFIED,
+        peerBytes: Long = 0,
+        webSeedBytes: Long = 0
     ) {
         val svc = this
         if (UpgradingMark.isUpgrading(svc)) {
@@ -948,7 +952,7 @@ class DeviceAgentService : Service() {
             return
         }
         synchronized(inFlightFiles) { inFlightFiles.remove(fileId) }
-        reportReleaseStatus(batchId, fileId, "downloaded", dest.length(), completionPath = completionPath)
+        reportReleaseStatus(batchId, fileId, "downloaded", dest.length(), completionPath = completionPath, peerBytes = peerBytes, webSeedBytes = webSeedBytes)
         android.util.Log.i(TAG, "Download OK, cmd=$commandId batch=$batchId file=$fileId, installing via ${installer.mode}")
         UpgradingMark.write(svc, fileId)
         reportReleaseStatus(batchId, fileId, "installing")
@@ -1106,11 +1110,13 @@ class DeviceAgentService : Service() {
         bytes: Long = 0,
         errorCode: String = "",
         errorMessage: String = "",
-        completionPath: Int = COMPLETION_PATH_UNSPECIFIED
+        completionPath: Int = COMPLETION_PATH_UNSPECIFIED,
+        peerBytes: Long = 0,
+        webSeedBytes: Long = 0
     ) {
         if (batchId.isEmpty()) return
         Thread {
-            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, errorCode, errorMessage, completionPath) }
+            try { nativeReportReleaseStatus(batchId, fileId, status, bytes, errorCode, errorMessage, completionPath, peerBytes, webSeedBytes) }
             catch (e: Exception) {
                 android.util.Log.e(TAG, "reportReleaseStatus native: ${e.message}")
             }

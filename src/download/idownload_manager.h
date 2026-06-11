@@ -51,11 +51,20 @@ struct DownloadProgress {
     int percent;                // 进度百分比 0-100
 };
 
+struct DownloadCompletionTelemetry {
+    int completion_path = 0;     // terminal_agent.v1.CompletionPath
+    int64_t peer_bytes = 0;      // 来自 P2P peers 的下载字节数
+    int64_t web_seed_bytes = 0;  // 来自 web seed 的下载字节数
+};
+
 // ─── IDownloadManager：下载管理器抽象接口 ─────────────────
 class IDownloadManager {
 public:
     using ProgressCallback = std::function<void(const DownloadProgress&)>;
-    using CompleteCallback = std::function<void(bool success, const std::string& err)>;
+    using CompleteCallback = std::function<void(
+        bool success,
+        const std::string& err,
+        const DownloadCompletionTelemetry& telemetry)>;
 
     virtual ~IDownloadManager() = default;
 

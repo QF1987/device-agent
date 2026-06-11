@@ -39,7 +39,18 @@
 // JNI native 方法实现
 static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(JNIEnv* env, jclass clazz, jobject serviceObj, jstring jServerHost, jint jServerPort, jstring jDeviceId);
 static void Java_com_deviceagent_DeviceAgentService_nativeStop_impl(JNIEnv* env, jclass clazz);
-static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(JNIEnv* env, jclass clazz, jstring jBatchId, jstring jFileId, jstring jStatus, jlong jDownloadedBytes, jstring jErrorCode, jstring jErrorMessage, jint jCompletionPath);
+static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(
+    JNIEnv* env,
+    jclass clazz,
+    jstring jBatchId,
+    jstring jFileId,
+    jstring jStatus,
+    jlong jDownloadedBytes,
+    jstring jErrorCode,
+    jstring jErrorMessage,
+    jint jCompletionPath,
+    jlong jPeerBytes,
+    jlong jWebSeedBytes);
 static void Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl(JNIEnv* env, jclass clazz, jboolean isCellular, jboolean isWifi);
 
 // ─── 全局变量（跨函数共享）────────────────────────────
@@ -110,7 +121,7 @@ static JNINativeMethod g_methods[] = {
     },
     {
         const_cast<char*>("nativeReportReleaseStatus"),
-        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;I)Z"),
+        const_cast<char*>("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;IJJ)Z"),
         reinterpret_cast<void*>(&Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl)
     },
     {
@@ -370,7 +381,11 @@ static void call_p2p_progress(const device_agent::DownloadProgress& progress) {
     env->DeleteLocalRef(clazz);
 }
 
-static void call_p2p_complete(bool success, const std::string& error, device_agent::CompletionPathTelemetry completion_path) {
+static void call_p2p_complete(bool success,
+                              const std::string& error,
+                              device_agent::CompletionPathTelemetry completion_path,
+                              int64_t peer_bytes,
+                              int64_t web_seed_bytes) {
     ScopedJniEnv scoped = ScopedJniEnv::current();
     JNIEnv* env = scoped.get();
     jclass clazz = get_service_class(env);
@@ -379,7 +394,7 @@ static void call_p2p_complete(bool success, const std::string& error, device_age
         return;
     }
 
-    jmethodID method = env->GetMethodID(clazz, "onP2PComplete", "(ZLjava/lang/String;I)V");
+    jmethodID method = env->GetMethodID(clazz, "onP2PComplete", "(ZLjava/lang/String;IJJ)V");
     if (method == nullptr) {
         clear_jni_exception(env, "onP2PComplete");
         env->DeleteLocalRef(clazz);
@@ -392,7 +407,9 @@ static void call_p2p_complete(bool success, const std::string& error, device_age
         method,
         success ? JNI_TRUE : JNI_FALSE,
         jError,
-        static_cast<jint>(completion_path));
+        static_cast<jint>(completion_path),
+        static_cast<jlong>(peer_bytes),
+        static_cast<jlong>(web_seed_bytes));
     clear_jni_exception(env, "onP2PComplete");
     env->DeleteLocalRef(jError);
     env->DeleteLocalRef(clazz);
@@ -481,8 +498,10 @@ static jint Java_com_deviceagent_DeviceAgentService_nativeStart_impl(
                                             const std::string&,
                                             bool success,
                                             const std::string& error,
-                                            device_agent::CompletionPathTelemetry completion_path) {
-        call_p2p_complete(success, error, completion_path);
+                                            device_agent::CompletionPathTelemetry completion_path,
+                                            int64_t peer_bytes,
+                                            int64_t web_seed_bytes) {
+        call_p2p_complete(success, error, completion_path, peer_bytes, web_seed_bytes);
     };
     g_handler->set_download_manager(std::make_shared<device_agent::P2PDownloadManager>(
         p2pCallbacks,
@@ -566,7 +585,7 @@ static void Java_com_deviceagent_DeviceAgentService_nativeOnNetworkChanged_impl(
 }
 
 // ─── nativeReportReleaseStatus 实现 ──────────────────────
-// Kotlin签名: nativeReportReleaseStatus(batchId, fileId, status, downloadedBytes, errorCode, errorMessage, completionPath): Boolean
+// Kotlin签名: nativeReportReleaseStatus(batchId, fileId, status, downloadedBytes, errorCode, errorMessage, completionPath, peerBytes, webSeedBytes): Boolean
 static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatus_impl(
     JNIEnv* env,
     jclass,
@@ -576,7 +595,9 @@ static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatu
     jlong jDownloadedBytes,
     jstring jErrorCode,
     jstring jErrorMessage,
-    jint jCompletionPath) {
+    jint jCompletionPath,
+    jlong jPeerBytes,
+    jlong jWebSeedBytes) {
 
     if (g_client == nullptr) {
         LOGI("nativeReportReleaseStatus: g_client is null, skipping");
@@ -599,6 +620,8 @@ static jboolean Java_com_deviceagent_DeviceAgentService_nativeReportReleaseStatu
 
     req.set_downloaded_bytes(jDownloadedBytes);
     req.set_completion_path(parseCompletionPath(jCompletionPath));
+    req.set_peer_bytes(jPeerBytes);
+    req.set_web_seed_bytes(jWebSeedBytes);
 
     if (jErrorCode != nullptr) {
         str = env->GetStringUTFChars(jErrorCode, nullptr);

@@ -108,12 +108,18 @@ static terminal_agent::v1::ReleaseStatusRequest make_release_status(
         int64_t downloaded_bytes,
         terminal_agent::v1::ReleaseErrorCode error_code =
             terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
-        const std::string& error_message = std::string()) {
+        const std::string& error_message = std::string(),
+        int completion_path = 0,
+        int64_t peer_bytes = 0,
+        int64_t web_seed_bytes = 0) {
     terminal_agent::v1::ReleaseStatusRequest report;
     report.set_batch_id(req.batch_id);
     report.set_file_id(req.file_id);
     report.set_status(status);
     report.set_downloaded_bytes(downloaded_bytes);
+    report.set_completion_path(static_cast<terminal_agent::v1::CompletionPath>(completion_path));
+    report.set_peer_bytes(peer_bytes);
+    report.set_web_seed_bytes(web_seed_bytes);
     report.set_error_code(error_code);
     report.set_error_message(error_message);
     report.set_timestamp(
@@ -355,7 +361,9 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                     }
                 },
                 [req, release_status_reporter, last_downloaded_bytes](
-                        bool ok, const std::string& err) {
+                        bool ok,
+                        const std::string& err,
+                        const DownloadCompletionTelemetry& telemetry) {
                     if (!ok) {
                         LOG_ERROR("download_ready: download failed: " + err);
                         if (release_status_reporter) {
@@ -376,7 +384,12 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                             release_status_reporter(make_release_status(
                                 req,
                                 terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED,
-                                final_bytes));
+                                final_bytes,
+                                terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+                                "",
+                                telemetry.completion_path,
+                                telemetry.peer_bytes,
+                                telemetry.web_seed_bytes));
                         }
                     }
                 });

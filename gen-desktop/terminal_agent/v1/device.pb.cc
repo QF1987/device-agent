@@ -386,11 +386,11 @@ constexpr ReleaseStatusRequest::ParseTableT_ ReleaseStatusRequest::InternalGener
     {
       PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_._has_bits_),
       0, // no _extensions_
-      9, 120,  // max_field_number, fast_idx_mask
+      11, 120,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294966784,  // skipmap
+      4294965248,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      9,  // num_field_entries
+      11,  // num_field_entries
       0,  // num_aux_entries
       offsetof(ParseTableT_, field_names),  // no aux_entries
       class_data,
@@ -434,11 +434,17 @@ constexpr ReleaseStatusRequest::ParseTableT_ ReleaseStatusRequest::InternalGener
        {64, 7, 0,
         PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.timestamp_)}},
       // .terminal_agent.v1.CompletionPath completion_path = 9;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(ReleaseStatusRequest, _impl_.completion_path_), 8>(),
-       {72, 8, 0,
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(ReleaseStatusRequest, _impl_.completion_path_), 10>(),
+       {72, 10, 0,
         PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.completion_path_)}},
-      {::_pbi::TcParser::MiniParse, {}},
-      {::_pbi::TcParser::MiniParse, {}},
+      // int64 peer_bytes = 10;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(ReleaseStatusRequest, _impl_.peer_bytes_), 8>(),
+       {80, 8, 0,
+        PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.peer_bytes_)}},
+      // int64 web_seed_bytes = 11;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(ReleaseStatusRequest, _impl_.web_seed_bytes_), 9>(),
+       {88, 9, 0,
+        PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.web_seed_bytes_)}},
       {::_pbi::TcParser::MiniParse, {}},
       {::_pbi::TcParser::MiniParse, {}},
       {::_pbi::TcParser::MiniParse, {}},
@@ -463,7 +469,11 @@ constexpr ReleaseStatusRequest::ParseTableT_ ReleaseStatusRequest::InternalGener
       // int64 timestamp = 8;
       {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.timestamp_), _Internal::kHasBitsOffset + 7, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
       // .terminal_agent.v1.CompletionPath completion_path = 9;
-      {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.completion_path_), _Internal::kHasBitsOffset + 8, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+      {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.completion_path_), _Internal::kHasBitsOffset + 10, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+      // int64 peer_bytes = 10;
+      {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.peer_bytes_), _Internal::kHasBitsOffset + 8, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+      // int64 web_seed_bytes = 11;
+      {PROTOBUF_FIELD_OFFSET(ReleaseStatusRequest, _impl_.web_seed_bytes_), _Internal::kHasBitsOffset + 9, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
     }},
     // no aux_entries
     {{
@@ -498,6 +508,8 @@ inline constexpr ReleaseStatusRequest::Impl_::Impl_(
         status_{static_cast< ::terminal_agent::v1::ReleaseDeviceStatus >(0)},
         error_code_{static_cast< ::terminal_agent::v1::ReleaseErrorCode >(0)},
         timestamp_{::int64_t{0}},
+        peer_bytes_{::int64_t{0}},
+        web_seed_bytes_{::int64_t{0}},
         completion_path_{static_cast< ::terminal_agent::v1::CompletionPath >(0)} {}
 
 template <typename>
@@ -3314,7 +3326,7 @@ const ::uint32_t
         4,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_._has_bits_),
-        12, // hasbit index offset
+        14, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.device_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.batch_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.file_id_),
@@ -3324,6 +3336,8 @@ const ::uint32_t
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.error_message_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.timestamp_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.completion_path_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.peer_bytes_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusRequest, _impl_.web_seed_bytes_),
         0,
         1,
         2,
@@ -3332,7 +3346,9 @@ const ::uint32_t
         6,
         3,
         7,
+        10,
         8,
+        9,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::ReleaseStatusResponse, _impl_._has_bits_),
         5, // hasbit index offset
@@ -3360,7 +3376,7 @@ static const ::_pbi::MigrationSchema
         {167, sizeof(::terminal_agent::v1::CommandStreamRequest)},
         {172, sizeof(::terminal_agent::v1::CommandResult)},
         {185, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
-        {206, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
+        {210, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
@@ -3432,7 +3448,7 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "mandStreamRequest\022\021\n\tdevice_id\030\001 \001(\t\"l\n\r"
     "CommandResult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdev"
     "ice_id\030\002 \001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030"
-    "\004 \001(\t\022\023\n\013executed_at\030\005 \001(\003\"\275\002\n\024ReleaseSt"
+    "\004 \001(\t\022\023\n\013executed_at\030\005 \001(\003\"\351\002\n\024ReleaseSt"
     "atusRequest\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_"
     "id\030\002 \001(\t\022\017\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001("
     "\0162&.terminal_agent.v1.ReleaseDeviceStatu"
@@ -3440,40 +3456,41 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "e\030\006 \001(\0162#.terminal_agent.v1.ReleaseError"
     "Code\022\025\n\rerror_message\030\007 \001(\t\022\021\n\ttimestamp"
     "\030\010 \001(\003\022:\n\017completion_path\030\t \001(\0162!.termin"
-    "al_agent.v1.CompletionPath\":\n\025ReleaseSta"
-    "tusResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message"
-    "\030\002 \001(\t*D\n\013NetworkType\022\017\n\013NET_UNKNOWN\020\000\022\014"
-    "\n\010CELLULAR\020\001\022\010\n\004WIFI\020\002\022\014\n\010ETHERNET\020\003*\266\003\n"
-    "\023ReleaseDeviceStatus\022%\n!RELEASE_DEVICE_S"
-    "TATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_DEVICE_ST"
-    "ATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE_STATUS_"
-    "READY\020\002\022%\n!RELEASE_DEVICE_STATUS_DOWNLOA"
-    "DING\020\003\022$\n RELEASE_DEVICE_STATUS_DOWNLOAD"
-    "ED\020\004\022$\n RELEASE_DEVICE_STATUS_INSTALLING"
-    "\020\005\022#\n\037RELEASE_DEVICE_STATUS_INSTALLED\020\006\022"
-    ")\n%RELEASE_DEVICE_STATUS_DOWNLOAD_FAILED"
-    "\020\007\022(\n$RELEASE_DEVICE_STATUS_INSTALL_FAIL"
-    "ED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CANCELLED\020"
-    "\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRYING\020\n*\234\002"
-    "\n\020ReleaseErrorCode\022\"\n\036RELEASE_ERROR_CODE"
-    "_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_CODE_NET"
-    "WORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CODE_SERVE"
-    "R_ERROR\020\002\022$\n RELEASE_ERROR_CODE_STORAGE_"
-    "ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CHECKSUM_F"
-    "AILED\020\004\022$\n RELEASE_ERROR_CODE_INSTALL_ER"
-    "ROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSINESS_ERR"
-    "OR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPLETION_PA"
-    "TH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n\020WEB"
-    "_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK_STALL\020\003"
-    "\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004B;Z9gith"
-    "ub.com/QF1987/terminal-agent-go/gen/term"
-    "inal_agent/v1b\006proto3"
+    "al_agent.v1.CompletionPath\022\022\n\npeer_bytes"
+    "\030\n \001(\003\022\026\n\016web_seed_bytes\030\013 \001(\003\":\n\025Releas"
+    "eStatusResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007mes"
+    "sage\030\002 \001(\t*D\n\013NetworkType\022\017\n\013NET_UNKNOWN"
+    "\020\000\022\014\n\010CELLULAR\020\001\022\010\n\004WIFI\020\002\022\014\n\010ETHERNET\020\003"
+    "*\266\003\n\023ReleaseDeviceStatus\022%\n!RELEASE_DEVI"
+    "CE_STATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_DEVIC"
+    "E_STATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE_STA"
+    "TUS_READY\020\002\022%\n!RELEASE_DEVICE_STATUS_DOW"
+    "NLOADING\020\003\022$\n RELEASE_DEVICE_STATUS_DOWN"
+    "LOADED\020\004\022$\n RELEASE_DEVICE_STATUS_INSTAL"
+    "LING\020\005\022#\n\037RELEASE_DEVICE_STATUS_INSTALLE"
+    "D\020\006\022)\n%RELEASE_DEVICE_STATUS_DOWNLOAD_FA"
+    "ILED\020\007\022(\n$RELEASE_DEVICE_STATUS_INSTALL_"
+    "FAILED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CANCEL"
+    "LED\020\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRYING\020"
+    "\n*\234\002\n\020ReleaseErrorCode\022\"\n\036RELEASE_ERROR_"
+    "CODE_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_CODE"
+    "_NETWORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CODE_S"
+    "ERVER_ERROR\020\002\022$\n RELEASE_ERROR_CODE_STOR"
+    "AGE_ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CHECKS"
+    "UM_FAILED\020\004\022$\n RELEASE_ERROR_CODE_INSTAL"
+    "L_ERROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSINESS"
+    "_ERROR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPLETIO"
+    "N_PATH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n"
+    "\020WEB_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK_STA"
+    "LL\020\003\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004B;Z9"
+    "github.com/QF1987/terminal-agent-go/gen/"
+    "terminal_agent/v1b\006proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    3341,
+    3385,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
@@ -8520,7 +8537,11 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
         reinterpret_cast<char*>(&_impl_.timestamp_) -
         reinterpret_cast<char*>(&_impl_.downloaded_bytes_)) + sizeof(_impl_.timestamp_));
   }
-  _impl_.completion_path_ = 0;
+  if (BatchCheckHasBit(cached_has_bits, 0x00000700U)) {
+    ::memset(&_impl_.peer_bytes_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.completion_path_) -
+        reinterpret_cast<char*>(&_impl_.peer_bytes_)) + sizeof(_impl_.completion_path_));
+  }
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
@@ -8621,11 +8642,29 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
   }
 
   // .terminal_agent.v1.CompletionPath completion_path = 9;
-  if (CheckHasBit(cached_has_bits, 0x00000100U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000400U)) {
     if (this_._internal_completion_path() != 0) {
       target = stream->EnsureSpace(target);
       target = ::_pbi::WireFormatLite::WriteEnumToArray(
           9, this_._internal_completion_path(), target);
+    }
+  }
+
+  // int64 peer_bytes = 10;
+  if (CheckHasBit(cached_has_bits, 0x00000100U)) {
+    if (this_._internal_peer_bytes() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<10>(
+              stream, this_._internal_peer_bytes(), target);
+    }
+  }
+
+  // int64 web_seed_bytes = 11;
+  if (CheckHasBit(cached_has_bits, 0x00000200U)) {
+    if (this_._internal_web_seed_bytes() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<11>(
+              stream, this_._internal_web_seed_bytes(), target);
     }
   }
 
@@ -8712,9 +8751,23 @@ PROTOBUF_NOINLINE void ReleaseStatusRequest::Clear() {
       }
     }
   }
-   {
-    // .terminal_agent.v1.CompletionPath completion_path = 9;
+  if (BatchCheckHasBit(cached_has_bits, 0x00000700U)) {
+    // int64 peer_bytes = 10;
     if (CheckHasBit(cached_has_bits, 0x00000100U)) {
+      if (this_._internal_peer_bytes() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_peer_bytes());
+      }
+    }
+    // int64 web_seed_bytes = 11;
+    if (CheckHasBit(cached_has_bits, 0x00000200U)) {
+      if (this_._internal_web_seed_bytes() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_web_seed_bytes());
+      }
+    }
+    // .terminal_agent.v1.CompletionPath completion_path = 9;
+    if (CheckHasBit(cached_has_bits, 0x00000400U)) {
       if (this_._internal_completion_path() != 0) {
         total_size += 1 +
                       ::_pbi::WireFormatLite::EnumSize(this_._internal_completion_path());
@@ -8796,9 +8849,21 @@ void ReleaseStatusRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
       }
     }
   }
-  if (CheckHasBit(cached_has_bits, 0x00000100U)) {
-    if (from._internal_completion_path() != 0) {
-      _this->_impl_.completion_path_ = from._impl_.completion_path_;
+  if (BatchCheckHasBit(cached_has_bits, 0x00000700U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000100U)) {
+      if (from._internal_peer_bytes() != 0) {
+        _this->_impl_.peer_bytes_ = from._impl_.peer_bytes_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000200U)) {
+      if (from._internal_web_seed_bytes() != 0) {
+        _this->_impl_.web_seed_bytes_ = from._impl_.web_seed_bytes_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000400U)) {
+      if (from._internal_completion_path() != 0) {
+        _this->_impl_.completion_path_ = from._impl_.completion_path_;
+      }
     }
   }
   _this->_impl_._has_bits_[0] |= cached_has_bits;

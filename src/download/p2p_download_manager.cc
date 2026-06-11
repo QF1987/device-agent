@@ -848,14 +848,33 @@ CompletionPathTelemetry choose_completion_path(bool stall_fallback,
     return CompletionPathTelemetry::Unspecified;
 }
 
+DownloadCompletionTelemetry make_completion_telemetry(CompletionPathTelemetry completion_path,
+                                                      int64_t peer_bytes,
+                                                      int64_t web_seed_bytes) {
+    DownloadCompletionTelemetry telemetry;
+    telemetry.completion_path = static_cast<int>(completion_path);
+    telemetry.peer_bytes = peer_bytes;
+    telemetry.web_seed_bytes = web_seed_bytes;
+    return telemetry;
+}
+
 void emit_complete_callback(const P2PDownloadManager::Callbacks& callbacks,
                             const DownloadRequest& req,
                             const std::string& downloaded_path,
                             bool success,
                             const std::string& error,
-                            CompletionPathTelemetry completion_path) {
+                            CompletionPathTelemetry completion_path,
+                            int64_t peer_bytes,
+                            int64_t web_seed_bytes) {
     if (callbacks.on_complete_with_path) {
-        callbacks.on_complete_with_path(req, downloaded_path, success, error, completion_path);
+        callbacks.on_complete_with_path(
+            req,
+            downloaded_path,
+            success,
+            error,
+            completion_path,
+            peer_bytes,
+            web_seed_bytes);
     } else if (callbacks.on_complete) {
         callbacks.on_complete(req, downloaded_path, success, error);
     }
@@ -1112,7 +1131,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
     }
     if (!policy.p2p_enabled) {
         if (on_complete) {
-            on_complete(false, "p2p disabled by policy");
+            on_complete(false, "p2p disabled by policy", DownloadCompletionTelemetry{});
         }
         return;
     }
@@ -1120,13 +1139,19 @@ void P2PDownloadManager::download(const DownloadRequest& req,
         static_cast<int64_t>(policy.min_file_size_mb_for_p2p) * 1024 * 1024;
     if (policy.min_file_size_mb_for_p2p > 0 && req.file_size > 0 && req.file_size < min_bytes) {
         if (on_complete) {
-            on_complete(false, "p2p disabled by min_file_size_mb_for_p2p policy");
+            on_complete(
+                false,
+                "p2p disabled by min_file_size_mb_for_p2p policy",
+                DownloadCompletionTelemetry{});
         }
         return;
     }
     if (current_network == NetworkType::CELLULAR && !policy.cellular_download_enabled) {
         if (on_complete) {
-            on_complete(false, "p2p cellular download disabled by policy");
+            on_complete(
+                false,
+                "p2p cellular download disabled by policy",
+                DownloadCompletionTelemetry{});
         }
         return;
     }
@@ -1134,7 +1159,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
     select_download_source(req, source_error);
     if (!source_error.empty() && !is_http_url(req.url)) {
         if (on_complete) {
-            on_complete(false, source_error);
+            on_complete(false, source_error, DownloadCompletionTelemetry{});
         }
         return;
     }
@@ -1142,7 +1167,7 @@ void P2PDownloadManager::download(const DownloadRequest& req,
     bool expected = false;
     if (!downloading_.compare_exchange_strong(expected, true)) {
         if (on_complete) {
-            on_complete(false, "p2p download already active");
+            on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
         }
         return;
     }
@@ -1638,8 +1663,21 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     const auto final_counters = peer_counter_totals(peer_counter_ledger);
                     const int64_t final_web_seed_bytes =
                         std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
+                    const auto completion_path =
+                        choose_completion_path(completed_by_stall_fallback,
+                                               completed_by_sha_fallback,
+                                               final_counters.from_peers,
+                                               final_web_seed_bytes,
+                                               last_total_payload_download,
+                                               has_web_seed_hint);
                     if (on_complete) {
-                        on_complete(true, "");
+                        on_complete(
+                            true,
+                            "",
+                            make_completion_telemetry(
+                                completion_path,
+                                final_counters.from_peers,
+                                final_web_seed_bytes));
                     }
                     if (callbacks_.on_complete || callbacks_.on_complete_with_path) {
                         emit_complete_callback(
@@ -1648,12 +1686,9 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             downloaded_path,
                             true,
                             "",
-                            choose_completion_path(completed_by_stall_fallback,
-                                                   completed_by_sha_fallback,
-                                                   final_counters.from_peers,
-                                                   final_web_seed_bytes,
-                                                   last_total_payload_download,
-                                                   has_web_seed_hint));
+                            completion_path,
+                            final_counters.from_peers,
+                            final_web_seed_bytes);
                     }
                     complete_sent = true;
 
@@ -1715,25 +1750,35 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     }
 
     downloading_.store(false);
+    const auto final_counters = peer_counter_totals(peer_counter_ledger);
+    const int64_t final_web_seed_bytes =
+        std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
+    const auto completion_path =
+        choose_completion_path(completed_by_stall_fallback,
+                               completed_by_sha_fallback,
+                               final_counters.from_peers,
+                               final_web_seed_bytes,
+                               last_total_payload_download,
+                               has_web_seed_hint);
     if (!complete_sent && on_complete) {
-        on_complete(success, success ? std::string() : error);
+        on_complete(
+            success,
+            success ? std::string() : error,
+            make_completion_telemetry(
+                completion_path,
+                final_counters.from_peers,
+                final_web_seed_bytes));
     }
     if (!complete_sent && (callbacks_.on_complete || callbacks_.on_complete_with_path)) {
-        const auto final_counters = peer_counter_totals(peer_counter_ledger);
-        const int64_t final_web_seed_bytes =
-            std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
         emit_complete_callback(
             callbacks_,
             req,
             downloaded_path,
             success,
             success ? std::string() : error,
-            choose_completion_path(completed_by_stall_fallback,
-                                   completed_by_sha_fallback,
-                                   final_counters.from_peers,
-                                   final_web_seed_bytes,
-                                   last_total_payload_download,
-                                   has_web_seed_hint));
+            completion_path,
+            final_counters.from_peers,
+            final_web_seed_bytes);
     }
     set_state_idle();
 }

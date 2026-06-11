@@ -18,7 +18,7 @@ public:
             on_progress(device_agent::DownloadProgress{progress_bytes, req.file_size, 50});
         }
         if (on_complete) {
-            on_complete(complete_success, complete_error);
+            on_complete(complete_success, complete_error, completion_telemetry);
         }
     }
 
@@ -29,6 +29,7 @@ public:
     int64_t progress_bytes = 512;
     bool complete_success = true;
     std::string complete_error;
+    device_agent::DownloadCompletionTelemetry completion_telemetry;
     std::vector<device_agent::DownloadRequest> requests;
 };
 
@@ -62,6 +63,10 @@ int main() {
     {
         std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
         auto fake = std::make_shared<FakeDownloadManager>();
+        fake->completion_telemetry.completion_path =
+            terminal_agent::v1::P2P_PRIMARY;
+        fake->completion_telemetry.peer_bytes = 321;
+        fake->completion_telemetry.web_seed_bytes = 191;
         device_agent::CommandHandler handler(
             [](const terminal_agent::v1::CommandResult&) { return true; });
         handler.set_download_manager(fake);
@@ -93,6 +98,13 @@ int main() {
                          "completion status should be downloaded");
             ok &= expect(reports[2].downloaded_bytes() == 512,
                          "completion bytes should use last progress");
+            ok &= expect(reports[2].completion_path() ==
+                             terminal_agent::v1::P2P_PRIMARY,
+                         "completion path should be forwarded from download telemetry");
+            ok &= expect(reports[2].peer_bytes() == 321,
+                         "peer bytes should be forwarded from download telemetry");
+            ok &= expect(reports[2].web_seed_bytes() == 191,
+                         "web seed bytes should be forwarded from download telemetry");
         }
     }
 

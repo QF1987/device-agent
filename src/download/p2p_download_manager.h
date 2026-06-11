@@ -72,7 +72,14 @@ public:
         std::function<void(const DownloadRequest&, const std::string&)> on_started;
         std::function<void(const DownloadRequest&, const DownloadProgress&)> on_progress;
         std::function<void(const DownloadRequest&, const std::string&, bool, const std::string&)> on_complete;
-        std::function<void(const DownloadRequest&, const std::string&, bool, const std::string&, CompletionPathTelemetry)> on_complete_with_path;
+        std::function<void(
+            const DownloadRequest&,
+            const std::string&,
+            bool,
+            const std::string&,
+            CompletionPathTelemetry,
+            int64_t,
+            int64_t)> on_complete_with_path;
     };
 
     explicit P2PDownloadManager(

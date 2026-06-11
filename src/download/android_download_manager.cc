@@ -65,7 +65,7 @@ void AndroidDownloadManager::download(
     if (env == nullptr || g_java_service == nullptr) {
         std::string err = "Java service not available";
         LOG_ERROR("AndroidDownloadManager: " + err);
-        if (on_complete) on_complete(false, err);
+        if (on_complete) on_complete(false, err, DownloadCompletionTelemetry{});
         return;
     }
 
@@ -76,7 +76,7 @@ void AndroidDownloadManager::download(
     if (method == nullptr) {
         std::string err = "onDownloadReady method not found in Java service";
         LOG_ERROR("AndroidDownloadManager: " + err);
-        if (on_complete) on_complete(false, err);
+        if (on_complete) on_complete(false, err, DownloadCompletionTelemetry{});
         return;
     }
 
@@ -113,7 +113,7 @@ void AndroidDownloadManager::download(
         env->ExceptionClear();
         std::string err = "JNI call to onDownloadReady failed";
         LOG_ERROR("AndroidDownloadManager: " + err);
-        if (on_complete) on_complete(false, err);
+        if (on_complete) on_complete(false, err, DownloadCompletionTelemetry{});
         return;
     }
 
@@ -121,7 +121,7 @@ void AndroidDownloadManager::download(
     LOG_INFO("AndroidDownloadManager: download_ready forwarded to Java layer");
 
     // on_complete 回调表示"已转发"，实际下载结果由 Kotlin 层通过 HTTP 上报
-    if (on_complete) on_complete(true, "");
+    if (on_complete) on_complete(true, "", DownloadCompletionTelemetry{});
 }
 
 // ─── cancel ───────────────────────────────────────────────
