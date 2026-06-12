@@ -9,6 +9,11 @@ bool NetworkPolicy::should_seed() const {
     return current_type_ == NetworkType::WIFI;
 }
 
+NetworkType NetworkPolicy::current_type() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return current_type_;
+}
+
 void NetworkPolicy::on_network_changed(NetworkType type) {
     std::vector<Listener*> listeners;
     {

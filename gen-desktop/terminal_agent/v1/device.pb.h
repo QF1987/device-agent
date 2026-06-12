@@ -2686,6 +2686,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceMetrics final : public ::goog
     kDiskPercentFieldNumber = 3,
     kUptimeSecondsFieldNumber = 6,
     kNetworkTxBytesFieldNumber = 5,
+    kP2PUploadBytesFieldNumber = 7,
+    kP2PUploadBytesCellularFieldNumber = 8,
   };
   // float cpu_percent = 1;
   void clear_cpu_percent() ;
@@ -2747,11 +2749,31 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceMetrics final : public ::goog
   void _internal_set_network_tx_bytes(::int64_t value);
 
   public:
+  // int64 p2p_upload_bytes = 7;
+  void clear_p2p_upload_bytes() ;
+  [[nodiscard]] ::int64_t p2p_upload_bytes() const;
+  void set_p2p_upload_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_p2p_upload_bytes() const;
+  void _internal_set_p2p_upload_bytes(::int64_t value);
+
+  public:
+  // int64 p2p_upload_bytes_cellular = 8;
+  void clear_p2p_upload_bytes_cellular() ;
+  [[nodiscard]] ::int64_t p2p_upload_bytes_cellular() const;
+  void set_p2p_upload_bytes_cellular(::int64_t value);
+
+  private:
+  ::int64_t _internal_p2p_upload_bytes_cellular() const;
+  void _internal_set_p2p_upload_bytes_cellular(::int64_t value);
+
+  public:
   // @@protoc_insertion_point(class_scope:terminal_agent.v1.DeviceMetrics)
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<3, 6,
+      ::google::protobuf::internal::TcParseTable<3, 8,
                           0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
@@ -2786,6 +2808,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceMetrics final : public ::goog
     float disk_percent_;
     ::int32_t uptime_seconds_;
     ::int64_t network_tx_bytes_;
+    ::int64_t p2p_upload_bytes_;
+    ::int64_t p2p_upload_bytes_cellular_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -5659,6 +5683,54 @@ inline ::int32_t DeviceMetrics::_internal_uptime_seconds() const {
 inline void DeviceMetrics::_internal_set_uptime_seconds(::int32_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uptime_seconds_ = value;
+}
+
+// int64 p2p_upload_bytes = 7;
+inline void DeviceMetrics::clear_p2p_upload_bytes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.p2p_upload_bytes_ = ::int64_t{0};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+}
+inline ::int64_t DeviceMetrics::p2p_upload_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceMetrics.p2p_upload_bytes)
+  return _internal_p2p_upload_bytes();
+}
+inline void DeviceMetrics::set_p2p_upload_bytes(::int64_t value) {
+  _internal_set_p2p_upload_bytes(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceMetrics.p2p_upload_bytes)
+}
+inline ::int64_t DeviceMetrics::_internal_p2p_upload_bytes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.p2p_upload_bytes_;
+}
+inline void DeviceMetrics::_internal_set_p2p_upload_bytes(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.p2p_upload_bytes_ = value;
+}
+
+// int64 p2p_upload_bytes_cellular = 8;
+inline void DeviceMetrics::clear_p2p_upload_bytes_cellular() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.p2p_upload_bytes_cellular_ = ::int64_t{0};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000080U);
+}
+inline ::int64_t DeviceMetrics::p2p_upload_bytes_cellular() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceMetrics.p2p_upload_bytes_cellular)
+  return _internal_p2p_upload_bytes_cellular();
+}
+inline void DeviceMetrics::set_p2p_upload_bytes_cellular(::int64_t value) {
+  _internal_set_p2p_upload_bytes_cellular(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000080U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceMetrics.p2p_upload_bytes_cellular)
+}
+inline ::int64_t DeviceMetrics::_internal_p2p_upload_bytes_cellular() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.p2p_upload_bytes_cellular_;
+}
+inline void DeviceMetrics::_internal_set_p2p_upload_bytes_cellular(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.p2p_upload_bytes_cellular_ = value;
 }
 
 // -------------------------------------------------------------------

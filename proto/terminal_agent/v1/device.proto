@@ -159,6 +159,14 @@ message DeviceMetrics {
 
   // 设备运行时长，单位秒（本次启动以来）
   int32  uptime_seconds = 6;
+
+  // P2P 做种累计上传字节（本次启动以来）。做种发生在下载完成后的 TTL 期内，
+  // 故挂周期状态上报而非下载完成上报；老端不上报时保持 0（ADR-20260612-01）
+  int64  p2p_upload_bytes = 7;
+
+  // 其中「蜂窝网络期间」的 P2P 上传字节（device 侧按当下网络类型分桶累积）。
+  // 蜂窝默认禁止上传，此值是守门指标，正常应恒为 0
+  int64  p2p_upload_bytes_cellular = 8;
 }
 
 // 设备配置

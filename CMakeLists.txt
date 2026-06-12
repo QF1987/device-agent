@@ -23,6 +23,7 @@ set(COMMON_SOURCES
     src/reboot_state/reboot_state.cc
     src/download/android_download_manager.cc
     src/download/network_policy.cc
+    src/download/p2p_upload_counters.cc
 )
 
 set(COMMON_HEADERS
@@ -47,7 +48,7 @@ if(ANDROID OR __ANDROID__)
     add_definitions(-D__ANDROID__)
     list(APPEND COMMON_SOURCES src/executor/android_executor.cc)
     list(APPEND COMMON_SOURCES src/jni_wrapper.cpp)
-    list(APPEND COMMON_SOURCES src/download/p2p_download_manager.cc)
+    list(APPEND COMMON_SOURCES src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc)
 
     # Exclude desktop executors from Android build
     list(FILTER COMMON_SOURCES EXCLUDE REGEX "src/executor/linux_executor.cc$")
@@ -179,7 +180,7 @@ extern "C" const char* device_agent_libtorrent_version() {
 
     add_executable(p2p_download_manager_test
         src/download/p2p_download_manager_test.cc
-        src/download/p2p_download_manager.cc
+        src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
         src/download/network_policy.cc
         src/config/p2p_config_store.cc
         src/logger/logger.cc
@@ -227,6 +228,13 @@ extern "C" const char* device_agent_libtorrent_version() {
     )
     target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
 
+    add_executable(p2p_upload_counters_test
+        src/download/p2p_upload_counters_test.cc
+        src/download/p2p_upload_counters.cc
+        src/download/network_policy.cc
+    )
+    target_include_directories(p2p_upload_counters_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
 # ─── Desktop (Linux/macOS): build as standalone executable ─
 else()
     message(STATUS "=== Building device-agent for desktop ===")
@@ -247,7 +255,7 @@ else()
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
-        src/download/p2p_download_manager.cc
+        src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
     )
 
     add_executable(device-agent
@@ -282,6 +290,13 @@ else()
     )
     target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
 
+    add_executable(p2p_upload_counters_test
+        src/download/p2p_upload_counters_test.cc
+        src/download/p2p_upload_counters.cc
+        src/download/network_policy.cc
+    )
+    target_include_directories(p2p_upload_counters_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
     add_executable(command_handler_download_test
         src/client/command_handler_download_test.cc
         src/client/command_handler.cc
@@ -301,7 +316,7 @@ else()
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
-            src/download/p2p_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
@@ -320,7 +335,7 @@ else()
 
         add_executable(p2p_docker_runner
             src/download/p2p_docker_runner.cc
-            src/download/p2p_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc

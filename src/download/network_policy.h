@@ -21,6 +21,8 @@ public:
     };
 
     bool should_seed() const;
+    // 当前网络类型(P2P 上传分桶采样用,ADR-20260612-01 D2)
+    NetworkType current_type() const;
     void on_network_changed(NetworkType type);
     void add_listener(Listener* listener);
     void remove_listener(Listener* listener);

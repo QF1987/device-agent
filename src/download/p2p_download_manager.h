@@ -116,6 +116,8 @@ private:
     bool should_stop_seeding(double share_ratio) const;
     void ensure_session_locked();
     void remove_active_handle_locked(const lt::torrent_handle& handle);
+    // 蜂窝守门采样:按增量分桶累积到进程级计数(ADR-20260612-01 D2);仅 worker 线程调用
+    void sample_upload(std::int64_t all_time_upload);
     void refresh_policy_from_config();
 
     mutable std::mutex mu_;
@@ -126,6 +128,8 @@ private:
     std::shared_ptr<NetworkPolicy> network_policy_;
     P2PSeedingPolicy seeding_policy_;
     NetworkType network_type_{NetworkType::NONE};
+    // P2P 上传分桶采样的上次样本(torrent all_time_upload);仅 worker 线程读写
+    std::int64_t last_upload_sample_{0};
     std::atomic<bool> downloading_{false};
     std::atomic<bool> cancel_requested_{false};
     Callbacks callbacks_;

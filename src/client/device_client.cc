@@ -1,4 +1,5 @@
 #include "client/device_client.h"
+#include "download/p2p_upload_counters.h"
 #include "client/network_info.h"
 #include "logger/logger.h"
 #include <chrono>
@@ -147,6 +148,10 @@ void DeviceClient::status_report_loop() {
         metrics->set_network_rx_bytes(0);
         metrics->set_network_tx_bytes(0);
         metrics->set_uptime_seconds(0);
+        // 蜂窝守门:P2P 做种上传分桶计数(ADR-20260612-01;老 server 忽略未知字段)
+        const auto p2p_upload = p2p_upload_counters();
+        metrics->set_p2p_upload_bytes(p2p_upload.total);
+        metrics->set_p2p_upload_bytes_cellular(p2p_upload.cellular);
         populate_network_info_proto(status.mutable_network_info());
 
         terminal_agent::v1::StatusReportResponse resp;

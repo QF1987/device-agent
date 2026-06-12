@@ -316,7 +316,9 @@ inline constexpr DeviceMetrics::Impl_::Impl_(
         network_rx_bytes_{::int64_t{0}},
         disk_percent_{0},
         uptime_seconds_{0},
-        network_tx_bytes_{::int64_t{0}} {}
+        network_tx_bytes_{::int64_t{0}},
+        p2p_upload_bytes_{::int64_t{0}},
+        p2p_upload_bytes_cellular_{::int64_t{0}} {}
 
 template <typename>
 PROTOBUF_CONSTEXPR DeviceMetrics::DeviceMetrics(::_pbi::ConstantInitialized)
@@ -652,19 +654,23 @@ const ::uint32_t
         0,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_._has_bits_),
-        9, // hasbit index offset
+        11, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.cpu_percent_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.memory_percent_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.disk_percent_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.network_rx_bytes_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.network_tx_bytes_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.uptime_seconds_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.p2p_upload_bytes_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceMetrics, _impl_.p2p_upload_bytes_cellular_),
         0,
         1,
         3,
         2,
         5,
         4,
+        6,
+        7,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceConfig, _impl_._has_bits_),
         8, // hasbit index offset
@@ -836,18 +842,18 @@ static const ::_pbi::MigrationSchema
         {16, sizeof(::terminal_agent::v1::HeartbeatRequest)},
         {33, sizeof(::terminal_agent::v1::HeartbeatResponse)},
         {40, sizeof(::terminal_agent::v1::DeviceMetrics)},
-        {55, sizeof(::terminal_agent::v1::DeviceConfig)},
-        {68, sizeof(::terminal_agent::v1::NetworkInfo)},
-        {87, sizeof(::terminal_agent::v1::StatusReport)},
-        {104, sizeof(::terminal_agent::v1::StatusReportResponse)},
-        {111, sizeof(::terminal_agent::v1::EventReport)},
-        {126, sizeof(::terminal_agent::v1::EventReportResponse)},
-        {133, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
-        {152, sizeof(::terminal_agent::v1::Command)},
-        {167, sizeof(::terminal_agent::v1::CommandStreamRequest)},
-        {172, sizeof(::terminal_agent::v1::CommandResult)},
-        {185, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
-        {210, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
+        {59, sizeof(::terminal_agent::v1::DeviceConfig)},
+        {72, sizeof(::terminal_agent::v1::NetworkInfo)},
+        {91, sizeof(::terminal_agent::v1::StatusReport)},
+        {108, sizeof(::terminal_agent::v1::StatusReportResponse)},
+        {115, sizeof(::terminal_agent::v1::EventReport)},
+        {130, sizeof(::terminal_agent::v1::EventReportResponse)},
+        {137, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
+        {156, sizeof(::terminal_agent::v1::Command)},
+        {171, sizeof(::terminal_agent::v1::CommandStreamRequest)},
+        {176, sizeof(::terminal_agent::v1::CommandResult)},
+        {189, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
+        {214, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::terminal_agent::v1::_AuthContext_default_instance_._instance,
@@ -881,86 +887,88 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     "\001(\002\022\026\n\016uptime_seconds\030\006 \001(\005\0227\n\ncapabilit"
     "y\030\007 \001(\0132#.terminal_agent.v1.DeviceCapabi"
     "lity\"E\n\021HeartbeatResponse\022\033\n\023has_pending"
-    "_command\030\001 \001(\010\022\023\n\013server_time\030\002 \001(\003\"\236\001\n\r"
+    "_command\030\001 \001(\010\022\023\n\013server_time\030\002 \001(\003\"\333\001\n\r"
     "DeviceMetrics\022\023\n\013cpu_percent\030\001 \001(\002\022\026\n\016me"
     "mory_percent\030\002 \001(\002\022\024\n\014disk_percent\030\003 \001(\002"
     "\022\030\n\020network_rx_bytes\030\004 \001(\003\022\030\n\020network_tx"
-    "_bytes\030\005 \001(\003\022\026\n\016uptime_seconds\030\006 \001(\005\"\222\001\n"
-    "\014DeviceConfig\022\031\n\021screen_brightness\030\001 \001(\005"
-    "\022\024\n\014volume_level\030\002 \001(\005\022\033\n\023auto_reboot_en"
-    "abled\030\003 \001(\010\022\030\n\020auto_reboot_time\030\004 \001(\t\022\032\n"
-    "\022custom_config_json\030\005 \001(\t\"\300\001\n\013NetworkInf"
-    "o\022\023\n\013gateway_mac\030\001 \001(\t\022\r\n\005bssid\030\002 \001(\t\022\016\n"
-    "\006lan_ip\030\003 \001(\t\022\020\n\010lan_cidr\030\004 \001(\t\022\021\n\tpubli"
-    "c_ip\030\005 \001(\t\0220\n\010net_type\030\006 \001(\0162\036.terminal_"
-    "agent.v1.NetworkType\022\022\n\nis_metered\030\007 \001(\010"
-    "\022\022\n\nis_roaming\030\010 \001(\010\"\370\001\n\014StatusReport\022\021\n"
-    "\tdevice_id\030\001 \001(\t\022\021\n\ttimestamp\030\002 \001(\003\022\016\n\006s"
-    "tatus\030\003 \001(\t\022\030\n\020firmware_version\030\004 \001(\t\0221\n"
-    "\007metrics\030\005 \001(\0132 .terminal_agent.v1.Devic"
-    "eMetrics\022/\n\006config\030\006 \001(\0132\037.terminal_agen"
-    "t.v1.DeviceConfig\0224\n\014network_info\030\007 \001(\0132"
-    "\036.terminal_agent.v1.NetworkInfo\"9\n\024Statu"
-    "sReportResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007mes"
-    "sage\030\002 \001(\t\"\177\n\013EventReport\022\021\n\tdevice_id\030\001"
-    " \001(\t\022\021\n\ttimestamp\030\002 \001(\003\022\022\n\nevent_type\030\003 "
-    "\001(\t\022\020\n\010severity\030\004 \001(\t\022\017\n\007message\030\005 \001(\t\022\023"
-    "\n\013detail_json\030\006 \001(\t\"8\n\023EventReportRespon"
-    "se\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\256\001"
-    "\n\024DownloadReadyCommand\022\020\n\010batch_id\030\001 \001(\t"
-    "\022\017\n\007file_id\030\002 \001(\t\022\021\n\tfile_type\030\003 \001(\t\022\024\n\014"
-    "download_url\030\004 \001(\t\022\016\n\006sha256\030\005 \001(\t\022\021\n\tfi"
-    "le_size\030\006 \001(\003\022\023\n\013torrent_url\030\007 \001(\t\022\022\n\nma"
-    "gnet_uri\030\010 \001(\t\"\210\001\n\007Command\022\021\n\tdevice_id\030"
-    "\001 \001(\t\022\022\n\ncommand_id\030\002 \001(\t\022\024\n\014command_typ"
-    "e\030\003 \001(\t\022\024\n\014payload_json\030\004 \001(\t\022\021\n\tissued_"
-    "at\030\005 \001(\003\022\027\n\017timeout_seconds\030\006 \001(\003\")\n\024Com"
-    "mandStreamRequest\022\021\n\tdevice_id\030\001 \001(\t\"l\n\r"
-    "CommandResult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n\tdev"
-    "ice_id\030\002 \001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007message\030"
-    "\004 \001(\t\022\023\n\013executed_at\030\005 \001(\003\"\351\002\n\024ReleaseSt"
-    "atusRequest\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010batch_"
-    "id\030\002 \001(\t\022\017\n\007file_id\030\003 \001(\t\0226\n\006status\030\004 \001("
-    "\0162&.terminal_agent.v1.ReleaseDeviceStatu"
-    "s\022\030\n\020downloaded_bytes\030\005 \001(\003\0227\n\nerror_cod"
-    "e\030\006 \001(\0162#.terminal_agent.v1.ReleaseError"
-    "Code\022\025\n\rerror_message\030\007 \001(\t\022\021\n\ttimestamp"
-    "\030\010 \001(\003\022:\n\017completion_path\030\t \001(\0162!.termin"
-    "al_agent.v1.CompletionPath\022\022\n\npeer_bytes"
-    "\030\n \001(\003\022\026\n\016web_seed_bytes\030\013 \001(\003\":\n\025Releas"
-    "eStatusResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007mes"
-    "sage\030\002 \001(\t*D\n\013NetworkType\022\017\n\013NET_UNKNOWN"
-    "\020\000\022\014\n\010CELLULAR\020\001\022\010\n\004WIFI\020\002\022\014\n\010ETHERNET\020\003"
-    "*\266\003\n\023ReleaseDeviceStatus\022%\n!RELEASE_DEVI"
-    "CE_STATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_DEVIC"
-    "E_STATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE_STA"
-    "TUS_READY\020\002\022%\n!RELEASE_DEVICE_STATUS_DOW"
-    "NLOADING\020\003\022$\n RELEASE_DEVICE_STATUS_DOWN"
-    "LOADED\020\004\022$\n RELEASE_DEVICE_STATUS_INSTAL"
-    "LING\020\005\022#\n\037RELEASE_DEVICE_STATUS_INSTALLE"
-    "D\020\006\022)\n%RELEASE_DEVICE_STATUS_DOWNLOAD_FA"
-    "ILED\020\007\022(\n$RELEASE_DEVICE_STATUS_INSTALL_"
-    "FAILED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CANCEL"
-    "LED\020\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRYING\020"
-    "\n*\234\002\n\020ReleaseErrorCode\022\"\n\036RELEASE_ERROR_"
-    "CODE_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_CODE"
-    "_NETWORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CODE_S"
-    "ERVER_ERROR\020\002\022$\n RELEASE_ERROR_CODE_STOR"
-    "AGE_ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CHECKS"
-    "UM_FAILED\020\004\022$\n RELEASE_ERROR_CODE_INSTAL"
-    "L_ERROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSINESS"
-    "_ERROR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPLETIO"
-    "N_PATH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n"
-    "\020WEB_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK_STA"
-    "LL\020\003\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004B;Z9"
-    "github.com/QF1987/terminal-agent-go/gen/"
-    "terminal_agent/v1b\006proto3"
+    "_bytes\030\005 \001(\003\022\026\n\016uptime_seconds\030\006 \001(\005\022\030\n\020"
+    "p2p_upload_bytes\030\007 \001(\003\022!\n\031p2p_upload_byt"
+    "es_cellular\030\010 \001(\003\"\222\001\n\014DeviceConfig\022\031\n\021sc"
+    "reen_brightness\030\001 \001(\005\022\024\n\014volume_level\030\002 "
+    "\001(\005\022\033\n\023auto_reboot_enabled\030\003 \001(\010\022\030\n\020auto"
+    "_reboot_time\030\004 \001(\t\022\032\n\022custom_config_json"
+    "\030\005 \001(\t\"\300\001\n\013NetworkInfo\022\023\n\013gateway_mac\030\001 "
+    "\001(\t\022\r\n\005bssid\030\002 \001(\t\022\016\n\006lan_ip\030\003 \001(\t\022\020\n\010la"
+    "n_cidr\030\004 \001(\t\022\021\n\tpublic_ip\030\005 \001(\t\0220\n\010net_t"
+    "ype\030\006 \001(\0162\036.terminal_agent.v1.NetworkTyp"
+    "e\022\022\n\nis_metered\030\007 \001(\010\022\022\n\nis_roaming\030\010 \001("
+    "\010\"\370\001\n\014StatusReport\022\021\n\tdevice_id\030\001 \001(\t\022\021\n"
+    "\ttimestamp\030\002 \001(\003\022\016\n\006status\030\003 \001(\t\022\030\n\020firm"
+    "ware_version\030\004 \001(\t\0221\n\007metrics\030\005 \001(\0132 .te"
+    "rminal_agent.v1.DeviceMetrics\022/\n\006config\030"
+    "\006 \001(\0132\037.terminal_agent.v1.DeviceConfig\0224"
+    "\n\014network_info\030\007 \001(\0132\036.terminal_agent.v1"
+    ".NetworkInfo\"9\n\024StatusReportResponse\022\020\n\010"
+    "accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\177\n\013Event"
+    "Report\022\021\n\tdevice_id\030\001 \001(\t\022\021\n\ttimestamp\030\002"
+    " \001(\003\022\022\n\nevent_type\030\003 \001(\t\022\020\n\010severity\030\004 \001"
+    "(\t\022\017\n\007message\030\005 \001(\t\022\023\n\013detail_json\030\006 \001(\t"
+    "\"8\n\023EventReportResponse\022\020\n\010accepted\030\001 \001("
+    "\010\022\017\n\007message\030\002 \001(\t\"\256\001\n\024DownloadReadyComm"
+    "and\022\020\n\010batch_id\030\001 \001(\t\022\017\n\007file_id\030\002 \001(\t\022\021"
+    "\n\tfile_type\030\003 \001(\t\022\024\n\014download_url\030\004 \001(\t\022"
+    "\016\n\006sha256\030\005 \001(\t\022\021\n\tfile_size\030\006 \001(\003\022\023\n\013to"
+    "rrent_url\030\007 \001(\t\022\022\n\nmagnet_uri\030\010 \001(\t\"\210\001\n\007"
+    "Command\022\021\n\tdevice_id\030\001 \001(\t\022\022\n\ncommand_id"
+    "\030\002 \001(\t\022\024\n\014command_type\030\003 \001(\t\022\024\n\014payload_"
+    "json\030\004 \001(\t\022\021\n\tissued_at\030\005 \001(\003\022\027\n\017timeout"
+    "_seconds\030\006 \001(\003\")\n\024CommandStreamRequest\022\021"
+    "\n\tdevice_id\030\001 \001(\t\"l\n\rCommandResult\022\022\n\nco"
+    "mmand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 \001(\t\022\016\n\006sta"
+    "tus\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013executed_a"
+    "t\030\005 \001(\003\"\351\002\n\024ReleaseStatusRequest\022\021\n\tdevi"
+    "ce_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022\017\n\007file_id"
+    "\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.terminal_agent."
+    "v1.ReleaseDeviceStatus\022\030\n\020downloaded_byt"
+    "es\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#.terminal_"
+    "agent.v1.ReleaseErrorCode\022\025\n\rerror_messa"
+    "ge\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\022:\n\017completio"
+    "n_path\030\t \001(\0162!.terminal_agent.v1.Complet"
+    "ionPath\022\022\n\npeer_bytes\030\n \001(\003\022\026\n\016web_seed_"
+    "bytes\030\013 \001(\003\":\n\025ReleaseStatusResponse\022\020\n\010"
+    "accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t*D\n\013Netwo"
+    "rkType\022\017\n\013NET_UNKNOWN\020\000\022\014\n\010CELLULAR\020\001\022\010\n"
+    "\004WIFI\020\002\022\014\n\010ETHERNET\020\003*\266\003\n\023ReleaseDeviceS"
+    "tatus\022%\n!RELEASE_DEVICE_STATUS_UNSPECIFI"
+    "ED\020\000\022!\n\035RELEASE_DEVICE_STATUS_PENDING\020\001\022"
+    "\037\n\033RELEASE_DEVICE_STATUS_READY\020\002\022%\n!RELE"
+    "ASE_DEVICE_STATUS_DOWNLOADING\020\003\022$\n RELEA"
+    "SE_DEVICE_STATUS_DOWNLOADED\020\004\022$\n RELEASE"
+    "_DEVICE_STATUS_INSTALLING\020\005\022#\n\037RELEASE_D"
+    "EVICE_STATUS_INSTALLED\020\006\022)\n%RELEASE_DEVI"
+    "CE_STATUS_DOWNLOAD_FAILED\020\007\022(\n$RELEASE_D"
+    "EVICE_STATUS_INSTALL_FAILED\020\010\022#\n\037RELEASE"
+    "_DEVICE_STATUS_CANCELLED\020\t\022\"\n\036RELEASE_DE"
+    "VICE_STATUS_RETRYING\020\n*\234\002\n\020ReleaseErrorC"
+    "ode\022\"\n\036RELEASE_ERROR_CODE_UNSPECIFIED\020\000\022"
+    "$\n RELEASE_ERROR_CODE_NETWORK_ERROR\020\001\022#\n"
+    "\037RELEASE_ERROR_CODE_SERVER_ERROR\020\002\022$\n RE"
+    "LEASE_ERROR_CODE_STORAGE_ERROR\020\003\022&\n\"RELE"
+    "ASE_ERROR_CODE_CHECKSUM_FAILED\020\004\022$\n RELE"
+    "ASE_ERROR_CODE_INSTALL_ERROR\020\005\022%\n!RELEAS"
+    "E_ERROR_CODE_BUSINESS_ERROR\020\006*\221\001\n\016Comple"
+    "tionPath\022\037\n\033COMPLETION_PATH_UNSPECIFIED\020"
+    "\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n\020WEB_SEED_PRIMARY\020\002"
+    "\022\027\n\023HTTP_FALLBACK_STALL\020\003\022\036\n\032HTTP_FALLBA"
+    "CK_SHA_MISMATCH\020\004B;Z9github.com/QF1987/t"
+    "erminal-agent-go/gen/terminal_agent/v1b\006"
+    "proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    3385,
+    3446,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
@@ -2428,9 +2436,9 @@ inline void DeviceMetrics::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   ::memset(reinterpret_cast<char *>(&_impl_) +
                offsetof(Impl_, cpu_percent_),
            0,
-           offsetof(Impl_, network_tx_bytes_) -
+           offsetof(Impl_, p2p_upload_bytes_cellular_) -
                offsetof(Impl_, cpu_percent_) +
-               sizeof(Impl_::network_tx_bytes_));
+               sizeof(Impl_::p2p_upload_bytes_cellular_));
 }
 DeviceMetrics::~DeviceMetrics() {
   // @@protoc_insertion_point(destructor:terminal_agent.v1.DeviceMetrics)
@@ -2486,16 +2494,16 @@ DeviceMetrics::GetClassData() const {
   return DeviceMetrics_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 6, 0, 0, 2>
+const ::_pbi::TcParseTable<3, 8, 0, 0, 2>
 DeviceMetrics::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_._has_bits_),
     0, // no _extensions_
-    6, 56,  // max_field_number, fast_idx_mask
+    8, 56,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967232,  // skipmap
+    4294967040,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    6,  // num_field_entries
+    8,  // num_field_entries
     0,  // num_aux_entries
     offsetof(decltype(_table_), field_names),  // no aux_entries
     DeviceMetrics_class_data_.base(),
@@ -2505,7 +2513,9 @@ DeviceMetrics::_table_ = {
     ::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceMetrics>(),  // to_prefetch
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
+    // int64 p2p_upload_bytes_cellular = 8;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DeviceMetrics, _impl_.p2p_upload_bytes_cellular_), 7>(),
+     {64, 7, 0, PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.p2p_upload_bytes_cellular_)}},
     // float cpu_percent = 1;
     {::_pbi::TcParser::FastF32S1,
      {13, 0, 0, PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.cpu_percent_)}},
@@ -2524,7 +2534,9 @@ DeviceMetrics::_table_ = {
     // int32 uptime_seconds = 6;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(DeviceMetrics, _impl_.uptime_seconds_), 4>(),
      {48, 4, 0, PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.uptime_seconds_)}},
-    {::_pbi::TcParser::MiniParse, {}},
+    // int64 p2p_upload_bytes = 7;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DeviceMetrics, _impl_.p2p_upload_bytes_), 6>(),
+     {56, 6, 0, PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.p2p_upload_bytes_)}},
   }}, {{
     65535, 65535
   }}, {{
@@ -2546,6 +2558,12 @@ DeviceMetrics::_table_ = {
     // int32 uptime_seconds = 6;
     {PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.uptime_seconds_), _Internal::kHasBitsOffset + 4, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // int64 p2p_upload_bytes = 7;
+    {PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.p2p_upload_bytes_), _Internal::kHasBitsOffset + 6, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+    // int64 p2p_upload_bytes_cellular = 8;
+    {PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.p2p_upload_bytes_cellular_), _Internal::kHasBitsOffset + 7, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
   }},
   // no aux_entries
   {{
@@ -2559,10 +2577,10 @@ PROTOBUF_NOINLINE void DeviceMetrics::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     ::memset(&_impl_.cpu_percent_, 0, static_cast<::size_t>(
-        reinterpret_cast<char*>(&_impl_.network_tx_bytes_) -
-        reinterpret_cast<char*>(&_impl_.cpu_percent_)) + sizeof(_impl_.network_tx_bytes_));
+        reinterpret_cast<char*>(&_impl_.p2p_upload_bytes_cellular_) -
+        reinterpret_cast<char*>(&_impl_.cpu_percent_)) + sizeof(_impl_.p2p_upload_bytes_cellular_));
   }
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
@@ -2637,6 +2655,24 @@ PROTOBUF_NOINLINE void DeviceMetrics::Clear() {
     }
   }
 
+  // int64 p2p_upload_bytes = 7;
+  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+    if (this_._internal_p2p_upload_bytes() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<7>(
+              stream, this_._internal_p2p_upload_bytes(), target);
+    }
+  }
+
+  // int64 p2p_upload_bytes_cellular = 8;
+  if ((this_._impl_._has_bits_[0] & 0x00000080u) != 0) {
+    if (this_._internal_p2p_upload_bytes_cellular() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<8>(
+              stream, this_._internal_p2p_upload_bytes_cellular(), target);
+    }
+  }
+
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -2662,7 +2698,7 @@ PROTOBUF_NOINLINE void DeviceMetrics::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     // float cpu_percent = 1;
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (::absl::bit_cast<::uint32_t>(this_._internal_cpu_percent()) != 0) {
@@ -2702,6 +2738,20 @@ PROTOBUF_NOINLINE void DeviceMetrics::Clear() {
             this_._internal_network_tx_bytes());
       }
     }
+    // int64 p2p_upload_bytes = 7;
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (this_._internal_p2p_upload_bytes() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_p2p_upload_bytes());
+      }
+    }
+    // int64 p2p_upload_bytes_cellular = 8;
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (this_._internal_p2p_upload_bytes_cellular() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_p2p_upload_bytes_cellular());
+      }
+    }
   }
   return this_.MaybeComputeUnknownFieldsSize(total_size,
                                              &this_._impl_._cached_size_);
@@ -2716,7 +2766,7 @@ void DeviceMetrics::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::g
   (void) cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (::absl::bit_cast<::uint32_t>(from._internal_cpu_percent()) != 0) {
         _this->_impl_.cpu_percent_ = from._impl_.cpu_percent_;
@@ -2747,6 +2797,16 @@ void DeviceMetrics::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::g
         _this->_impl_.network_tx_bytes_ = from._impl_.network_tx_bytes_;
       }
     }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (from._internal_p2p_upload_bytes() != 0) {
+        _this->_impl_.p2p_upload_bytes_ = from._impl_.p2p_upload_bytes_;
+      }
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (from._internal_p2p_upload_bytes_cellular() != 0) {
+        _this->_impl_.p2p_upload_bytes_cellular_ = from._impl_.p2p_upload_bytes_cellular_;
+      }
+    }
   }
   _this->_impl_._has_bits_[0] |= cached_has_bits;
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
@@ -2765,8 +2825,8 @@ void DeviceMetrics::InternalSwap(DeviceMetrics* PROTOBUF_RESTRICT PROTOBUF_NONNU
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.network_tx_bytes_)
-      + sizeof(DeviceMetrics::_impl_.network_tx_bytes_)
+      PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.p2p_upload_bytes_cellular_)
+      + sizeof(DeviceMetrics::_impl_.p2p_upload_bytes_cellular_)
       - PROTOBUF_FIELD_OFFSET(DeviceMetrics, _impl_.cpu_percent_)>(
           reinterpret_cast<char*>(&_impl_.cpu_percent_),
           reinterpret_cast<char*>(&other->_impl_.cpu_percent_));

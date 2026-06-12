@@ -1,4 +1,5 @@
 #include "download/p2p_download_manager.h"
+#include "download/p2p_upload_counters.h"
 
 #include "config/p2p_config_store.h"
 #include "logger/logger.h"
@@ -1228,6 +1229,21 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
 }
 #endif
 
+void P2PDownloadManager::sample_upload(std::int64_t all_time_upload) {
+    const std::int64_t delta = all_time_upload - last_upload_sample_;
+    NetworkType type = NetworkType::NONE;
+    if (network_policy_) {
+        type = network_policy_->current_type();
+    } else {
+        std::lock_guard<std::mutex> lock(mu_);
+        type = network_type_;
+    }
+    accumulate_p2p_upload(delta, type);  // delta<=0 由计数器内部忽略
+    if (all_time_upload > last_upload_sample_) {
+        last_upload_sample_ = all_time_upload;
+    }
+}
+
 void P2PDownloadManager::on_network_changed(NetworkType type) {
     std::vector<lt::torrent_handle> handles;
     P2PSeedingPolicy policy;
@@ -1279,6 +1295,7 @@ void P2PDownloadManager::join_worker() {
 void P2PDownloadManager::set_state_downloading() {
     std::lock_guard<std::mutex> lock(state_mu_);
     state_machine_.mark_downloading();
+    last_upload_sample_ = 0;  // 新 torrent 的 all_time_upload 从 0 起
 }
 
 void P2PDownloadManager::set_state_seeding() {
@@ -1533,6 +1550,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
 
                     lt::torrent_status status = handle.status();
+                    sample_upload(static_cast<std::int64_t>(status.all_time_upload));
                     last_total_payload_download = std::max<int64_t>(
                         last_total_payload_download,
                         static_cast<int64_t>(status.total_payload_download));
@@ -1700,6 +1718,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         }
 
                         const auto status = handle.status();
+                        sample_upload(static_cast<std::int64_t>(status.all_time_upload));
                         if (should_stop_seeding(share_ratio(status))) {
                             break;
                         }
