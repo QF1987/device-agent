@@ -107,10 +107,10 @@ See the full protocol in `proto/terminal_agent/v1/`.
 
 - ✅ macOS (Apple Silicon & Intel)
 - ✅ Linux (x86_64, ARM64, ARMv7)
-- ✅ Windows (via CMake)
-- ✅ Embedded Linux (Buildroot, Yocto)
-- ✅ Android (NDK)
-- ✅ iOS (via C++ framework)
+- ✅ Android (NDK, arm64-v8a & armeabi-v7a)
+- 🚧 Windows — planned; bridge/download layers reserve a TCP-localhost fallback, but no build toolchain or executor exists yet
+- 🚧 iOS — planned; no executor or build target yet
+- 🚧 Embedded Linux (Buildroot, Yocto) — not yet validated as a distinct target
 
 ## License
 
