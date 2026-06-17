@@ -77,10 +77,12 @@ if(WIN32)
     target_link_libraries(remote_desktop PUBLIC user32 gdi32)
 endif()
 
-add_executable(rfb_protocol_test
-    src/remotedesktop/rfb/rfb_protocol_test.cc
-)
-target_link_libraries(rfb_protocol_test PRIVATE remote_desktop)
+if(NOT ANDROID AND NOT __ANDROID__)
+    add_executable(rfb_protocol_test
+        src/remotedesktop/rfb/rfb_protocol_test.cc
+    )
+    target_link_libraries(rfb_protocol_test PRIVATE remote_desktop)
+endif()
 
 # ─── Android: build as JNI shared library ─────────────────
 if(ANDROID OR __ANDROID__)
