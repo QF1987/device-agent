@@ -41,6 +41,47 @@ set(COMMON_HEADERS
     src/jni_bridge.h
 )
 
+set(REMOTE_DESKTOP_SOURCES
+    src/remotedesktop/rfb/rfb_protocol.cc
+    src/remotedesktop/rfb/rfb_server.cc
+    src/remotedesktop/tunnel/tunnel_protocol.cc
+)
+
+set(REMOTE_DESKTOP_HEADERS
+    src/remotedesktop/input_injector.h
+    src/remotedesktop/screen_capturer.h
+    src/remotedesktop/rfb/rfb_protocol.h
+    src/remotedesktop/rfb/rfb_server.h
+    src/remotedesktop/tunnel/tunnel_protocol.h
+)
+
+if(WIN32)
+    list(APPEND REMOTE_DESKTOP_SOURCES
+        src/remotedesktop/platform/windows/windows_badge.cc
+        src/remotedesktop/platform/windows/windows_input_injector.cc
+        src/remotedesktop/platform/windows/windows_screen_capturer.cc
+    )
+    list(APPEND REMOTE_DESKTOP_HEADERS
+        src/remotedesktop/platform/windows/windows_badge.h
+        src/remotedesktop/platform/windows/windows_input_injector.h
+        src/remotedesktop/platform/windows/windows_screen_capturer.h
+    )
+endif()
+
+add_library(remote_desktop STATIC
+    ${REMOTE_DESKTOP_SOURCES}
+    ${REMOTE_DESKTOP_HEADERS}
+)
+target_include_directories(remote_desktop PUBLIC ${CMAKE_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(remote_desktop PUBLIC user32 gdi32)
+endif()
+
+add_executable(rfb_protocol_test
+    src/remotedesktop/rfb/rfb_protocol_test.cc
+)
+target_link_libraries(rfb_protocol_test PRIVATE remote_desktop)
+
 # ─── Android: build as JNI shared library ─────────────────
 if(ANDROID OR __ANDROID__)
     message(STATUS "=== Building device-agent for Android ===")

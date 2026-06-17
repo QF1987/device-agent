@@ -47,3 +47,10 @@ build-verify/
 tools/protoc-*
 .gitnexus
 .grpc-build/
+
+# stray build/work dirs
+build-linux/
+build-android-arm64-s3/
+build-android-armeabi-s3/
+build-review-s2-arm64/
+.understand-anything/
