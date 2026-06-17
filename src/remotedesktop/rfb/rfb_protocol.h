@@ -12,6 +12,7 @@ namespace device_agent::remotedesktop::rfb {
 // Clean-room RFB 3.8 implementation from RFC 6143. Do not copy GPL VNC code.
 constexpr uint8_t kSecurityNone = 1;
 constexpr int32_t kEncodingRaw = 0;
+constexpr int32_t kEncodingZrle = 16;
 
 struct PixelFormat {
     uint8_t bits_per_pixel = 32;
@@ -88,6 +89,8 @@ public:
 
     const PixelFormat& pixelFormat() const { return pixel_format_; }
     void setPixelFormat(const PixelFormat& format) { pixel_format_ = format; }
+    int32_t preferredEncoding() const { return preferred_encoding_; }
+    void resetSessionState();
 
     std::vector<uint8_t> protocolVersion() const;
     bool acceptClientVersion(const std::vector<uint8_t>& message, std::string& err) const;
@@ -102,9 +105,14 @@ public:
 private:
     uint32_t convertBgraPixel(const uint8_t* bgra) const;
     void appendPixel(std::vector<uint8_t>& out, uint32_t pixel) const;
+    void appendCompressedPixel(std::vector<uint8_t>& out, uint32_t pixel) const;
+    void appendRawRect(std::vector<uint8_t>& out, const ScreenFrame& frame, const Rect& rect) const;
+    std::vector<uint8_t> zrleRectPayload(const ScreenFrame& frame, const Rect& rect) const;
 
     std::string desktop_name_;
     PixelFormat pixel_format_;
+    int32_t preferred_encoding_ = kEncodingRaw;
+    mutable bool zrle_stream_started_ = false;
 };
 
 void appendU8(std::vector<uint8_t>& out, uint8_t value);

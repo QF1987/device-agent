@@ -38,6 +38,30 @@ Rect clamp_rect(const Rect& r, uint16_t width, uint16_t height) {
     return out;
 }
 
+std::vector<uint8_t> zlibStoredSyncFlush(const std::vector<uint8_t>& plain, bool include_header) {
+    std::vector<uint8_t> out;
+    if (include_header) {
+        out.push_back(0x78);
+        out.push_back(0x01);
+    }
+    size_t offset = 0;
+    while (offset < plain.size()) {
+        const size_t remaining = plain.size() - offset;
+        const uint16_t len = static_cast<uint16_t>(std::min<size_t>(remaining, 65535));
+        out.push_back(0x00);
+        out.push_back(static_cast<uint8_t>(len & 0xff));
+        out.push_back(static_cast<uint8_t>((len >> 8) & 0xff));
+        const uint16_t nlen = static_cast<uint16_t>(~len);
+        out.push_back(static_cast<uint8_t>(nlen & 0xff));
+        out.push_back(static_cast<uint8_t>((nlen >> 8) & 0xff));
+        out.insert(out.end(), plain.begin() + static_cast<std::ptrdiff_t>(offset),
+                   plain.begin() + static_cast<std::ptrdiff_t>(offset + len));
+        offset += len;
+    }
+    out.insert(out.end(), {0x00, 0x00, 0x00, 0xff, 0xff});
+    return out;
+}
+
 }  // namespace
 
 ByteReader::ByteReader(const uint8_t* data, size_t size) : data_(data), size_(size) {}
@@ -90,6 +114,11 @@ size_t ByteReader::remaining() const {
 }
 
 RfbProtocol::RfbProtocol(std::string desktop_name) : desktop_name_(std::move(desktop_name)) {}
+
+void RfbProtocol::resetSessionState() {
+    preferred_encoding_ = kEncodingRaw;
+    zrle_stream_started_ = false;
+}
 
 std::vector<uint8_t> RfbProtocol::protocolVersion() const {
     const char version[] = "RFB 003.008\n";
@@ -196,6 +225,13 @@ bool RfbProtocol::parseClientMessage(const std::vector<uint8_t>& bytes, ClientMe
             }
             message.set_encodings.encodings.push_back(static_cast<int32_t>(value));
         }
+        preferred_encoding_ = kEncodingRaw;
+        for (int32_t encoding : message.set_encodings.encodings) {
+            if (encoding == kEncodingZrle) {
+                preferred_encoding_ = kEncodingZrle;
+                break;
+            }
+        }
         return true;
     }
     case 3: {
@@ -277,24 +313,19 @@ std::vector<uint8_t> RfbProtocol::framebufferUpdate(const ScreenFrame& frame, co
     appendU8(out, 0);  // padding
     appendU16(out, static_cast<uint16_t>(rects.size()));
 
-    const uint32_t stride = frame.stride == 0 ? static_cast<uint32_t>(frame.width) * 4 : frame.stride;
     for (const Rect& rect : rects) {
         appendU16(out, rect.x);
         appendU16(out, rect.y);
         appendU16(out, rect.width);
         appendU16(out, rect.height);
-        appendS32(out, kEncodingRaw);
-
-        for (uint16_t y = 0; y < rect.height; ++y) {
-            size_t row = static_cast<size_t>(rect.y + y) * stride;
-            for (uint16_t x = 0; x < rect.width; ++x) {
-                size_t offset = row + static_cast<size_t>(rect.x + x) * 4;
-                if (offset + 3 < frame.bgra.size()) {
-                    appendPixel(out, convertBgraPixel(frame.bgra.data() + offset));
-                } else {
-                    appendPixel(out, 0);
-                }
-            }
+        if (preferred_encoding_ == kEncodingZrle) {
+            appendS32(out, kEncodingZrle);
+            std::vector<uint8_t> zrle = zrleRectPayload(frame, rect);
+            appendU32(out, static_cast<uint32_t>(zrle.size()));
+            out.insert(out.end(), zrle.begin(), zrle.end());
+        } else {
+            appendS32(out, kEncodingRaw);
+            appendRawRect(out, frame, rect);
         }
     }
     return out;
@@ -320,6 +351,59 @@ void RfbProtocol::appendPixel(std::vector<uint8_t>& out, uint32_t pixel) const {
             out.push_back(static_cast<uint8_t>((pixel >> (i * 8)) & 0xff));
         }
     }
+}
+
+void RfbProtocol::appendCompressedPixel(std::vector<uint8_t>& out, uint32_t pixel) const {
+    const size_t before = out.size();
+    appendPixel(out, pixel);
+    if (pixel_format_.bits_per_pixel == 32 && pixel_format_.true_color && pixel_format_.depth <= 24) {
+        if (pixel_format_.big_endian) {
+            out.erase(out.begin() + static_cast<std::ptrdiff_t>(before));
+        } else {
+            out.pop_back();
+        }
+    }
+}
+
+void RfbProtocol::appendRawRect(std::vector<uint8_t>& out, const ScreenFrame& frame, const Rect& rect) const {
+    const uint32_t stride = frame.stride == 0 ? static_cast<uint32_t>(frame.width) * 4 : frame.stride;
+    for (uint16_t y = 0; y < rect.height; ++y) {
+        size_t row = static_cast<size_t>(rect.y + y) * stride;
+        for (uint16_t x = 0; x < rect.width; ++x) {
+            size_t offset = row + static_cast<size_t>(rect.x + x) * 4;
+            if (offset + 3 < frame.bgra.size()) {
+                appendPixel(out, convertBgraPixel(frame.bgra.data() + offset));
+            } else {
+                appendPixel(out, 0);
+            }
+        }
+    }
+}
+
+std::vector<uint8_t> RfbProtocol::zrleRectPayload(const ScreenFrame& frame, const Rect& rect) const {
+    std::vector<uint8_t> tiles;
+    const uint32_t stride = frame.stride == 0 ? static_cast<uint32_t>(frame.width) * 4 : frame.stride;
+    for (uint16_t tile_y = 0; tile_y < rect.height; tile_y = static_cast<uint16_t>(tile_y + 64)) {
+        uint16_t tile_h = std::min<uint16_t>(64, rect.height - tile_y);
+        for (uint16_t tile_x = 0; tile_x < rect.width; tile_x = static_cast<uint16_t>(tile_x + 64)) {
+            uint16_t tile_w = std::min<uint16_t>(64, rect.width - tile_x);
+            tiles.push_back(0);  // Raw ZRLE tile.
+            for (uint16_t y = 0; y < tile_h; ++y) {
+                size_t row = static_cast<size_t>(rect.y + tile_y + y) * stride;
+                for (uint16_t x = 0; x < tile_w; ++x) {
+                    size_t offset = row + static_cast<size_t>(rect.x + tile_x + x) * 4;
+                    if (offset + 3 < frame.bgra.size()) {
+                        appendCompressedPixel(tiles, convertBgraPixel(frame.bgra.data() + offset));
+                    } else {
+                        appendCompressedPixel(tiles, 0);
+                    }
+                }
+            }
+        }
+    }
+    std::vector<uint8_t> out = zlibStoredSyncFlush(tiles, !zrle_stream_started_);
+    zrle_stream_started_ = true;
+    return out;
 }
 
 void appendU8(std::vector<uint8_t>& out, uint8_t value) {

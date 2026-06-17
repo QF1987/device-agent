@@ -62,6 +62,12 @@ void testClientMessages() {
     assert(msg.set_encodings.encodings.size() == 2);
     assert(msg.set_encodings.encodings[0] == 0);
     assert(msg.set_encodings.encodings[1] == -223);
+    assert(rfb.preferredEncoding() == device_agent::remotedesktop::rfb::kEncodingRaw);
+
+    std::vector<uint8_t> zrle_enc{2, 0, 0, 2, 0, 0, 0, 16, 0, 0, 0, 0};
+    assert(rfb.parseClientMessage(zrle_enc, msg, err));
+    assert(msg.type == ClientMessage::Type::SetEncodings);
+    assert(rfb.preferredEncoding() == device_agent::remotedesktop::rfb::kEncodingZrle);
 
     std::vector<uint8_t> fur{3, 1, 0, 10, 0, 20, 0, 30, 0, 40};
     assert(rfb.parseClientMessage(fur, msg, err));
@@ -118,6 +124,35 @@ void testRawFramebufferUpdate() {
     rfb.setPixelFormat(rgb565);
     auto rgb565_out = rfb.framebufferUpdate(frame, {Rect{0, 0, 1, 1}});
     assert(rgb565_out.size() == 4 + 12 + 2);
+}
+
+void testZrleFramebufferUpdate() {
+    RfbProtocol rfb;
+    ClientMessage msg{ClientMessage::Type::SetEncodings};
+    std::string err;
+    std::vector<uint8_t> zrle_enc{2, 0, 0, 1, 0, 0, 0, 16};
+    assert(rfb.parseClientMessage(zrle_enc, msg, err));
+    assert(rfb.preferredEncoding() == device_agent::remotedesktop::rfb::kEncodingZrle);
+
+    ScreenFrame frame;
+    frame.width = 2;
+    frame.height = 1;
+    frame.stride = 8;
+    frame.bgra = {
+        0x03, 0x02, 0x01, 0xff,
+        0x30, 0x20, 0x10, 0xff,
+    };
+    auto out = rfb.framebufferUpdate(frame, {Rect{0, 0, 2, 1}});
+    assert(out.size() > 20);
+    assert(out[0] == 0);
+    assert(out[3] == 1);
+    assert(out[12] == 0 && out[13] == 0 && out[14] == 0 && out[15] == 16);
+    uint32_t length = (static_cast<uint32_t>(out[16]) << 24) |
+                      (static_cast<uint32_t>(out[17]) << 16) |
+                      (static_cast<uint32_t>(out[18]) << 8) |
+                      static_cast<uint32_t>(out[19]);
+    assert(length == out.size() - 20);
+    assert(out[20] == 0x78);
 }
 
 void testTunnelFrames() {
@@ -206,6 +241,7 @@ int main() {
     testHandshake();
     testClientMessages();
     testRawFramebufferUpdate();
+    testZrleFramebufferUpdate();
     testTunnelFrames();
     testRfbServerRetriesTransientCaptureFailure();
     std::cout << "rfb_protocol_test PASS\n";

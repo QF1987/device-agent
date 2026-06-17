@@ -47,6 +47,7 @@ RfbServer::RfbServer(IScreenCapturer& capturer, IInputInjector& injector, std::s
     : capturer_(capturer), injector_(injector), protocol_(std::move(desktop_name)) {}
 
 bool RfbServer::serveClient(IRfbTransport& transport, std::string& err) {
+    protocol_.resetSessionState();
     if (!writeVector(transport, protocol_.protocolVersion(), err)) {
         return false;
     }

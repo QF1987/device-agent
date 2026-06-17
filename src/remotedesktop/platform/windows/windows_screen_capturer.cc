@@ -158,6 +158,31 @@ bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err
 
     D3D11_TEXTURE2D_DESC desc{};
     desktop_texture->GetDesc(&desc);
+    const uint32_t width = std::min<uint32_t>(desc.Width, UINT16_MAX);
+    const uint32_t height = std::min<uint32_t>(desc.Height, UINT16_MAX);
+
+    UINT move_bytes = 0;
+    std::vector<DXGI_OUTDUPL_MOVE_RECT> move_rects;
+    hr = duplication_->GetFrameMoveRects(0, nullptr, &move_bytes);
+    if (hr == DXGI_ERROR_MORE_DATA && move_bytes > 0) {
+        move_rects.resize(move_bytes / sizeof(DXGI_OUTDUPL_MOVE_RECT));
+        hr = duplication_->GetFrameMoveRects(move_bytes, move_rects.data(), &move_bytes);
+        if (FAILED(hr)) {
+            move_rects.clear();
+        }
+    }
+
+    UINT dirty_bytes = 0;
+    std::vector<RECT> dirty_rects;
+    hr = duplication_->GetFrameDirtyRects(0, nullptr, &dirty_bytes);
+    if (hr == DXGI_ERROR_MORE_DATA && dirty_bytes > 0) {
+        dirty_rects.resize(dirty_bytes / sizeof(RECT));
+        hr = duplication_->GetFrameDirtyRects(dirty_bytes, dirty_rects.data(), &dirty_bytes);
+        if (FAILED(hr)) {
+            dirty_rects.clear();
+        }
+    }
+
     D3D11_TEXTURE2D_DESC staging_desc = desc;
     staging_desc.BindFlags = 0;
     staging_desc.MiscFlags = 0;
@@ -181,8 +206,6 @@ bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err
         return false;
     }
 
-    const uint32_t width = std::min<uint32_t>(desc.Width, UINT16_MAX);
-    const uint32_t height = std::min<uint32_t>(desc.Height, UINT16_MAX);
     frame.width = static_cast<uint16_t>(width);
     frame.height = static_cast<uint16_t>(height);
     frame.stride = width * 4;
@@ -195,7 +218,28 @@ bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err
     }
     d3d_context_->Unmap(staging.Get(), 0);
     release_frame();
-    frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
+    frame.dirty_rects.clear();
+    if (!move_rects.empty()) {
+        frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
+    } else {
+        for (const RECT& dirty : dirty_rects) {
+            const LONG left = std::max<LONG>(0, dirty.left);
+            const LONG top = std::max<LONG>(0, dirty.top);
+            const LONG right = std::min<LONG>(static_cast<LONG>(frame.width), dirty.right);
+            const LONG bottom = std::min<LONG>(static_cast<LONG>(frame.height), dirty.bottom);
+            if (right > left && bottom > top) {
+                frame.dirty_rects.push_back(Rect{
+                    static_cast<uint16_t>(left),
+                    static_cast<uint16_t>(top),
+                    static_cast<uint16_t>(right - left),
+                    static_cast<uint16_t>(bottom - top),
+                });
+            }
+        }
+    }
+    if (frame.dirty_rects.empty()) {
+        frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
+    }
     last_frame_ = frame;
     return true;
 }
