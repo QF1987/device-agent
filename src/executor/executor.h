@@ -77,6 +77,16 @@ public:
     void upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) override;
 };
 
+#ifdef _WIN32
+class WindowsExecutor : public Executor {
+public:
+    std::string reboot(bool force, const std::string& command_id, std::string& err) override;
+    void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
+    void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
+    void upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) override;
+};
+#endif
+
 // ─── AndroidExecutor：Android 专用执行器 ─────────────────
 // 通过 JNI 调用 Android Java API
 //   - reboot：ActivityManager.shutdown() 或 /system/bin/reboot

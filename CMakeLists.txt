@@ -22,6 +22,7 @@ set(COMMON_SOURCES
     src/executor/macos_executor.cc
     src/reboot_state/reboot_state.cc
     src/download/android_download_manager.cc
+    src/download/noop_download_manager.cc
     src/download/network_policy.cc
     src/download/p2p_upload_counters.cc
 )
@@ -36,6 +37,7 @@ set(COMMON_HEADERS
     src/executor/executor.h
     src/download/idownload_manager.h
     src/download/android_download_manager.h
+    src/download/noop_download_manager.h
     src/download/network_policy.h
     src/reboot_state/reboot_state.h
     src/jni_bridge.h
@@ -60,11 +62,13 @@ if(WIN32)
         src/remotedesktop/platform/windows/windows_badge.cc
         src/remotedesktop/platform/windows/windows_input_injector.cc
         src/remotedesktop/platform/windows/windows_screen_capturer.cc
+        src/remotedesktop/platform/windows/windows_session_launcher.cc
     )
     list(APPEND REMOTE_DESKTOP_HEADERS
         src/remotedesktop/platform/windows/windows_badge.h
         src/remotedesktop/platform/windows/windows_input_injector.h
         src/remotedesktop/platform/windows/windows_screen_capturer.h
+        src/remotedesktop/platform/windows/windows_session_launcher.h
     )
 endif()
 
@@ -75,6 +79,7 @@ add_library(remote_desktop STATIC
 target_include_directories(remote_desktop PUBLIC ${CMAKE_SOURCE_DIR}/src)
 if(WIN32)
     target_compile_definitions(remote_desktop PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(remote_desktop PUBLIC /utf-8)
     target_link_libraries(remote_desktop PUBLIC user32 gdi32 dxgi d3d11)
 endif()
 
@@ -283,9 +288,69 @@ elseif(WIN32)
     message(STATUS "=== Building device-agent Windows remote desktop targets ===")
     find_package(Threads REQUIRED)
 
+    add_library(remote_desktop_runtime STATIC
+        src/remotedesktop/remote_desktop_runtime.cc
+        src/remotedesktop/tunnel/tunnel_client.cc
+    )
+    target_include_directories(remote_desktop_runtime PUBLIC ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(remote_desktop_runtime PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(remote_desktop_runtime PUBLIC /utf-8)
+    target_link_libraries(remote_desktop_runtime PUBLIC
+        remote_desktop
+        ws2_32
+        secur32
+        crypt32
+        userenv
+        wtsapi32
+    )
+
     option(BUILD_EXAMPLES "Build example business apps" ON)
     if(BUILD_EXAMPLES)
         add_subdirectory(examples/rd_vnc_standalone)
+    endif()
+
+    option(DEVICE_AGENT_BUILD_WINDOWS_AGENT "Build full Windows device-agent executable" OFF)
+    if(DEVICE_AGENT_BUILD_WINDOWS_AGENT)
+        find_package(protobuf CONFIG REQUIRED)
+        find_package(gRPC CONFIG REQUIRED)
+
+        set(GEN_DESKTOP_DIR "${CMAKE_SOURCE_DIR}/gen-desktop")
+        set(WINDOWS_AGENT_SOURCES ${COMMON_SOURCES})
+        list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/executor/linux_executor.cc$")
+        list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/executor/macos_executor.cc$")
+        list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/download/android_download_manager.cc$")
+        list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/download/p2p_upload_counters.cc$")
+        list(APPEND WINDOWS_AGENT_SOURCES
+            src/executor/windows_executor.cc
+            "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+            "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+            "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+            "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+        )
+
+        add_executable(device-agent
+            ${WINDOWS_AGENT_SOURCES}
+            ${COMMON_HEADERS}
+        )
+        target_include_directories(device-agent PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/include
+            ${GEN_DESKTOP_DIR}
+        )
+        target_compile_definitions(device-agent PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(device-agent PRIVATE /utf-8)
+        target_link_libraries(device-agent PRIVATE
+            remote_desktop
+            remote_desktop_runtime
+            Threads::Threads
+            protobuf::libprotobuf
+            gRPC::grpc++
+            ws2_32
+            secur32
+            crypt32
+            userenv
+            wtsapi32
+        )
     endif()
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─

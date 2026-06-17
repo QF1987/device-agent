@@ -36,7 +36,11 @@
 #include <atomic>
 #include <cerrno>
 #include <cstring>
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <sys/stat.h>
+#endif
 
 #include "client/device_client.h"
 #include "client/command_handler.h"
@@ -47,9 +51,12 @@
 #include "download/idownload_manager.h"
 #ifdef __ANDROID__
 #include "download/android_download_manager.h"
+#elif defined(_WIN32)
+#include "download/noop_download_manager.h"
 #else
 #include "download/p2p_download_manager.h"
 #endif
+#include "remotedesktop/remote_desktop_runtime.h"
 #include "reboot_state/reboot_state.h"
 
 // ============================================================
@@ -101,7 +108,11 @@ bool ensure_directory(const std::string& path) {
     if (path.empty()) {
         return true;
     }
+#ifdef _WIN32
+    if (::_mkdir(path.c_str()) == 0 || errno == EEXIST) {
+#else
     if (::mkdir(path.c_str(), 0755) == 0 || errno == EEXIST) {
+#endif
         return true;
     }
     LOG_ERROR("Failed to create download directory " + path + ": " + std::strerror(errno));
@@ -109,10 +120,76 @@ bool ensure_directory(const std::string& path) {
 }
 #endif
 
+#ifdef _WIN32
+std::string env_string(const char* key) {
+    const char* value = std::getenv(key);
+    return value && value[0] ? std::string(value) : std::string();
+}
+
+bool env_bool(const char* key) {
+    const std::string value = env_string(key);
+    return value == "1" || value == "true" || value == "TRUE" || value == "yes";
+}
+
+bool parse_remote_desktop_child_args(int argc,
+                                     char* argv[],
+                                     device_agent::remotedesktop::RemoteDesktopRuntimeConfig& out) {
+    bool child = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--remote-desktop-child") {
+            child = true;
+        } else if (arg == "--rd-relay" && i + 1 < argc) {
+            out.relay_endpoint = argv[++i];
+        } else if (arg == "--rd-device" && i + 1 < argc) {
+            out.device_id = argv[++i];
+        } else if (arg == "--rd-token" && i + 1 < argc) {
+            out.token = argv[++i];
+        } else if (arg == "--rd-server-name" && i + 1 < argc) {
+            out.server_name = argv[++i];
+        } else if (arg == "--rd-insecure") {
+            out.insecure_tls = true;
+        }
+    }
+    return child;
+}
+
+device_agent::remotedesktop::RemoteDesktopRuntimeConfig remote_desktop_config_from_env(
+        const device_agent::Config& config) {
+    device_agent::remotedesktop::RemoteDesktopRuntimeConfig rd;
+    rd.relay_endpoint = env_string("DEVICE_AGENT_RD_RELAY");
+    rd.device_id = env_string("DEVICE_AGENT_RD_DEVICE_ID");
+    if (rd.device_id.empty()) {
+        rd.device_id = config.auth.device_id;
+    }
+    rd.token = env_string("DEVICE_AGENT_RD_TOKEN");
+    if (rd.token.empty()) {
+        rd.token = config.auth.token;
+    }
+    rd.server_name = env_string("DEVICE_AGENT_RD_SERVER_NAME");
+    rd.insecure_tls = env_bool("DEVICE_AGENT_RD_INSECURE");
+    rd.launch_active_session = !env_bool("DEVICE_AGENT_RD_NO_SESSION_LAUNCH");
+    return rd;
+}
+#endif
+
 // ============================================================
 // main()：程序入口
 // ============================================================
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    device_agent::remotedesktop::RemoteDesktopRuntimeConfig child_rd_config;
+    if (parse_remote_desktop_child_args(argc, argv, child_rd_config)) {
+        std::signal(SIGINT, signal_handler);
+        std::signal(SIGTERM, signal_handler);
+        std::string err;
+        if (!device_agent::remotedesktop::runRemoteDesktopChild(child_rd_config, g_running, err)) {
+            std::cerr << "remote desktop child failed: " << err << "\n";
+            return 1;
+        }
+        return 0;
+    }
+#endif
 
     // ============================================================
     // 第 1 步：解析命令行参数
@@ -270,6 +347,10 @@ int main(int argc, char* argv[]) {
     handler.set_download_directory(download_dir);
     handler.set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
     LOG_INFO("Using MacOSExecutor + P2PDownloadManager download_dir=" + download_dir);
+#elif defined(_WIN32)
+    handler.set_executor(std::make_shared<device_agent::WindowsExecutor>());
+    handler.set_download_manager(std::make_shared<device_agent::NoopDownloadManager>());
+    LOG_INFO("Using WindowsExecutor + NoopDownloadManager");
 #else
     handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
     const std::string download_dir = desktop_download_dir();
@@ -279,6 +360,20 @@ int main(int argc, char* argv[]) {
     handler.set_download_directory(download_dir);
     handler.set_download_manager(std::make_shared<device_agent::P2PDownloadManager>());
     LOG_INFO("Using LinuxExecutor + P2PDownloadManager download_dir=" + download_dir);
+#endif
+
+#ifdef _WIN32
+    std::unique_ptr<device_agent::remotedesktop::RemoteDesktopRuntime> remote_desktop_runtime;
+    const auto rd_config = remote_desktop_config_from_env(config);
+    if (rd_config.enabled()) {
+        remote_desktop_runtime.reset(new device_agent::remotedesktop::RemoteDesktopRuntime(rd_config));
+        std::string rd_err;
+        if (!remote_desktop_runtime->start(rd_err)) {
+            LOG_ERROR("Remote desktop failed to start: " + rd_err);
+        } else {
+            LOG_INFO("Remote desktop runtime started");
+        }
+    }
 #endif
 
     // ============================================================
@@ -338,6 +433,11 @@ int main(int argc, char* argv[]) {
     // 再停 Bridge（断开业务应用连接）
     // 最后等后台线程结束
     LOG_INFO("Shutting down...");
+#ifdef _WIN32
+    if (remote_desktop_runtime) {
+        remote_desktop_runtime->stop();
+    }
+#endif
     client->stop();
     bridge->stop();
     metrics_thread.join();  // 等待指标线程结束
