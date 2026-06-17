@@ -6,7 +6,8 @@ add_executable(rd_vnc_standalone
     ${CMAKE_SOURCE_DIR}/src/remotedesktop/tunnel/tunnel_client.cc
 )
 
-target_link_libraries(rd_vnc_standalone PRIVATE remote_desktop Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
 if(WIN32)
-    target_link_libraries(rd_vnc_standalone PRIVATE ws2_32)
+    target_link_libraries(rd_vnc_standalone PRIVATE remote_desktop Threads::Threads ws2_32 secur32 crypt32)
+else()
+    target_link_libraries(rd_vnc_standalone PRIVATE remote_desktop Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
 endif()

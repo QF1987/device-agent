@@ -74,7 +74,8 @@ add_library(remote_desktop STATIC
 )
 target_include_directories(remote_desktop PUBLIC ${CMAKE_SOURCE_DIR}/src)
 if(WIN32)
-    target_link_libraries(remote_desktop PUBLIC user32 gdi32)
+    target_compile_definitions(remote_desktop PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(remote_desktop PUBLIC user32 gdi32 dxgi d3d11)
 endif()
 
 if(NOT ANDROID AND NOT __ANDROID__)
@@ -277,6 +278,15 @@ extern "C" const char* device_agent_libtorrent_version() {
         src/download/network_policy.cc
     )
     target_include_directories(p2p_upload_counters_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+elseif(WIN32)
+    message(STATUS "=== Building device-agent Windows remote desktop targets ===")
+    find_package(Threads REQUIRED)
+
+    option(BUILD_EXAMPLES "Build example business apps" ON)
+    if(BUILD_EXAMPLES)
+        add_subdirectory(examples/rd_vnc_standalone)
+    endif()
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─
 else()

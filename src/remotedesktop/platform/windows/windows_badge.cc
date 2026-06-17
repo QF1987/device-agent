@@ -15,7 +15,8 @@ const wchar_t* kBadgeCommand =
     L"$f.Text='DeviceOps Remote Control';"
     L"$f.FormBorderStyle='None';$f.TopMost=$true;$f.ShowInTaskbar=$false;"
     L"$f.BackColor='DarkRed';$f.Width=360;$f.Height=36;$f.Left=20;$f.Top=20;"
-    L"$l=New-Object Windows.Forms.Label;$l.Text='* 正在被远程控制';"
+    L"$l=New-Object Windows.Forms.Label;"
+    L"$l.Text=([char]0x25cf+[char]0x20+[char]0x6b63+[char]0x5728+[char]0x88ab+[char]0x8fdc+[char]0x7a0b+[char]0x63a7+[char]0x5236);"
     L"$l.ForeColor='White';$l.BackColor='DarkRed';$l.AutoSize=$true;"
     L"$l.Left=12;$l.Top=8;"
     L"$f.Controls.Add($l);[Windows.Forms.Application]::Run($f)\"";

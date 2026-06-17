@@ -2,12 +2,202 @@
 
 #include "remotedesktop/platform/windows/windows_screen_capturer.h"
 
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <iterator>
+
 namespace device_agent::remotedesktop::windows {
 
+namespace {
+
+std::string hrError(const char* op, HRESULT hr) {
+    char buf[128]{};
+    std::snprintf(buf, sizeof(buf), "%s failed: 0x%08lx", op, static_cast<unsigned long>(hr));
+    return buf;
+}
+
+}  // namespace
+
 bool WindowsScreenCapturer::capture(ScreenFrame& frame, std::string& err) {
-    // Win7-safe fallback. DXGI Desktop Duplication should sit above this branch
-    // for Win8+ interactive sessions; session 0 still needs active-session launch.
+    std::string dxgi_err;
+    if (captureWithDxgi(frame, dxgi_err)) {
+        return true;
+    }
+    if (!last_frame_.bgra.empty()) {
+        frame = last_frame_;
+        return true;
+    }
+    // Win7 and session-0/service contexts cannot rely on Desktop Duplication.
+    // Keep GDI as the mandatory fallback path for compatibility and diagnostics.
+    (void)dxgi_err;
     return captureWithGdi(frame, err);
+}
+
+bool WindowsScreenCapturer::initializeDxgi(std::string& err) {
+    if (dxgi_initialized_) {
+        return duplication_ != nullptr;
+    }
+    dxgi_initialized_ = true;
+
+    D3D_FEATURE_LEVEL levels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
+    D3D_FEATURE_LEVEL selected{};
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
+        nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        levels,
+        static_cast<UINT>(std::size(levels)),
+        D3D11_SDK_VERSION,
+        &d3d_device_,
+        &selected,
+        &d3d_context_);
+    if (FAILED(hr)) {
+        err = hrError("D3D11CreateDevice", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
+    hr = d3d_device_.As(&dxgi_device);
+    if (FAILED(hr)) {
+        err = hrError("Query IDXGIDevice", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    hr = dxgi_device->GetAdapter(&adapter);
+    if (FAILED(hr)) {
+        err = hrError("GetAdapter", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIOutput> output;
+    hr = adapter->EnumOutputs(0, &output);
+    if (FAILED(hr)) {
+        err = hrError("EnumOutputs", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIOutput1> output1;
+    hr = output.As(&output1);
+    if (FAILED(hr)) {
+        err = hrError("Query IDXGIOutput1", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+
+    hr = output1->DuplicateOutput(d3d_device_.Get(), &duplication_);
+    if (FAILED(hr)) {
+        err = hrError("DuplicateOutput", hr);
+        resetDxgi();
+        dxgi_initialized_ = true;
+        return false;
+    }
+    return true;
+}
+
+void WindowsScreenCapturer::resetDxgi() {
+    duplication_.Reset();
+    d3d_context_.Reset();
+    d3d_device_.Reset();
+    dxgi_initialized_ = false;
+}
+
+bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err) {
+    if (!initializeDxgi(err)) {
+        return false;
+    }
+
+    DXGI_OUTDUPL_FRAME_INFO frame_info{};
+    Microsoft::WRL::ComPtr<IDXGIResource> resource;
+    HRESULT hr = duplication_->AcquireNextFrame(100, &frame_info, &resource);
+    if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+        err = "DXGI frame wait timed out";
+        return false;
+    }
+    if (hr == DXGI_ERROR_ACCESS_LOST || hr == DXGI_ERROR_INVALID_CALL) {
+        err = hrError("AcquireNextFrame", hr);
+        resetDxgi();
+        return false;
+    }
+    if (FAILED(hr)) {
+        err = hrError("AcquireNextFrame", hr);
+        return false;
+    }
+
+    bool acquired = true;
+    auto release_frame = [&]() {
+        if (acquired && duplication_) {
+            duplication_->ReleaseFrame();
+            acquired = false;
+        }
+    };
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> desktop_texture;
+    hr = resource.As(&desktop_texture);
+    if (FAILED(hr)) {
+        err = hrError("Query ID3D11Texture2D", hr);
+        release_frame();
+        return false;
+    }
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desktop_texture->GetDesc(&desc);
+    D3D11_TEXTURE2D_DESC staging_desc = desc;
+    staging_desc.BindFlags = 0;
+    staging_desc.MiscFlags = 0;
+    staging_desc.Usage = D3D11_USAGE_STAGING;
+    staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+    hr = d3d_device_->CreateTexture2D(&staging_desc, nullptr, &staging);
+    if (FAILED(hr)) {
+        err = hrError("CreateTexture2D staging", hr);
+        release_frame();
+        return false;
+    }
+    d3d_context_->CopyResource(staging.Get(), desktop_texture.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    hr = d3d_context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        err = hrError("Map staging", hr);
+        release_frame();
+        return false;
+    }
+
+    const uint32_t width = std::min<uint32_t>(desc.Width, UINT16_MAX);
+    const uint32_t height = std::min<uint32_t>(desc.Height, UINT16_MAX);
+    frame.width = static_cast<uint16_t>(width);
+    frame.height = static_cast<uint16_t>(height);
+    frame.stride = width * 4;
+    frame.bgra.resize(static_cast<size_t>(frame.stride) * frame.height);
+    const auto* src = static_cast<const uint8_t*>(mapped.pData);
+    for (uint32_t y = 0; y < height; ++y) {
+        std::memcpy(frame.bgra.data() + static_cast<size_t>(y) * frame.stride,
+                    src + static_cast<size_t>(y) * mapped.RowPitch,
+                    frame.stride);
+    }
+    d3d_context_->Unmap(staging.Get(), 0);
+    release_frame();
+    frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
+    last_frame_ = frame;
+    return true;
 }
 
 bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err) {
@@ -19,6 +209,11 @@ bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err)
 
     const int width = GetSystemMetrics(SM_CXSCREEN);
     const int height = GetSystemMetrics(SM_CYSCREEN);
+    if (width <= 0 || height <= 0 || width > UINT16_MAX || height > UINT16_MAX) {
+        ReleaseDC(nullptr, screen);
+        err = "unsupported GDI desktop size";
+        return false;
+    }
     HDC memory = CreateCompatibleDC(screen);
     if (!memory) {
         ReleaseDC(nullptr, screen);
@@ -63,6 +258,7 @@ bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err)
     frame.stride = static_cast<uint32_t>(width) * 4;
     frame.bgra.assign(static_cast<uint8_t*>(pixels), static_cast<uint8_t*>(pixels) + byte_count);
     frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
+    last_frame_ = frame;
 
     DeleteObject(bitmap);
     DeleteDC(memory);

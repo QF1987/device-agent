@@ -3,65 +3,129 @@
 #include "remotedesktop/platform/windows/windows_input_injector.h"
 
 #include <array>
+#include <cstdio>
 
 namespace device_agent::remotedesktop::windows {
 
 namespace {
 
-WORD keysymToVk(uint32_t keysym) {
+struct KeyMapping {
+    WORD vk = 0;
+    bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
+};
+
+KeyMapping keysymToVk(uint32_t keysym) {
     if (keysym >= 'a' && keysym <= 'z') {
-        return static_cast<WORD>('A' + (keysym - 'a'));
+        return KeyMapping{static_cast<WORD>('A' + (keysym - 'a'))};
     }
     if ((keysym >= 'A' && keysym <= 'Z') || (keysym >= '0' && keysym <= '9')) {
-        return static_cast<WORD>(keysym);
+        return KeyMapping{static_cast<WORD>(keysym)};
+    }
+    if (keysym >= 0x20 && keysym <= 0x7e) {
+        SHORT mapped = VkKeyScanA(static_cast<char>(keysym));
+        if (mapped != -1) {
+            return KeyMapping{
+                static_cast<WORD>(mapped & 0xff),
+                (mapped & 0x0100) != 0,
+                (mapped & 0x0200) != 0,
+                (mapped & 0x0400) != 0,
+            };
+        }
+    }
+    if (keysym >= 0xffbe && keysym <= 0xffc9) {
+        return KeyMapping{static_cast<WORD>(VK_F1 + (keysym - 0xffbe))};
     }
     switch (keysym) {
-    case 0xff08: return VK_BACK;
-    case 0xff09: return VK_TAB;
-    case 0xff0d: return VK_RETURN;
-    case 0xff1b: return VK_ESCAPE;
-    case 0xff50: return VK_HOME;
-    case 0xff51: return VK_LEFT;
-    case 0xff52: return VK_UP;
-    case 0xff53: return VK_RIGHT;
-    case 0xff54: return VK_DOWN;
-    case 0xff55: return VK_PRIOR;
-    case 0xff56: return VK_NEXT;
-    case 0xff57: return VK_END;
-    case 0xffff: return VK_DELETE;
-    case 0xffe1: return VK_SHIFT;
-    case 0xffe2: return VK_SHIFT;
-    case 0xffe3: return VK_CONTROL;
-    case 0xffe4: return VK_CONTROL;
-    case 0xffe9: return VK_MENU;
-    case 0xffea: return VK_MENU;
+    case 0xff08: return KeyMapping{VK_BACK};
+    case 0xff09: return KeyMapping{VK_TAB};
+    case 0xff0d: return KeyMapping{VK_RETURN};
+    case 0xff13: return KeyMapping{VK_PAUSE};
+    case 0xff14: return KeyMapping{VK_SCROLL};
+    case 0xff1b: return KeyMapping{VK_ESCAPE};
+    case 0xff50: return KeyMapping{VK_HOME};
+    case 0xff51: return KeyMapping{VK_LEFT};
+    case 0xff52: return KeyMapping{VK_UP};
+    case 0xff53: return KeyMapping{VK_RIGHT};
+    case 0xff54: return KeyMapping{VK_DOWN};
+    case 0xff55: return KeyMapping{VK_PRIOR};
+    case 0xff56: return KeyMapping{VK_NEXT};
+    case 0xff57: return KeyMapping{VK_END};
+    case 0xff63: return KeyMapping{VK_INSERT};
+    case 0xffff: return KeyMapping{VK_DELETE};
+    case 0xff7f: return KeyMapping{VK_NUMLOCK};
+    case 0xffe1:
+    case 0xffe2: return KeyMapping{VK_SHIFT};
+    case 0xffe3:
+    case 0xffe4: return KeyMapping{VK_CONTROL};
+    case 0xffe7:
+    case 0xffe8: return KeyMapping{VK_LWIN};
+    case 0xffe9:
+    case 0xffea: return KeyMapping{VK_MENU};
     default:
-        return 0;
+        return {};
     }
 }
 
 bool sendOne(INPUT& input, std::string& err) {
+    HDESK input_desktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
+    if (input_desktop) {
+        SetThreadDesktop(input_desktop);
+        CloseDesktop(input_desktop);
+    }
     if (SendInput(1, &input, sizeof(INPUT)) != 1) {
-        err = "SendInput failed";
+        if (input.type == INPUT_KEYBOARD) {
+            keybd_event(static_cast<BYTE>(input.ki.wVk),
+                        static_cast<BYTE>(MapVirtualKey(input.ki.wVk, MAPVK_VK_TO_VSC)),
+                        input.ki.dwFlags & KEYEVENTF_KEYUP,
+                        0);
+            return true;
+        }
+        if (input.type == INPUT_MOUSE) {
+            mouse_event(input.mi.dwFlags, input.mi.dx, input.mi.dy, input.mi.mouseData, 0);
+            return true;
+        }
+        char buf[96]{};
+        std::snprintf(buf, sizeof(buf), "SendInput failed: %lu", static_cast<unsigned long>(GetLastError()));
+        err = buf;
         return false;
     }
+    return true;
+}
+
+bool sendKey(WORD vk, bool down, std::string& err) {
+    INPUT input{};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = vk;
+    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    return sendOne(input, err);
+}
+
+bool sendModifierChord(const KeyMapping& mapping, bool down, std::string& err) {
+    if (down) {
+        if (mapping.shift && !sendKey(VK_SHIFT, true, err)) return false;
+        if (mapping.ctrl && !sendKey(VK_CONTROL, true, err)) return false;
+        if (mapping.alt && !sendKey(VK_MENU, true, err)) return false;
+        return sendKey(mapping.vk, true, err);
+    }
+    if (!sendKey(mapping.vk, false, err)) return false;
+    if (mapping.alt && !sendKey(VK_MENU, false, err)) return false;
+    if (mapping.ctrl && !sendKey(VK_CONTROL, false, err)) return false;
+    if (mapping.shift && !sendKey(VK_SHIFT, false, err)) return false;
     return true;
 }
 
 }  // namespace
 
 bool WindowsInputInjector::keyEvent(uint32_t rfb_keysym, bool down, std::string& err) {
-    WORD vk = keysymToVk(rfb_keysym);
-    if (vk == 0) {
+    KeyMapping mapping = keysymToVk(rfb_keysym);
+    if (mapping.vk == 0) {
         // Keep the RFB session alive when guacd sends a keysym outside the
         // Phase 1 map; broader mapping belongs to the next input-hardening pass.
         return true;
     }
-    INPUT input{};
-    input.type = INPUT_KEYBOARD;
-    input.ki.wVk = vk;
-    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
-    return sendOne(input, err);
+    return sendModifierChord(mapping, down, err);
 }
 
 bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_t y, std::string& err) {
@@ -97,6 +161,24 @@ bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_
         click.type = INPUT_MOUSE;
         click.mi.dwFlags = is_down ? button.down_flag : button.up_flag;
         if (!sendOne(click, err)) {
+            return false;
+        }
+    }
+    if ((button_mask & 0x08) != 0) {
+        INPUT wheel{};
+        wheel.type = INPUT_MOUSE;
+        wheel.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        wheel.mi.mouseData = WHEEL_DELTA;
+        if (!sendOne(wheel, err)) {
+            return false;
+        }
+    }
+    if ((button_mask & 0x10) != 0) {
+        INPUT wheel{};
+        wheel.type = INPUT_MOUSE;
+        wheel.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        wheel.mi.mouseData = static_cast<DWORD>(-WHEEL_DELTA);
+        if (!sendOne(wheel, err)) {
             return false;
         }
     }

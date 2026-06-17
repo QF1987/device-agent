@@ -13,10 +13,11 @@
 #include <vector>
 
 #ifdef _WIN32
-#include "remotedesktop/platform/windows/windows_input_injector.h"
-#include "remotedesktop/platform/windows/windows_screen_capturer.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include "remotedesktop/platform/windows/windows_badge.h"
+#include "remotedesktop/platform/windows/windows_input_injector.h"
+#include "remotedesktop/platform/windows/windows_screen_capturer.h"
 using socket_t = SOCKET;
 constexpr socket_t kInvalidSocket = INVALID_SOCKET;
 static void closeSocket(socket_t s) { closesocket(s); }
@@ -194,7 +195,7 @@ int runListenMode(const Options& opt,
         return 1;
     }
     std::cout << "rd_vnc_standalone listening on :" << opt.listen_port
-              << " with fake frame source " << opt.width << "x" << opt.height << "\n";
+              << " for RFB clients\n";
     while (!g_stop.load()) {
         socket_t client = accept(listener, nullptr, nullptr);
         if (client == kInvalidSocket) {
@@ -239,7 +240,6 @@ int main(int argc, char** argv) {
             cleanupSockets();
             return 2;
         }
-        device_agent::remotedesktop::rfb::RfbServer server(fake_capturer, logging_input, "DeviceOps Tunnel Test Pattern");
         device_agent::remotedesktop::tunnel::TunnelClientConfig cfg;
         cfg.relay_host = host;
         cfg.relay_port = port;
@@ -247,11 +247,44 @@ int main(int argc, char** argv) {
         cfg.token = opt.token;
         cfg.insecure_tls = opt.insecure;
         cfg.server_name = opt.server_name;
+#ifdef _WIN32
+        device_agent::remotedesktop::windows::WindowsScreenCapturer real_capturer;
+        device_agent::remotedesktop::windows::WindowsInputInjector real_input;
+        device_agent::remotedesktop::windows::WindowsRemoteControlBadge badge;
+        device_agent::remotedesktop::ScreenFrame probe;
+        std::string probe_err;
+        if (real_capturer.capture(probe, probe_err)) {
+            cfg.screen_w = probe.width;
+            cfg.screen_h = probe.height;
+            std::cerr << "using Windows desktop frame source " << probe.width << "x" << probe.height << "\n";
+        } else {
+            cfg.screen_w = opt.width;
+            cfg.screen_h = opt.height;
+            std::cerr << "initial Windows capture failed, HELLO uses fallback size "
+                      << opt.width << "x" << opt.height << ": " << probe_err << "\n";
+        }
+        cfg.heartbeat_seconds = 5;
+        device_agent::remotedesktop::rfb::RfbServer server(real_capturer, real_input, "DeviceOps Windows Desktop");
+        device_agent::remotedesktop::tunnel::TunnelClient client(
+            cfg, server, [&badge](bool on) {
+                std::string badge_err;
+                if (on) {
+                    if (!badge.show(badge_err)) {
+                        std::cerr << "BADGE on failed: " << badge_err << "\n";
+                    }
+                } else {
+                    badge.hide();
+                }
+                std::cerr << "BADGE " << (on ? "on" : "off") << "\n";
+            });
+#else
         cfg.screen_w = opt.width;
         cfg.screen_h = opt.height;
         cfg.heartbeat_seconds = 5;
+        device_agent::remotedesktop::rfb::RfbServer server(fake_capturer, logging_input, "DeviceOps Tunnel Test Pattern");
         device_agent::remotedesktop::tunnel::TunnelClient client(
             cfg, server, [](bool on) { std::cerr << "BADGE " << (on ? "on" : "off") << "\n"; });
+#endif
         std::string err;
         if (!client.run(g_stop, err)) {
             std::cerr << "tunnel client failed: " << err << "\n";
