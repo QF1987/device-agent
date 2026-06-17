@@ -68,6 +68,23 @@ KeyMapping keysymToVk(uint32_t keysym) {
     }
 }
 
+bool keysymToUnicode(uint32_t keysym, WORD& code_unit) {
+    uint32_t codepoint = 0;
+    if (keysym >= 0x01000000 && keysym <= 0x0110ffff) {
+        codepoint = keysym & 0x00ffffff;
+    } else if (keysym >= 0x00a0 && keysym <= 0x00ff) {
+        codepoint = keysym;
+    } else {
+        return false;
+    }
+
+    if (codepoint == 0 || codepoint > 0xffff || (codepoint >= 0xd800 && codepoint <= 0xdfff)) {
+        return false;
+    }
+    code_unit = static_cast<WORD>(codepoint);
+    return true;
+}
+
 bool sendOne(INPUT& input, std::string& err) {
     HDESK input_desktop = OpenInputDesktop(0, FALSE, GENERIC_ALL);
     if (input_desktop) {
@@ -77,8 +94,10 @@ bool sendOne(INPUT& input, std::string& err) {
     if (SendInput(1, &input, sizeof(INPUT)) != 1) {
         if (input.type == INPUT_KEYBOARD) {
             keybd_event(static_cast<BYTE>(input.ki.wVk),
-                        static_cast<BYTE>(MapVirtualKey(input.ki.wVk, MAPVK_VK_TO_VSC)),
-                        input.ki.dwFlags & KEYEVENTF_KEYUP,
+                        (input.ki.dwFlags & KEYEVENTF_UNICODE) != 0
+                            ? static_cast<BYTE>(input.ki.wScan)
+                            : static_cast<BYTE>(MapVirtualKey(input.ki.wVk, MAPVK_VK_TO_VSC)),
+                        input.ki.dwFlags,
                         0);
             return true;
         }
@@ -102,6 +121,15 @@ bool sendKey(WORD vk, bool down, std::string& err) {
     return sendOne(input, err);
 }
 
+bool sendUnicode(WORD code_unit, bool down, std::string& err) {
+    INPUT input{};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = 0;
+    input.ki.wScan = code_unit;
+    input.ki.dwFlags = KEYEVENTF_UNICODE | (down ? 0 : KEYEVENTF_KEYUP);
+    return sendOne(input, err);
+}
+
 bool sendModifierChord(const KeyMapping& mapping, bool down, std::string& err) {
     if (down) {
         if (mapping.shift && !sendKey(VK_SHIFT, true, err)) return false;
@@ -119,6 +147,11 @@ bool sendModifierChord(const KeyMapping& mapping, bool down, std::string& err) {
 }  // namespace
 
 bool WindowsInputInjector::keyEvent(uint32_t rfb_keysym, bool down, std::string& err) {
+    WORD unicode_unit = 0;
+    if (keysymToUnicode(rfb_keysym, unicode_unit)) {
+        return sendUnicode(unicode_unit, down, err);
+    }
+
     KeyMapping mapping = keysymToVk(rfb_keysym);
     if (mapping.vk == 0) {
         // Keep the RFB session alive when guacd sends a keysym outside the
