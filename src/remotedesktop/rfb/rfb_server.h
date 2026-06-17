@@ -25,6 +25,7 @@ public:
 private:
     bool writeVector(IRfbTransport& transport, const std::vector<uint8_t>& bytes, std::string& err);
     bool readClientMessage(IRfbTransport& transport, ClientMessage& message, std::string& err);
+    bool captureWithRetry(ScreenFrame& frame, int attempts, int delay_ms, std::string& err);
     bool handleFramebufferRequest(IRfbTransport& transport, const FramebufferUpdateRequest& request, std::string& err);
 
     IScreenCapturer& capturer_;

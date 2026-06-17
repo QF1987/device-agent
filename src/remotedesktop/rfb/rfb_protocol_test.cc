@@ -1,4 +1,5 @@
 #include "remotedesktop/rfb/rfb_protocol.h"
+#include "remotedesktop/rfb/rfb_server.h"
 #include "remotedesktop/tunnel/tunnel_protocol.h"
 
 #include <cassert>
@@ -8,8 +9,10 @@
 using device_agent::remotedesktop::Rect;
 using device_agent::remotedesktop::ScreenFrame;
 using device_agent::remotedesktop::rfb::ClientMessage;
+using device_agent::remotedesktop::rfb::IRfbTransport;
 using device_agent::remotedesktop::rfb::PixelFormat;
 using device_agent::remotedesktop::rfb::RfbProtocol;
+using device_agent::remotedesktop::rfb::RfbServer;
 
 namespace {
 
@@ -128,6 +131,75 @@ void testTunnelFrames() {
     assert(fields.size() == 2 && fields[0] == "BADGE" && fields[1] == "on");
 }
 
+class RetryCapturer : public device_agent::remotedesktop::IScreenCapturer {
+public:
+    bool capture(ScreenFrame& frame, std::string& err) override {
+        ++calls;
+        if (calls == 1 || calls == 3) {
+            err = "synthetic transient capture failure";
+            return false;
+        }
+        frame.width = 2;
+        frame.height = 1;
+        frame.stride = 8;
+        frame.bgra = {0x03, 0x02, 0x01, 0xff, 0x30, 0x20, 0x10, 0xff};
+        frame.dirty_rects = {Rect{0, 0, 2, 1}};
+        return true;
+    }
+
+    int calls = 0;
+};
+
+class NoopInjector : public device_agent::remotedesktop::IInputInjector {
+public:
+    bool keyEvent(uint32_t, bool, std::string&) override { return true; }
+    bool pointerEvent(uint8_t, uint16_t, uint16_t, std::string&) override { return true; }
+};
+
+class MemoryTransport : public IRfbTransport {
+public:
+    explicit MemoryTransport(std::vector<uint8_t> input) : input_(std::move(input)) {}
+
+    bool readExact(uint8_t* data, size_t size, std::string& err) override {
+        if (pos_ + size > input_.size()) {
+            err = "synthetic EOF";
+            return false;
+        }
+        std::memcpy(data, input_.data() + pos_, size);
+        pos_ += size;
+        return true;
+    }
+
+    bool writeAll(const uint8_t* data, size_t size, std::string&) override {
+        output.insert(output.end(), data, data + size);
+        return true;
+    }
+
+    std::vector<uint8_t> output;
+
+private:
+    std::vector<uint8_t> input_;
+    size_t pos_ = 0;
+};
+
+void testRfbServerRetriesTransientCaptureFailure() {
+    std::vector<uint8_t> input = bytes("RFB 003.008\n");
+    input.push_back(1);  // Security type: None.
+    input.push_back(1);  // Shared flag.
+    std::vector<uint8_t> fur{3, 0, 0, 0, 0, 0, 0, 2, 0, 1};
+    input.insert(input.end(), fur.begin(), fur.end());
+
+    RetryCapturer capturer;
+    NoopInjector injector;
+    RfbServer server(capturer, injector, "Retry Test Desktop");
+    MemoryTransport transport(std::move(input));
+    std::string err;
+    assert(!server.serveClient(transport, err));
+    assert(err == "synthetic EOF");
+    assert(capturer.calls == 4);
+    assert(transport.output.size() >= bytes("RFB 003.008\n").size() + 2 + 4 + 24 + 4 + 12 + 8);
+}
+
 }  // namespace
 
 int main() {
@@ -135,6 +207,7 @@ int main() {
     testClientMessages();
     testRawFramebufferUpdate();
     testTunnelFrames();
+    testRfbServerRetriesTransientCaptureFailure();
     std::cout << "rfb_protocol_test PASS\n";
     return 0;
 }

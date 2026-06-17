@@ -554,6 +554,10 @@ bool readFrame(TlsConnection& conn, std::vector<std::string>& fields, std::strin
 TunnelClient::TunnelClient(TunnelClientConfig config, rfb::RfbServer& rfb_server, BadgeCallback badge_callback)
     : config_(std::move(config)), rfb_server_(rfb_server), badge_callback_(std::move(badge_callback)) {}
 
+TunnelClient::~TunnelClient() {
+    reapOpenWorkers(true);
+}
+
 bool TunnelClient::run(std::atomic<bool>& stop, std::string& err) {
     int backoff_ms = 1000;
     while (!stop.load()) {
@@ -562,7 +566,9 @@ bool TunnelClient::run(std::atomic<bool>& stop, std::string& err) {
             backoff_ms = 1000;
         } else if (!stop.load()) {
             std::cerr << "tunnel disconnected: " << once_err << ", reconnect in " << backoff_ms << "ms\n";
-            std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms));
+            for (int slept = 0; slept < backoff_ms && !stop.load(); slept += 100) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(std::min(100, backoff_ms - slept)));
+            }
             backoff_ms = std::min(backoff_ms * 2, 30000);
         }
     }
@@ -592,7 +598,9 @@ bool TunnelClient::runOnce(std::atomic<bool>& stop, std::string& err) {
     std::thread heartbeat([&]() {
         const int seconds = config_.heartbeat_seconds > 0 ? config_.heartbeat_seconds : 30;
         while (!heartbeat_stop.load() && !stop.load()) {
-            std::this_thread::sleep_for(std::chrono::seconds(seconds));
+            for (int i = 0; i < seconds * 10 && !heartbeat_stop.load() && !stop.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
             std::string write_err;
             if (!heartbeat_stop.load() && !stop.load()) {
                 (void)conn->writeText(pingFrame(), write_err);
@@ -604,13 +612,15 @@ bool TunnelClient::runOnce(std::atomic<bool>& stop, std::string& err) {
         if (!readFrame(*conn, fields, err)) {
             heartbeat_stop = true;
             heartbeat.join();
+            reapOpenWorkers(true);
             return false;
         }
         if (fields.empty()) {
             continue;
         }
         if (fields[0] == "OPEN" && fields.size() == 2) {
-            std::thread(&TunnelClient::handleOpen, this, fields[1]).detach();
+            startOpen(fields[1]);
+            reapOpenWorkers(false);
         } else if (fields[0] == "BADGE" && fields.size() == 2) {
             if (badge_callback_) {
                 badge_callback_(fields[1] == "on");
@@ -623,7 +633,18 @@ bool TunnelClient::runOnce(std::atomic<bool>& stop, std::string& err) {
 
     heartbeat_stop = true;
     heartbeat.join();
+    reapOpenWorkers(true);
     return true;
+}
+
+void TunnelClient::startOpen(const std::string& stream_id) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    std::thread worker([this, stream_id, done]() {
+        handleOpen(stream_id);
+        done->store(true);
+    });
+    std::lock_guard<std::mutex> lock(open_workers_mu_);
+    open_workers_.push_back(OpenWorker{std::move(worker), std::move(done)});
 }
 
 void TunnelClient::handleOpen(const std::string& stream_id) {
@@ -645,6 +666,27 @@ void TunnelClient::handleOpen(const std::string& stream_id) {
     std::cerr << "tunnel DATA open stream=" << stream_id << "\n";
     if (!rfb_server_.serveClient(*data, err)) {
         std::cerr << "RFB stream ended: " << err << "\n";
+    }
+}
+
+void TunnelClient::reapOpenWorkers(bool join_all) {
+    std::vector<std::thread> to_join;
+    {
+        std::lock_guard<std::mutex> lock(open_workers_mu_);
+        auto it = open_workers_.begin();
+        while (it != open_workers_.end()) {
+            if (join_all || (it->done && it->done->load())) {
+                if (it->thread.joinable()) {
+                    to_join.push_back(std::move(it->thread));
+                }
+                it = open_workers_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto& worker : to_join) {
+        worker.join();
     }
 }
 

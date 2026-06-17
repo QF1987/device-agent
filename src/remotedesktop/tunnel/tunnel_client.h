@@ -4,7 +4,11 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace device_agent::remotedesktop::tunnel {
 
@@ -25,16 +29,26 @@ public:
     using BadgeCallback = std::function<void(bool on)>;
 
     TunnelClient(TunnelClientConfig config, rfb::RfbServer& rfb_server, BadgeCallback badge_callback = {});
+    ~TunnelClient();
 
     bool run(std::atomic<bool>& stop, std::string& err);
 
 private:
+    struct OpenWorker {
+        std::thread thread;
+        std::shared_ptr<std::atomic<bool>> done;
+    };
+
     bool runOnce(std::atomic<bool>& stop, std::string& err);
+    void startOpen(const std::string& stream_id);
     void handleOpen(const std::string& stream_id);
+    void reapOpenWorkers(bool join_all);
 
     TunnelClientConfig config_;
     rfb::RfbServer& rfb_server_;
     BadgeCallback badge_callback_;
+    std::mutex open_workers_mu_;
+    std::vector<OpenWorker> open_workers_;
 };
 
 bool splitHostPort(const std::string& endpoint, std::string& host, std::string& port, std::string& err);

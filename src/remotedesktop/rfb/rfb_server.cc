@@ -1,6 +1,8 @@
 #include "remotedesktop/rfb/rfb_server.h"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace device_agent::remotedesktop::rfb {
 
@@ -76,7 +78,7 @@ bool RfbServer::serveClient(IRfbTransport& transport, std::string& err) {
     (void)shared_flag;
 
     ScreenFrame initial;
-    if (!capturer_.capture(initial, err)) {
+    if (!captureWithRetry(initial, 30, 500, err)) {
         return false;
     }
     if (!writeVector(transport, protocol_.serverInit(initial.width, initial.height), err)) {
@@ -137,9 +139,25 @@ bool RfbServer::readClientMessage(IRfbTransport& transport, ClientMessage& messa
     return protocol_.parseClientMessage(bytes, message, err);
 }
 
+bool RfbServer::captureWithRetry(ScreenFrame& frame, int attempts, int delay_ms, std::string& err) {
+    std::string last_err;
+    const int tries = std::max(1, attempts);
+    for (int i = 0; i < tries; ++i) {
+        if (capturer_.capture(frame, last_err)) {
+            err.clear();
+            return true;
+        }
+        if (i + 1 < tries) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        }
+    }
+    err = last_err.empty() ? "screen capture failed" : last_err;
+    return false;
+}
+
 bool RfbServer::handleFramebufferRequest(IRfbTransport& transport, const FramebufferUpdateRequest& request, std::string& err) {
     ScreenFrame frame;
-    if (!capturer_.capture(frame, err)) {
+    if (!captureWithRetry(frame, 20, 250, err)) {
         return false;
     }
 
