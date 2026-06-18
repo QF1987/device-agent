@@ -276,6 +276,11 @@ public:
         schannel.dwVersion = SCHANNEL_CRED_VERSION;
         schannel.dwFlags = SCH_CRED_NO_DEFAULT_CREDS |
                            (cfg.insecure_tls ? SCH_CRED_MANUAL_CRED_VALIDATION : SCH_CRED_AUTO_CRED_VALIDATION);
+        // 显式启用 TLS1.2 客户端协议:Win7 SP1 的 Schannel 默认 disabled-by-default
+        // 不提供 TLS1.2(grbitEnabledProtocols=0=系统默认 → 仅 1.0/1.1),会与 relay 的
+        // MinVersion=TLS1.2 握手失败(0x80090302)。显式请求让 Win7 主动协商 1.2;
+        // Win10/11 同走 1.2,不受影响。免改 relay、免逐台改注册表。
+        schannel.grbitEnabledProtocols = SP_PROT_TLS1_2_CLIENT;
 
         auto cred = std::unique_ptr<CredHandle, CredHandleDeleter>(new CredHandle{});
         TimeStamp expiry{};
