@@ -314,18 +314,63 @@ elseif(WIN32)
         find_package(protobuf CONFIG REQUIRED)
         find_package(gRPC CONFIG REQUIRED)
 
-        set(GEN_DESKTOP_DIR "${CMAKE_SOURCE_DIR}/gen-desktop")
+        set(GEN_WINDOWS_DIR "${CMAKE_BINARY_DIR}/gen-windows")
+        set(WINDOWS_PROTO_ROOT "${CMAKE_BINARY_DIR}/proto-src")
+        set(PROTO_SOURCE_ROOT "${CMAKE_SOURCE_DIR}/proto")
+        set(PROTO_SOURCE_ROOT_COMMAND "${PROTO_SOURCE_ROOT}")
+        if(PROTO_SOURCE_ROOT_COMMAND MATCHES "^/Mac/Home/")
+            string(REGEX REPLACE "^/Mac/Home/" "//Mac/Home/" PROTO_SOURCE_ROOT_COMMAND "${PROTO_SOURCE_ROOT_COMMAND}")
+        endif()
+        set(PROTO_DEVICE_SOURCE "${PROTO_SOURCE_ROOT}/terminal_agent/v1/device.proto")
+        set(PROTO_SERVICE_SOURCE "${PROTO_SOURCE_ROOT}/terminal_agent/v1/service.proto")
+        set(PROTO_DEVICE "${WINDOWS_PROTO_ROOT}/terminal_agent/v1/device.proto")
+        set(PROTO_SERVICE "${WINDOWS_PROTO_ROOT}/terminal_agent/v1/service.proto")
+        file(TO_NATIVE_PATH "${WINDOWS_PROTO_ROOT}" PROTO_ROOT_NATIVE)
+        file(TO_NATIVE_PATH "${PROTO_DEVICE}" PROTO_DEVICE_NATIVE)
+        file(TO_NATIVE_PATH "${PROTO_SERVICE}" PROTO_SERVICE_NATIVE)
+        if(TARGET gRPC::grpc_cpp_plugin)
+            set(GRPC_CPP_PLUGIN "$<TARGET_FILE:gRPC::grpc_cpp_plugin>")
+        else()
+            set(GRPC_CPP_PLUGIN
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/grpc/grpc_cpp_plugin.exe")
+        endif()
+        set(WINDOWS_PROTO_SRCS
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/device.pb.cc"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/service.pb.cc"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+        )
+        set(WINDOWS_PROTO_HDRS
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/device.pb.h"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/device.grpc.pb.h"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/service.pb.h"
+            "${GEN_WINDOWS_DIR}/terminal_agent/v1/service.grpc.pb.h"
+        )
+        add_custom_command(
+            OUTPUT ${WINDOWS_PROTO_SRCS} ${WINDOWS_PROTO_HDRS}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${GEN_WINDOWS_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${PROTO_SOURCE_ROOT_COMMAND}"
+                "${WINDOWS_PROTO_ROOT}"
+            COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+                --proto_path=${PROTO_ROOT_NATIVE}
+                --cpp_out=${GEN_WINDOWS_DIR}
+                --grpc_out=${GEN_WINDOWS_DIR}
+                --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN}
+                "${PROTO_DEVICE_NATIVE}"
+                "${PROTO_SERVICE_NATIVE}"
+            DEPENDS "${PROTO_DEVICE_SOURCE}" "${PROTO_SERVICE_SOURCE}"
+            COMMENT "Generating Windows protobuf/gRPC sources"
+            VERBATIM
+        )
+
         set(WINDOWS_AGENT_SOURCES ${COMMON_SOURCES})
         list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/executor/linux_executor.cc$")
         list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/executor/macos_executor.cc$")
         list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/download/android_download_manager.cc$")
-        list(FILTER WINDOWS_AGENT_SOURCES EXCLUDE REGEX "src/download/p2p_upload_counters.cc$")
         list(APPEND WINDOWS_AGENT_SOURCES
             src/executor/windows_executor.cc
-            "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
-            "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
-            "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
-            "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+            ${WINDOWS_PROTO_SRCS}
         )
 
         add_executable(device-agent
@@ -335,7 +380,7 @@ elseif(WIN32)
         target_include_directories(device-agent PRIVATE
             ${CMAKE_SOURCE_DIR}/src
             ${CMAKE_SOURCE_DIR}/include
-            ${GEN_DESKTOP_DIR}
+            ${GEN_WINDOWS_DIR}
         )
         target_compile_definitions(device-agent PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
         target_compile_options(device-agent PRIVATE /utf-8)

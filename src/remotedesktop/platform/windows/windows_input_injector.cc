@@ -2,6 +2,8 @@
 
 #include "remotedesktop/platform/windows/windows_input_injector.h"
 
+#include "logger/logger.h"
+
 #include <array>
 #include <cstdio>
 
@@ -147,6 +149,9 @@ bool sendModifierChord(const KeyMapping& mapping, bool down, std::string& err) {
 }  // namespace
 
 bool WindowsInputInjector::keyEvent(uint32_t rfb_keysym, bool down, std::string& err) {
+    if (down) {
+        LOG_DEBUG("WindowsInputInjector: key down keysym=" + std::to_string(rfb_keysym));
+    }
     WORD unicode_unit = 0;
     if (keysymToUnicode(rfb_keysym, unicode_unit)) {
         return sendUnicode(unicode_unit, down, err);
@@ -190,6 +195,8 @@ bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_
         if (was_down == is_down) {
             continue;
         }
+        LOG_DEBUG("WindowsInputInjector: pointer button mask=" + std::to_string(button_mask) +
+                  " x=" + std::to_string(x) + " y=" + std::to_string(y));
         INPUT click{};
         click.type = INPUT_MOUSE;
         click.mi.dwFlags = is_down ? button.down_flag : button.up_flag;
@@ -198,6 +205,8 @@ bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_
         }
     }
     if ((button_mask & 0x08) != 0) {
+        LOG_DEBUG("WindowsInputInjector: wheel up x=" + std::to_string(x) +
+                  " y=" + std::to_string(y));
         INPUT wheel{};
         wheel.type = INPUT_MOUSE;
         wheel.mi.dwFlags = MOUSEEVENTF_WHEEL;
@@ -207,6 +216,8 @@ bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_
         }
     }
     if ((button_mask & 0x10) != 0) {
+        LOG_DEBUG("WindowsInputInjector: wheel down x=" + std::to_string(x) +
+                  " y=" + std::to_string(y));
         INPUT wheel{};
         wheel.type = INPUT_MOUSE;
         wheel.mi.dwFlags = MOUSEEVENTF_WHEEL;

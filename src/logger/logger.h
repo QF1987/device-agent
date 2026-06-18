@@ -24,6 +24,12 @@
 #include <sstream>
 #include <mutex>
 
+#ifdef _WIN32
+#ifdef ERROR
+#undef ERROR
+#endif
+#endif
+
 namespace device_agent {
 
 // 日志级别枚举

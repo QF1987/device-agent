@@ -94,7 +94,13 @@ bool runRemoteDesktopChild(const RemoteDesktopRuntimeConfig& config,
             badge.hide();
         }
     });
-    return client.run(stop, err);
+    LOG_INFO(std::string("RemoteDesktopRuntime: starting tunnel client, stop=") +
+             (stop.load() ? "true" : "false"));
+    const bool ok = client.run(stop, err);
+    LOG_INFO(std::string("RemoteDesktopRuntime: tunnel client returned ok=") +
+             (ok ? "true" : "false") + " stop=" + (stop.load() ? "true" : "false") +
+             " err=" + err);
+    return ok;
 #else
     err = "remote desktop runtime is only implemented for Windows in Phase 2 M4";
     return false;
@@ -145,10 +151,25 @@ bool RemoteDesktopRuntime::start(std::string& err) {
         if (!impl_->config.server_name.empty()) {
             cmd += L" --rd-server-name " + windows::quoteArg(impl_->config.server_name);
         }
+        if (!impl_->config.child_log_path.empty()) {
+            cmd += L" --rd-log " + windows::quoteArg(impl_->config.child_log_path);
+        }
         if (!windows::launchInActiveConsoleSession(cmd, impl_->child, err)) {
             return false;
         }
         LOG_INFO("RemoteDesktopRuntime: launched child in active session");
+        const HANDLE child_process = impl_->child.hProcess;
+        std::thread([child_process]() {
+            DWORD wait = WaitForSingleObject(child_process, 5000);
+            if (wait == WAIT_OBJECT_0) {
+                DWORD code = 0;
+                if (GetExitCodeProcess(child_process, &code)) {
+                    LOG_ERROR("RemoteDesktopRuntime: child exited early, code=" + std::to_string(code));
+                } else {
+                    LOG_ERROR("RemoteDesktopRuntime: child exited early, code unavailable");
+                }
+            }
+        }).detach();
         return true;
     }
 #endif

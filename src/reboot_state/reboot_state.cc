@@ -10,22 +10,59 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#else
 #include <unistd.h>
 #include <dirent.h>
+#endif
 
 namespace device_agent {
 
 // ─── 工具函数 ─────────────────────────────────────────────
 
+static const char* default_state_file_path() {
+#ifdef _WIN32
+    return "C:/ProgramData/device-agent/reboot_pending.json";
+#else
+    return "/var/run/device-agent/reboot_pending.json";
+#endif
+}
+
+static const char* fallback_state_file_path() {
+#ifdef _WIN32
+    return "C:/Users/Public/device-agent-reboot-pending.json";
+#else
+    return "/tmp/device-agent-reboot-pending.json";
+#endif
+}
+
 // 确保目录存在
 static bool ensure_dir(const std::string& path) {
-    std::string dir = path.substr(0, path.find_last_of('/'));
+    std::string dir = path.substr(0, path.find_last_of("/\\"));
+#ifdef _WIN32
+    struct _stat st {};
+    if (_stat(dir.c_str(), &st) == 0 && (st.st_mode & _S_IFDIR) != 0) {
+        return true;
+    }
+    return _mkdir(dir.c_str()) == 0;
+#else
     DIR* d = opendir(dir.c_str());
     if (d) {
         closedir(d);
         return true;
     }
     return mkdir(dir.c_str(), 0755) == 0;
+#endif
+}
+
+static int remove_file(const std::string& path) {
+#ifdef _WIN32
+    return _unlink(path.c_str());
+#else
+    return unlink(path.c_str());
+#endif
 }
 
 // ─── RebootStateManager ────────────────────────────────────
@@ -44,14 +81,14 @@ bool RebootStateManager::write_pending(const std::string& command_id,
                                        int64_t issued_at_ms) {
     if (state_file_.empty()) {
         // 默认路径
-        state_file_ = "/var/run/device-agent/reboot_pending.json";
+        state_file_ = default_state_file_path();
     }
 
     // 确保目录存在
     if (!ensure_dir(state_file_)) {
         LOG_ERROR("RebootStateManager: failed to create directory for " + state_file_);
         // 尝试用 /tmp 作为 fallback
-        state_file_ = "/tmp/device-agent-reboot-pending.json";
+        state_file_ = fallback_state_file_path();
     }
 
     std::ofstream ofs(state_file_);
@@ -74,13 +111,13 @@ bool RebootStateManager::write_pending(const std::string& command_id,
 
 bool RebootStateManager::read_pending(RebootPendingState& out) {
     if (state_file_.empty()) {
-        state_file_ = "/var/run/device-agent/reboot_pending.json";
+        state_file_ = default_state_file_path();
     }
 
     std::ifstream ifs(state_file_);
     if (!ifs.is_open()) {
         // 尝试 /tmp fallback
-        state_file_ = "/tmp/device-agent-reboot-pending.json";
+        state_file_ = fallback_state_file_path();
         ifs.open(state_file_);
         if (!ifs.is_open()) {
             return false;  // 没有 pending 状态
@@ -142,23 +179,23 @@ bool RebootStateManager::read_pending(RebootPendingState& out) {
 
 void RebootStateManager::clear_pending() {
     if (state_file_.empty()) {
-        state_file_ = "/var/run/device-agent/reboot_pending.json";
+        state_file_ = default_state_file_path();
     }
 
-    if (unlink(state_file_.c_str()) == 0) {
+    if (remove_file(state_file_) == 0) {
         LOG_INFO("RebootStateManager: cleared pending state");
     } else {
         // 尝试 /tmp fallback
-        state_file_ = "/tmp/device-agent-reboot-pending.json";
-        unlink(state_file_.c_str());
+        state_file_ = fallback_state_file_path();
+        remove_file(state_file_);
     }
 }
 
 bool RebootStateManager::has_pending() const {
-    std::string path = state_file_.empty() ? "/var/run/device-agent/reboot_pending.json" : state_file_;
+    std::string path = state_file_.empty() ? default_state_file_path() : state_file_;
     std::ifstream ifs(path);
     if (!ifs.is_open()) {
-        path = "/tmp/device-agent-reboot-pending.json";
+        path = fallback_state_file_path();
         ifs.open(path);
         if (!ifs.is_open()) {
             return false;

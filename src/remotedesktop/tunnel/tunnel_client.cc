@@ -1,5 +1,6 @@
 #include "remotedesktop/tunnel/tunnel_client.h"
 
+#include "logger/logger.h"
 #include "remotedesktop/tunnel/tunnel_protocol.h"
 
 #ifndef _WIN32
@@ -565,7 +566,8 @@ bool TunnelClient::run(std::atomic<bool>& stop, std::string& err) {
         if (runOnce(stop, once_err)) {
             backoff_ms = 1000;
         } else if (!stop.load()) {
-            std::cerr << "tunnel disconnected: " << once_err << ", reconnect in " << backoff_ms << "ms\n";
+            LOG_WARN("tunnel disconnected: " + once_err + ", reconnect in " +
+                     std::to_string(backoff_ms) + "ms");
             for (int slept = 0; slept < backoff_ms && !stop.load(); slept += 100) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(std::min(100, backoff_ms - slept)));
             }
@@ -592,7 +594,7 @@ bool TunnelClient::runOnce(std::atomic<bool>& stop, std::string& err) {
         err = "tunnel HELLO rejected";
         return false;
     }
-    std::cerr << "tunnel connected as device " << config_.device_id << "\n";
+    LOG_INFO("tunnel connected as device " + config_.device_id);
 
     std::atomic<bool> heartbeat_stop{false};
     std::thread heartbeat([&]() {
@@ -625,7 +627,7 @@ bool TunnelClient::runOnce(std::atomic<bool>& stop, std::string& err) {
             if (badge_callback_) {
                 badge_callback_(fields[1] == "on");
             }
-            std::cerr << "tunnel badge " << fields[1] << "\n";
+            LOG_INFO("tunnel badge " + fields[1]);
         } else if (fields[0] == "PONG") {
             // Heartbeat ack.
         }
@@ -651,21 +653,21 @@ void TunnelClient::handleOpen(const std::string& stream_id) {
     std::string err;
     auto data = connectTls(config_, err);
     if (!data) {
-        std::cerr << "tunnel DATA connect failed: " << err << "\n";
+        LOG_WARN("tunnel DATA connect failed: " + err);
         return;
     }
     if (!data->writeText(dataFrame(stream_id, config_.device_id, config_.token), err)) {
-        std::cerr << "tunnel DATA frame failed: " << err << "\n";
+        LOG_WARN("tunnel DATA frame failed: " + err);
         return;
     }
     std::vector<std::string> ack;
     if (!readFrame(*data, ack, err) || ack.empty() || ack[0] != "OK") {
-        std::cerr << "tunnel DATA rejected: " << err << "\n";
+        LOG_WARN("tunnel DATA rejected: " + err);
         return;
     }
-    std::cerr << "tunnel DATA open stream=" << stream_id << "\n";
+    LOG_INFO("tunnel DATA open stream=" + stream_id);
     if (!rfb_server_.serveClient(*data, err)) {
-        std::cerr << "RFB stream ended: " << err << "\n";
+        LOG_WARN("RFB stream ended: " + err);
     }
 }
 

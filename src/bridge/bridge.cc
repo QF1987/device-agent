@@ -21,7 +21,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma comment(lib, "ws2_2.lib")
+#pragma comment(lib, "ws2_32.lib")
 #else
 #include <unistd.h>
 #include <sys/socket.h>
@@ -352,6 +352,7 @@ void SocketBridge::session_loop(int client_fd) {
 
 bool SocketBridge::setup_connect_socket() {
 #ifdef _WIN32
+    WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         return false;
     }

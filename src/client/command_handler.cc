@@ -197,6 +197,9 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         if (!executor_) {
 #ifdef __ANDROID__
             executor = std::make_shared<AndroidExecutor>();
+#elif defined(_WIN32)
+            LOG_INFO("No executor set, using WindowsExecutor");
+            executor = std::make_shared<WindowsExecutor>();
 #else
             LOG_INFO("No executor set, using LinuxExecutor");
             executor = std::make_shared<LinuxExecutor>();

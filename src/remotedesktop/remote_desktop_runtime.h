@@ -11,6 +11,7 @@ struct RemoteDesktopRuntimeConfig {
     std::string device_id;
     std::string token;
     std::string server_name;
+    std::string child_log_path;
     bool insecure_tls = false;
     bool launch_active_session = true;
     int heartbeat_seconds = 5;

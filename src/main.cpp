@@ -38,6 +38,7 @@
 #include <cstring>
 #ifdef _WIN32
 #include <direct.h>
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #endif
@@ -84,8 +85,12 @@ void print_usage(const char* prog) {
               << "Options:\n"
               << "  -c <file>    Config file (JSON), default: /etc/device-agent/config.json\n"
               << "  -e           Load config from environment variables\n"
+              << "  --service    Run under Windows Service Control Manager\n"
+              << "  --service-name <name>  Windows service name, default: DeviceAgent\n"
               << "  -h           Show this help\n";
 }
+
+int run_agent(int argc, char* argv[]);
 
 #ifndef __ANDROID__
 std::string desktop_download_dir() {
@@ -147,6 +152,8 @@ bool parse_remote_desktop_child_args(int argc,
             out.token = argv[++i];
         } else if (arg == "--rd-server-name" && i + 1 < argc) {
             out.server_name = argv[++i];
+        } else if (arg == "--rd-log" && i + 1 < argc) {
+            out.child_log_path = argv[++i];
         } else if (arg == "--rd-insecure") {
             out.insecure_tls = true;
         }
@@ -167,9 +174,94 @@ device_agent::remotedesktop::RemoteDesktopRuntimeConfig remote_desktop_config_fr
         rd.token = config.auth.token;
     }
     rd.server_name = env_string("DEVICE_AGENT_RD_SERVER_NAME");
+    rd.child_log_path = env_string("DEVICE_AGENT_RD_CHILD_LOG");
+    if (rd.child_log_path.empty() && !config.log_file.empty()) {
+        rd.child_log_path = config.log_file + ".rd-child.log";
+    }
     rd.insecure_tls = env_bool("DEVICE_AGENT_RD_INSECURE");
     rd.launch_active_session = !env_bool("DEVICE_AGENT_RD_NO_SESSION_LAUNCH");
     return rd;
+}
+
+int g_service_argc = 0;
+char** g_service_argv = nullptr;
+std::string g_service_name = "DeviceAgent";
+SERVICE_STATUS_HANDLE g_service_status_handle = nullptr;
+SERVICE_STATUS g_service_status{};
+
+void report_service_status(DWORD state, DWORD win32_exit_code = NO_ERROR, DWORD wait_hint_ms = 0) {
+    if (g_service_status_handle == nullptr) {
+        return;
+    }
+    g_service_status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    g_service_status.dwCurrentState = state;
+    g_service_status.dwWin32ExitCode = win32_exit_code;
+    g_service_status.dwWaitHint = wait_hint_ms;
+    g_service_status.dwControlsAccepted =
+        state == SERVICE_RUNNING ? SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN : 0;
+    SetServiceStatus(g_service_status_handle, &g_service_status);
+}
+
+DWORD WINAPI service_control_handler(DWORD control,
+                                     DWORD,
+                                     LPVOID,
+                                     LPVOID) {
+    if (control == SERVICE_CONTROL_STOP || control == SERVICE_CONTROL_SHUTDOWN) {
+        report_service_status(SERVICE_STOP_PENDING, NO_ERROR, 30000);
+        g_running.store(false);
+        return NO_ERROR;
+    }
+    return NO_ERROR;
+}
+
+void WINAPI service_main(DWORD, LPSTR*) {
+    g_service_status_handle = RegisterServiceCtrlHandlerExA(
+        g_service_name.c_str(),
+        service_control_handler,
+        nullptr);
+    if (g_service_status_handle == nullptr) {
+        return;
+    }
+    report_service_status(SERVICE_START_PENDING, NO_ERROR, 30000);
+    g_running.store(true);
+    report_service_status(SERVICE_RUNNING);
+    const int rc = run_agent(g_service_argc, g_service_argv);
+    report_service_status(SERVICE_STOPPED, rc == 0 ? NO_ERROR : ERROR_SERVICE_SPECIFIC_ERROR);
+}
+
+bool has_arg(int argc, char* argv[], const std::string& name) {
+    for (int i = 1; i < argc; ++i) {
+        if (argv[i] == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string arg_value(int argc, char* argv[], const std::string& name, const std::string& fallback) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (argv[i] == name) {
+            return argv[i + 1];
+        }
+    }
+    return fallback;
+}
+
+int run_windows_service(int argc, char* argv[]) {
+    g_service_argc = argc;
+    g_service_argv = argv;
+    g_service_name = arg_value(argc, argv, "--service-name", "DeviceAgent");
+    SERVICE_TABLE_ENTRYA service_table[] = {
+        {const_cast<char*>(g_service_name.c_str()), service_main},
+        {nullptr, nullptr},
+    };
+    if (StartServiceCtrlDispatcherA(service_table)) {
+        return 0;
+    }
+    if (GetLastError() == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) {
+        std::cerr << "--service must be started by the Windows Service Control Manager\n";
+    }
+    return 1;
 }
 #endif
 
@@ -178,12 +270,26 @@ device_agent::remotedesktop::RemoteDesktopRuntimeConfig remote_desktop_config_fr
 // ============================================================
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
+    if (has_arg(argc, argv, "--service")) {
+        return run_windows_service(argc, argv);
+    }
+#endif
+    return run_agent(argc, argv);
+}
+
+int run_agent(int argc, char* argv[]) {
+#ifdef _WIN32
     device_agent::remotedesktop::RemoteDesktopRuntimeConfig child_rd_config;
     if (parse_remote_desktop_child_args(argc, argv, child_rd_config)) {
+        g_running.store(true);
+        if (!child_rd_config.child_log_path.empty()) {
+            device_agent::Logger::instance().set_output(child_rd_config.child_log_path);
+        }
         std::signal(SIGINT, signal_handler);
         std::signal(SIGTERM, signal_handler);
         std::string err;
-        if (!device_agent::remotedesktop::runRemoteDesktopChild(child_rd_config, g_running, err)) {
+        std::atomic<bool> child_running{false};
+        if (!device_agent::remotedesktop::runRemoteDesktopChild(child_rd_config, child_running, err)) {
             std::cerr << "remote desktop child failed: " << err << "\n";
             return 1;
         }

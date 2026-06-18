@@ -1,6 +1,6 @@
 #include "client/network_info.h"
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(_WIN32)
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -16,7 +16,7 @@ namespace {
 std::mutex g_provider_mu;
 NetworkInfoProvider g_provider;
 
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(_WIN32)
 int prefix_len_from_netmask(sockaddr* netmask) {
     if (netmask == nullptr || netmask->sa_family != AF_INET) {
         return 0;
@@ -48,7 +48,7 @@ std::string cidr_from_addr_and_netmask(const sockaddr_in* addr, sockaddr* netmas
 
 NetworkInfoSnapshot collect_default_network_info() {
     NetworkInfoSnapshot info;
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(_WIN32)
     ifaddrs* ifaddr = nullptr;
     if (getifaddrs(&ifaddr) != 0 || ifaddr == nullptr) {
         return info;
