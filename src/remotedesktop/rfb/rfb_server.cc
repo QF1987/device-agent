@@ -98,11 +98,13 @@ bool RfbServer::serveClient(IRfbTransport& transport, std::string& err) {
             }
             break;
         case ClientMessage::Type::KeyEvent:
+            last_input_at_ = std::chrono::steady_clock::now();
             if (!injector_.keyEvent(message.key_event.keysym, message.key_event.down, err)) {
                 return false;
             }
             break;
         case ClientMessage::Type::PointerEvent:
+            last_input_at_ = std::chrono::steady_clock::now();
             if (!injector_.pointerEvent(message.pointer_event.button_mask, message.pointer_event.x, message.pointer_event.y, err)) {
                 return false;
             }
@@ -157,6 +159,14 @@ bool RfbServer::captureWithRetry(ScreenFrame& frame, int attempts, int delay_ms,
 }
 
 bool RfbServer::handleFramebufferRequest(IRfbTransport& transport, const FramebufferUpdateRequest& request, std::string& err) {
+    if (last_input_at_ != std::chrono::steady_clock::time_point{}) {
+        const auto age = std::chrono::steady_clock::now() - last_input_at_;
+        const auto settle = std::chrono::milliseconds(80);
+        if (age < settle) {
+            std::this_thread::sleep_for(settle - age);
+        }
+    }
+
     ScreenFrame frame;
     if (!captureWithRetry(frame, 20, 250, err)) {
         return false;

@@ -11,6 +11,19 @@ namespace device_agent::remotedesktop::windows {
 
 namespace {
 
+void flushDwmComposition() {
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm) {
+        return;
+    }
+    using DwmFlushFn = HRESULT(WINAPI*)();
+    auto fn = reinterpret_cast<DwmFlushFn>(GetProcAddress(dwm, "DwmFlush"));
+    if (fn) {
+        (void)fn();
+    }
+    FreeLibrary(dwm);
+}
+
 std::string hrError(const char* op, HRESULT hr) {
     char buf[128]{};
     std::snprintf(buf, sizeof(buf), "%s failed: 0x%08lx", op, static_cast<unsigned long>(hr));
@@ -245,6 +258,8 @@ bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err
 }
 
 bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err) {
+    flushDwmComposition();
+
     HDC screen = GetDC(nullptr);
     if (!screen) {
         err = "GetDC failed";

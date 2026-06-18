@@ -4,6 +4,7 @@
 #include "remotedesktop/rfb/rfb_protocol.h"
 #include "remotedesktop/screen_capturer.h"
 
+#include <chrono>
 #include <memory>
 
 namespace device_agent::remotedesktop::rfb {
@@ -31,6 +32,7 @@ private:
     IScreenCapturer& capturer_;
     IInputInjector& injector_;
     RfbProtocol protocol_;
+    std::chrono::steady_clock::time_point last_input_at_{};
 };
 
 }  // namespace device_agent::remotedesktop::rfb

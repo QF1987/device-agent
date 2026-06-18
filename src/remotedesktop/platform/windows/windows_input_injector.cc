@@ -5,7 +5,9 @@
 #include "logger/logger.h"
 
 #include <array>
+#include <chrono>
 #include <cstdio>
+#include <thread>
 
 namespace device_agent::remotedesktop::windows {
 
@@ -150,7 +152,7 @@ bool sendModifierChord(const KeyMapping& mapping, bool down, std::string& err) {
 
 bool WindowsInputInjector::keyEvent(uint32_t rfb_keysym, bool down, std::string& err) {
     if (down) {
-        LOG_DEBUG("WindowsInputInjector: key down keysym=" + std::to_string(rfb_keysym));
+        LOG_INFO("WindowsInputInjector: key down keysym=" + std::to_string(rfb_keysym));
     }
     WORD unicode_unit = 0;
     if (keysymToUnicode(rfb_keysym, unicode_unit)) {
@@ -167,11 +169,15 @@ bool WindowsInputInjector::keyEvent(uint32_t rfb_keysym, bool down, std::string&
 }
 
 bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_t y, std::string& err) {
-    const int width = GetSystemMetrics(SM_CXSCREEN);
-    const int height = GetSystemMetrics(SM_CYSCREEN);
+    int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (width <= 0 || height <= 0) {
+        width = GetSystemMetrics(SM_CXSCREEN);
+        height = GetSystemMetrics(SM_CYSCREEN);
+    }
     INPUT move{};
     move.type = INPUT_MOUSE;
-    move.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+    move.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
     move.mi.dx = width > 1 ? static_cast<LONG>((static_cast<uint64_t>(x) * 65535) / (width - 1)) : 0;
     move.mi.dy = height > 1 ? static_cast<LONG>((static_cast<uint64_t>(y) * 65535) / (height - 1)) : 0;
     if (!sendOne(move, err)) {
@@ -195,8 +201,12 @@ bool WindowsInputInjector::pointerEvent(uint8_t button_mask, uint16_t x, uint16_
         if (was_down == is_down) {
             continue;
         }
-        LOG_DEBUG("WindowsInputInjector: pointer button mask=" + std::to_string(button_mask) +
-                  " x=" + std::to_string(x) + " y=" + std::to_string(y));
+        LOG_INFO("WindowsInputInjector: pointer button mask=" + std::to_string(button_mask) +
+                 " x=" + std::to_string(x) + " y=" + std::to_string(y) +
+                 (is_down ? " down" : " up"));
+        if (!is_down) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        }
         INPUT click{};
         click.type = INPUT_MOUSE;
         click.mi.dwFlags = is_down ? button.down_flag : button.up_flag;
