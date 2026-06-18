@@ -383,20 +383,45 @@ void RfbProtocol::appendRawRect(std::vector<uint8_t>& out, const ScreenFrame& fr
 std::vector<uint8_t> RfbProtocol::zrleRectPayload(const ScreenFrame& frame, const Rect& rect) const {
     std::vector<uint8_t> tiles;
     const uint32_t stride = frame.stride == 0 ? static_cast<uint32_t>(frame.width) * 4 : frame.stride;
+    auto pixel_at = [&](uint16_t x, uint16_t y) -> uint32_t {
+        const size_t row = static_cast<size_t>(y) * stride;
+        const size_t offset = row + static_cast<size_t>(x) * 4;
+        if (offset + 3 < frame.bgra.size()) {
+            return convertBgraPixel(frame.bgra.data() + offset);
+        }
+        return 0;
+    };
+
     for (uint16_t tile_y = 0; tile_y < rect.height; tile_y = static_cast<uint16_t>(tile_y + 64)) {
         uint16_t tile_h = std::min<uint16_t>(64, rect.height - tile_y);
         for (uint16_t tile_x = 0; tile_x < rect.width; tile_x = static_cast<uint16_t>(tile_x + 64)) {
             uint16_t tile_w = std::min<uint16_t>(64, rect.width - tile_x);
+            const uint16_t first_x = static_cast<uint16_t>(rect.x + tile_x);
+            const uint16_t first_y = static_cast<uint16_t>(rect.y + tile_y);
+            const uint32_t first_pixel = pixel_at(first_x, first_y);
+            bool solid = true;
+            for (uint16_t y = 0; solid && y < tile_h; ++y) {
+                const uint16_t py = static_cast<uint16_t>(rect.y + tile_y + y);
+                for (uint16_t x = 0; x < tile_w; ++x) {
+                    const uint16_t px = static_cast<uint16_t>(rect.x + tile_x + x);
+                    if (pixel_at(px, py) != first_pixel) {
+                        solid = false;
+                        break;
+                    }
+                }
+            }
+            if (solid) {
+                tiles.push_back(1);  // Solid ZRLE tile.
+                appendCompressedPixel(tiles, first_pixel);
+                continue;
+            }
+
             tiles.push_back(0);  // Raw ZRLE tile.
             for (uint16_t y = 0; y < tile_h; ++y) {
-                size_t row = static_cast<size_t>(rect.y + tile_y + y) * stride;
                 for (uint16_t x = 0; x < tile_w; ++x) {
-                    size_t offset = row + static_cast<size_t>(rect.x + tile_x + x) * 4;
-                    if (offset + 3 < frame.bgra.size()) {
-                        appendCompressedPixel(tiles, convertBgraPixel(frame.bgra.data() + offset));
-                    } else {
-                        appendCompressedPixel(tiles, 0);
-                    }
+                    const uint16_t px = static_cast<uint16_t>(rect.x + tile_x + x);
+                    const uint16_t py = static_cast<uint16_t>(rect.y + tile_y + y);
+                    appendCompressedPixel(tiles, pixel_at(px, py));
                 }
             }
         }

@@ -20,6 +20,38 @@ std::vector<uint8_t> bytes(const char* s) {
     return std::vector<uint8_t>(s, s + std::strlen(s));
 }
 
+uint32_t read_be32_at(const std::vector<uint8_t>& data, size_t offset) {
+    return (static_cast<uint32_t>(data[offset]) << 24) |
+           (static_cast<uint32_t>(data[offset + 1]) << 16) |
+           (static_cast<uint32_t>(data[offset + 2]) << 8) |
+           static_cast<uint32_t>(data[offset + 3]);
+}
+
+std::vector<uint8_t> storedZlibPlain(const std::vector<uint8_t>& data, size_t offset, size_t size) {
+    std::vector<uint8_t> plain;
+    size_t pos = offset;
+    const size_t end = offset + size;
+    if (pos + 2 <= end && data[pos] == 0x78 && data[pos + 1] == 0x01) {
+        pos += 2;
+    }
+    while (pos + 5 <= end) {
+        if (pos + 5 == end && data[pos] == 0x00 && data[pos + 1] == 0x00 &&
+            data[pos + 2] == 0x00 && data[pos + 3] == 0xff && data[pos + 4] == 0xff) {
+            break;
+        }
+        assert(data[pos] == 0x00);
+        const uint16_t len = static_cast<uint16_t>(data[pos + 1] | (static_cast<uint16_t>(data[pos + 2]) << 8));
+        const uint16_t nlen = static_cast<uint16_t>(data[pos + 3] | (static_cast<uint16_t>(data[pos + 4]) << 8));
+        assert(static_cast<uint16_t>(~len) == nlen);
+        pos += 5;
+        assert(pos + len <= end);
+        plain.insert(plain.end(), data.begin() + static_cast<std::ptrdiff_t>(pos),
+                     data.begin() + static_cast<std::ptrdiff_t>(pos + len));
+        pos += len;
+    }
+    return plain;
+}
+
 void testHandshake() {
     RfbProtocol rfb("Unit Test Desktop");
     std::string err;
@@ -147,12 +179,39 @@ void testZrleFramebufferUpdate() {
     assert(out[0] == 0);
     assert(out[3] == 1);
     assert(out[12] == 0 && out[13] == 0 && out[14] == 0 && out[15] == 16);
-    uint32_t length = (static_cast<uint32_t>(out[16]) << 24) |
-                      (static_cast<uint32_t>(out[17]) << 16) |
-                      (static_cast<uint32_t>(out[18]) << 8) |
-                      static_cast<uint32_t>(out[19]);
+    uint32_t length = read_be32_at(out, 16);
     assert(length == out.size() - 20);
     assert(out[20] == 0x78);
+    auto plain = storedZlibPlain(out, 20, length);
+    assert(plain.size() == 7);
+    assert(plain[0] == 0);
+}
+
+void testZrleSolidTile() {
+    RfbProtocol rfb;
+    ClientMessage msg{ClientMessage::Type::SetEncodings};
+    std::string err;
+    std::vector<uint8_t> zrle_enc{2, 0, 0, 1, 0, 0, 0, 16};
+    assert(rfb.parseClientMessage(zrle_enc, msg, err));
+
+    ScreenFrame frame;
+    frame.width = 2;
+    frame.height = 2;
+    frame.stride = 8;
+    frame.bgra = {
+        0x03, 0x02, 0x01, 0xff,
+        0x03, 0x02, 0x01, 0xff,
+        0x03, 0x02, 0x01, 0xff,
+        0x03, 0x02, 0x01, 0xff,
+    };
+    auto out = rfb.framebufferUpdate(frame, {Rect{0, 0, 2, 2}});
+    const uint32_t length = read_be32_at(out, 16);
+    assert(length == out.size() - 20);
+    auto plain = storedZlibPlain(out, 20, length);
+    assert(plain.size() == 4);
+    assert(plain[0] == 1);
+    // Default little-endian 32bpp/depth24 CPIXEL omits the unused alpha byte.
+    assert(plain[1] == 0x03 && plain[2] == 0x02 && plain[3] == 0x01);
 }
 
 void testTunnelFrames() {
@@ -242,6 +301,7 @@ int main() {
     testClientMessages();
     testRawFramebufferUpdate();
     testZrleFramebufferUpdate();
+    testZrleSolidTile();
     testTunnelFrames();
     testRfbServerRetriesTransientCaptureFailure();
     std::cout << "rfb_protocol_test PASS\n";
