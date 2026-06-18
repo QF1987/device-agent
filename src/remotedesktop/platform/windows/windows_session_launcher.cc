@@ -115,7 +115,10 @@ bool launchInActiveConsoleSession(const std::wstring& command_line,
     si.lpDesktop = const_cast<LPWSTR>(L"winsta0\\default");
 
     std::wstring mutable_cmd = command_line;
-    DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE;
+    // 用 CREATE_NO_WINDOW 而非 CREATE_NEW_CONSOLE:子进程是后台 RD 组件,日志已落
+    // 文件(DEVICE_AGENT_RD_CHILD_LOG),不该在被控用户桌面弹一个常显的控制台窗口
+    // (交互观感差)。同 windows_badge.cc 的隐藏方式。
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
     BOOL ok = CreateProcessAsUserW(primary_token.handle,
                                    nullptr,
                                    mutable_cmd.data(),
