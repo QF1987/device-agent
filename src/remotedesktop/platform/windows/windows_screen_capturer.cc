@@ -37,14 +37,18 @@ bool WindowsScreenCapturer::capture(ScreenFrame& frame, std::string& err) {
     if (captureWithDxgi(frame, dxgi_err)) {
         return true;
     }
-    if (!last_frame_.bgra.empty()) {
-        frame = last_frame_;
-        return true;
-    }
     // Win7 and session-0/service contexts cannot rely on Desktop Duplication.
     // Keep GDI as the mandatory fallback path for compatibility and diagnostics.
     (void)dxgi_err;
-    return captureWithGdi(frame, err);
+    if (captureWithGdi(frame, err)) {
+        return true;
+    }
+    if (!last_frame_.bgra.empty()) {
+        frame = last_frame_;
+        err.clear();
+        return true;
+    }
+    return false;
 }
 
 bool WindowsScreenCapturer::initializeDxgi(std::string& err) {
