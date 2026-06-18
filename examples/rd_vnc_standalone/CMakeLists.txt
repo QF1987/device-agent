@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 add_executable(rd_vnc_standalone
     main.cpp
+    ${CMAKE_SOURCE_DIR}/src/logger/logger.cc
     ${CMAKE_SOURCE_DIR}/src/remotedesktop/test/test_pattern.cc
     ${CMAKE_SOURCE_DIR}/src/remotedesktop/tunnel/tunnel_client.cc
 )
