@@ -34,6 +34,17 @@ struct DeviceAuth {
     std::string token;     // 认证 Token（服务端颁发）
 };
 
+// ─── 首启自助注册配置 ─────────────────────────────────────
+struct EnrollmentConfig {
+    std::string installer_key_id;      // 服务端 installer key ID
+    std::string installer_key;         // D2 安装脚本注入的 installer key 明文
+    std::string token_file;            // 本地保存 device_id/token 的文件
+    std::string status_file;           // 本地展示短码/状态的文件
+    int timeout_seconds = 10;          // 单次 Enroll RPC 超时
+    int retry_base_seconds = 5;        // pending/rejected/network 退避下限
+    int retry_max_seconds = 300;       // pending/rejected/network 退避上限
+};
+
 // ─── 服务端连接配置 ───────────────────────────────────────
 struct ServerConfig {
     std::string host;   // 服务端地址（IP 或域名）
@@ -83,6 +94,7 @@ struct BusinessBridgeConfig {
 // 聚合所有子配置，是 Config::load() 的返回值类型
 struct Config {
     DeviceAuth auth;
+    EnrollmentConfig enrollment;
     ServerConfig server;
     HeartbeatConfig heartbeat;
     CommandStreamConfig command_stream;

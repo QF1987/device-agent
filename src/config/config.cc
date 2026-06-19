@@ -70,6 +70,13 @@ Config Config::load(const std::string& filepath) {
 
     cfg.auth.device_id = get_str("device_id");
     cfg.auth.token = get_str("token");
+    cfg.enrollment.installer_key_id = get_str("installer_key_id");
+    cfg.enrollment.installer_key = get_str("installer_key");
+    cfg.enrollment.token_file = get_str("enrollment_token_file");
+    cfg.enrollment.status_file = get_str("enrollment_status_file");
+    cfg.enrollment.timeout_seconds = get_int("enrollment_timeout", 10);
+    cfg.enrollment.retry_base_seconds = get_int("enrollment_retry_base", 5);
+    cfg.enrollment.retry_max_seconds = get_int("enrollment_retry_max", 300);
     cfg.server.host = get_str("server_host");
     cfg.server.port = get_int("server_port", 9090);
     cfg.server.use_tls = get_str("use_tls") == "true";
@@ -101,6 +108,16 @@ Config Config::load_from_env() {
 
     cfg.auth.device_id = env("DEVICE_ID");
     cfg.auth.token = env("DEVICE_TOKEN");
+    cfg.enrollment.installer_key_id = env("DEVICE_AGENT_INSTALLER_KEY_ID");
+    cfg.enrollment.installer_key = env("DEVICE_AGENT_INSTALLER_KEY");
+    cfg.enrollment.token_file = env("DEVICE_AGENT_ENROLLMENT_TOKEN_FILE");
+    cfg.enrollment.status_file = env("DEVICE_AGENT_ENROLLMENT_STATUS_FILE");
+    cfg.enrollment.timeout_seconds = std::atoi(env("DEVICE_AGENT_ENROLLMENT_TIMEOUT").c_str());
+    if (cfg.enrollment.timeout_seconds == 0) cfg.enrollment.timeout_seconds = 10;
+    cfg.enrollment.retry_base_seconds = std::atoi(env("DEVICE_AGENT_ENROLLMENT_RETRY_BASE").c_str());
+    if (cfg.enrollment.retry_base_seconds == 0) cfg.enrollment.retry_base_seconds = 5;
+    cfg.enrollment.retry_max_seconds = std::atoi(env("DEVICE_AGENT_ENROLLMENT_RETRY_MAX").c_str());
+    if (cfg.enrollment.retry_max_seconds == 0) cfg.enrollment.retry_max_seconds = 300;
     cfg.server.host = env("DEVICE_OPS_SERVER_HOST");
     cfg.server.port = std::atoi(env("DEVICE_OPS_SERVER_PORT").c_str());
     if (cfg.server.port == 0) cfg.server.port = 9090;

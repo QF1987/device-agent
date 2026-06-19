@@ -46,6 +46,7 @@
 #include "client/device_client.h"
 #include "client/command_handler.h"
 #include "config/config.h"
+#include "enrollment/enrollment_manager.h"
 #include "logger/logger.h"
 #include "bridge/bridge.h"
 #include "executor/executor.h"
@@ -387,7 +388,12 @@ int run_agent(int argc, char* argv[]) {
     // ============================================================
     // 第 5 步：配置校验
     // ============================================================
-    // device_id 和 token 是必须的，没有就没法认证
+    // device_id 和 token 是必须的；缺 token 时先走首启 self-enroll。
+    if (config.auth.token.empty()) {
+        if (!device_agent::enrollment::ensure_enrolled(&config)) {
+            return 1;
+        }
+    }
     if (config.auth.device_id.empty() || config.auth.token.empty()) {
         LOG_ERROR("device_id and token are required");
         return 1;

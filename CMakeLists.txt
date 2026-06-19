@@ -15,6 +15,7 @@ set(COMMON_SOURCES
     src/client/network_info.cc
     src/client/command_handler.cc
     src/config/config.cc
+    src/enrollment/enrollment_manager.cc
     src/config/p2p_config_store.cc
     src/logger/logger.cc
     src/bridge/bridge.cc
@@ -38,6 +39,7 @@ set(COMMON_HEADERS
     src/client/network_info.h
     src/client/command_handler.h
     src/config/config.h
+    src/enrollment/enrollment_manager.h
     src/config/p2p_config_store.h
     src/logger/logger.h
     src/executor/executor.h
@@ -487,6 +489,26 @@ else()
         ${GEN_DESKTOP_DIR}
     )
     target_link_libraries(command_handler_download_test PRIVATE protobuf::libprotobuf)
+
+    add_executable(enrollment_manager_test
+        src/enrollment/enrollment_manager_test.cc
+        src/enrollment/enrollment_manager.cc
+        src/config/config.cc
+        src/logger/logger.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+    )
+    target_include_directories(enrollment_manager_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_link_libraries(enrollment_manager_test PRIVATE
+        Threads::Threads
+        protobuf::libprotobuf
+        gRPC::grpc++
+    )
 
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         add_executable(p2p_download_manager_test
