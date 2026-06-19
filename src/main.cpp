@@ -53,7 +53,7 @@
 #ifdef __ANDROID__
 #include "download/android_download_manager.h"
 #elif defined(_WIN32)
-#include "download/noop_download_manager.h"
+#include "download/windows_download_manager.h"
 #else
 #include "download/p2p_download_manager.h"
 #endif
@@ -455,8 +455,15 @@ int run_agent(int argc, char* argv[]) {
     LOG_INFO("Using MacOSExecutor + P2PDownloadManager download_dir=" + download_dir);
 #elif defined(_WIN32)
     handler.set_executor(std::make_shared<device_agent::WindowsExecutor>());
-    handler.set_download_manager(std::make_shared<device_agent::NoopDownloadManager>());
-    LOG_INFO("Using WindowsExecutor + NoopDownloadManager");
+    {
+        const std::string download_dir = desktop_download_dir();
+        if (!ensure_directory(download_dir)) {
+            return 1;
+        }
+        handler.set_download_directory(download_dir);
+        handler.set_download_manager(std::make_shared<device_agent::WindowsDownloadManager>());
+        LOG_INFO("Using WindowsExecutor + WindowsDownloadManager download_dir=" + download_dir);
+    }
 #else
     handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
     const std::string download_dir = desktop_download_dir();

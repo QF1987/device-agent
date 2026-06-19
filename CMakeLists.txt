@@ -27,6 +27,12 @@ set(COMMON_SOURCES
     src/download/p2p_upload_counters.cc
 )
 
+# Windows 下载管理器（WinHTTP + BCrypt 兜底层）。仅在 Windows 编译，
+# 其它平台不引入。
+if(WIN32)
+    list(APPEND COMMON_SOURCES src/download/windows_download_manager.cc)
+endif()
+
 set(COMMON_HEADERS
     src/client/device_client.h
     src/client/network_info.h
@@ -42,6 +48,10 @@ set(COMMON_HEADERS
     src/reboot_state/reboot_state.h
     src/jni_bridge.h
 )
+
+if(WIN32)
+    list(APPEND COMMON_HEADERS src/download/windows_download_manager.h)
+endif()
 
 set(REMOTE_DESKTOP_SOURCES
     src/remotedesktop/rfb/rfb_protocol.cc
@@ -395,6 +405,8 @@ elseif(WIN32)
             crypt32
             userenv
             wtsapi32
+            winhttp
+            bcrypt
         )
     endif()
 
