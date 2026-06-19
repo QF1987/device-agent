@@ -27,6 +27,98 @@ namespace _fl = ::google::protobuf::internal::field_layout;
 namespace terminal_agent {
 namespace v1 {
 
+inline constexpr EnrollResponse::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        message_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        device_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        device_token_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        status_{static_cast< ::terminal_agent::v1::EnrollmentStatus >(0)},
+        accepted_{false},
+        server_time_unix_seconds_{::int64_t{0}},
+        retry_after_seconds_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR EnrollResponse::EnrollResponse(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(EnrollResponse_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct EnrollResponseDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR EnrollResponseDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~EnrollResponseDefaultTypeInternal() {}
+  union {
+    EnrollResponse _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 EnrollResponseDefaultTypeInternal _EnrollResponse_default_instance_;
+
+inline constexpr EnrollRequest::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        device_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        hardware_fingerprint_hash_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        installer_key_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        installer_key_proof_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        nonce_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        short_code_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        hostname_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        platform_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        os_arch_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        agent_version_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        timestamp_unix_seconds_{::int64_t{0}} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR EnrollRequest::EnrollRequest(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(EnrollRequest_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct EnrollRequestDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR EnrollRequestDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~EnrollRequestDefaultTypeInternal() {}
+  union {
+    EnrollRequest _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 EnrollRequestDefaultTypeInternal _EnrollRequest_default_instance_;
+
 inline constexpr CommandResultResponse::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -56,8 +148,8 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 CommandResultResponseDefaultTypeInternal _CommandResultResponse_default_instance_;
 }  // namespace v1
 }  // namespace terminal_agent
-static constexpr const ::_pb::EnumDescriptor *PROTOBUF_NONNULL *PROTOBUF_NULLABLE
-    file_level_enum_descriptors_terminal_5fagent_2fv1_2fservice_2eproto = nullptr;
+static const ::_pb::EnumDescriptor* PROTOBUF_NONNULL
+    file_level_enum_descriptors_terminal_5fagent_2fv1_2fservice_2eproto[1];
 static constexpr const ::_pb::ServiceDescriptor *PROTOBUF_NONNULL *PROTOBUF_NULLABLE
     file_level_service_descriptors_terminal_5fagent_2fv1_2fservice_2eproto = nullptr;
 const ::uint32_t
@@ -70,40 +162,104 @@ const ::uint32_t
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::CommandResultResponse, _impl_.message_),
         1,
         0,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_._has_bits_),
+        14, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.device_id_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.hardware_fingerprint_hash_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.installer_key_id_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.installer_key_proof_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.nonce_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.timestamp_unix_seconds_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.short_code_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.hostname_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.platform_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.os_arch_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollRequest, _impl_.agent_version_),
+        0,
+        1,
+        2,
+        3,
+        4,
+        10,
+        5,
+        6,
+        7,
+        8,
+        9,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_._has_bits_),
+        10, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.status_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.accepted_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.message_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.device_id_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.device_token_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.retry_after_seconds_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::EnrollResponse, _impl_.server_time_unix_seconds_),
+        3,
+        4,
+        0,
+        1,
+        2,
+        6,
+        5,
 };
 
 static const ::_pbi::MigrationSchema
     schemas[] ABSL_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
         {0, sizeof(::terminal_agent::v1::CommandResultResponse)},
+        {7, sizeof(::terminal_agent::v1::EnrollRequest)},
+        {32, sizeof(::terminal_agent::v1::EnrollResponse)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::terminal_agent::v1::_CommandResultResponse_default_instance_._instance,
+    &::terminal_agent::v1::_EnrollRequest_default_instance_._instance,
+    &::terminal_agent::v1::_EnrollResponse_default_instance_._instance,
 };
 const char descriptor_table_protodef_terminal_5fagent_2fv1_2fservice_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
     "\n\037terminal_agent/v1/service.proto\022\021termi"
     "nal_agent.v1\032\036terminal_agent/v1/device.p"
     "roto\":\n\025CommandResultResponse\022\020\n\010accepte"
-    "d\030\001 \001(\010\022\017\n\007message\030\002 \001(\t2\272\004\n\rDeviceServi"
-    "ce\022V\n\tHeartbeat\022#.terminal_agent.v1.Hear"
-    "tbeatRequest\032$.terminal_agent.v1.Heartbe"
-    "atResponse\022X\n\014ReportStatus\022\037.terminal_ag"
-    "ent.v1.StatusReport\032\'.terminal_agent.v1."
-    "StatusReportResponse\022U\n\013ReportEvent\022\036.te"
-    "rminal_agent.v1.EventReport\032&.terminal_a"
-    "gent.v1.EventReportResponse\022a\n\023ReportCom"
-    "mandResult\022 .terminal_agent.v1.CommandRe"
-    "sult\032(.terminal_agent.v1.CommandResultRe"
-    "sponse\022h\n\023ReportReleaseStatus\022\'.terminal"
-    "_agent.v1.ReleaseStatusRequest\032(.termina"
-    "l_agent.v1.ReleaseStatusResponse\022S\n\013Push"
-    "Command\022\032.terminal_agent.v1.Command\032(.te"
-    "rminal_agent.v1.CommandResultResponse2h\n"
-    "\016CommandService\022V\n\rCommandStream\022\'.termi"
-    "nal_agent.v1.CommandStreamRequest\032\032.term"
-    "inal_agent.v1.Command0\001B;Z9github.com/QF"
-    "1987/terminal-agent-go/gen/terminal_agen"
-    "t/v1b\006proto3"
+    "d\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\213\002\n\rEnrollReque"
+    "st\022\021\n\tdevice_id\030\001 \001(\t\022!\n\031hardware_finger"
+    "print_hash\030\002 \001(\t\022\030\n\020installer_key_id\030\003 \001"
+    "(\t\022\033\n\023installer_key_proof\030\004 \001(\t\022\r\n\005nonce"
+    "\030\005 \001(\t\022\036\n\026timestamp_unix_seconds\030\006 \001(\003\022\022"
+    "\n\nshort_code\030\007 \001(\t\022\020\n\010hostname\030\010 \001(\t\022\020\n\010"
+    "platform\030\t \001(\t\022\017\n\007os_arch\030\n \001(\t\022\025\n\ragent"
+    "_version\030\013 \001(\t\"\320\001\n\016EnrollResponse\0223\n\006sta"
+    "tus\030\001 \001(\0162#.terminal_agent.v1.Enrollment"
+    "Status\022\020\n\010accepted\030\002 \001(\010\022\017\n\007message\030\003 \001("
+    "\t\022\021\n\tdevice_id\030\004 \001(\t\022\024\n\014device_token\030\005 \001"
+    "(\t\022\033\n\023retry_after_seconds\030\006 \001(\005\022 \n\030serve"
+    "r_time_unix_seconds\030\007 \001(\003*\261\001\n\020Enrollment"
+    "Status\022!\n\035ENROLLMENT_STATUS_UNSPECIFIED\020"
+    "\000\022\035\n\031ENROLLMENT_STATUS_PENDING\020\001\022\034\n\030ENRO"
+    "LLMENT_STATUS_ACTIVE\020\002\022\036\n\032ENROLLMENT_STA"
+    "TUS_REJECTED\020\003\022\035\n\031ENROLLMENT_STATUS_REVO"
+    "KED\020\0042\211\005\n\rDeviceService\022M\n\006Enroll\022 .term"
+    "inal_agent.v1.EnrollRequest\032!.terminal_a"
+    "gent.v1.EnrollResponse\022V\n\tHeartbeat\022#.te"
+    "rminal_agent.v1.HeartbeatRequest\032$.termi"
+    "nal_agent.v1.HeartbeatResponse\022X\n\014Report"
+    "Status\022\037.terminal_agent.v1.StatusReport\032"
+    "\'.terminal_agent.v1.StatusReportResponse"
+    "\022U\n\013ReportEvent\022\036.terminal_agent.v1.Even"
+    "tReport\032&.terminal_agent.v1.EventReportR"
+    "esponse\022a\n\023ReportCommandResult\022 .termina"
+    "l_agent.v1.CommandResult\032(.terminal_agen"
+    "t.v1.CommandResultResponse\022h\n\023ReportRele"
+    "aseStatus\022\'.terminal_agent.v1.ReleaseSta"
+    "tusRequest\032(.terminal_agent.v1.ReleaseSt"
+    "atusResponse\022S\n\013PushCommand\022\032.terminal_a"
+    "gent.v1.Command\032(.terminal_agent.v1.Comm"
+    "andResultResponse2h\n\016CommandService\022V\n\rC"
+    "ommandStream\022\'.terminal_agent.v1.Command"
+    "StreamRequest\032\032.terminal_agent.v1.Comman"
+    "d0\001B;Z9github.com/QF1987/terminal-agent-"
+    "go/gen/terminal_agent/v1b\006proto3"
 };
 static const ::_pbi::DescriptorTable* PROTOBUF_NONNULL const
     descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto_deps[1] = {
@@ -113,13 +269,13 @@ static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fservice_2eprot
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto = {
     false,
     false,
-    892,
+    1632,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fservice_2eproto,
     "terminal_agent/v1/service.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto_once,
     descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto_deps,
     1,
-    1,
+    3,
     schemas,
     file_default_instances,
     TableStruct_terminal_5fagent_2fv1_2fservice_2eproto::offsets,
@@ -128,6 +284,12 @@ PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fage
 };
 namespace terminal_agent {
 namespace v1 {
+const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL EnrollmentStatus_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto);
+  return file_level_enum_descriptors_terminal_5fagent_2fv1_2fservice_2eproto[0];
+}
+PROTOBUF_CONSTINIT const uint32_t EnrollmentStatus_internal_data_[] = {
+    327680u, 0u, };
 // ===================================================================
 
 class CommandResultResponse::_Internal {
@@ -421,6 +583,1154 @@ void CommandResultResponse::InternalSwap(CommandResultResponse* PROTOBUF_RESTRIC
 }
 
 ::google::protobuf::Metadata CommandResultResponse::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class EnrollRequest::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<EnrollRequest>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_._has_bits_);
+};
+
+EnrollRequest::EnrollRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, EnrollRequest_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:terminal_agent.v1.EnrollRequest)
+}
+PROTOBUF_NDEBUG_INLINE EnrollRequest::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    const ::terminal_agent::v1::EnrollRequest& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        device_id_(arena, from.device_id_),
+        hardware_fingerprint_hash_(arena, from.hardware_fingerprint_hash_),
+        installer_key_id_(arena, from.installer_key_id_),
+        installer_key_proof_(arena, from.installer_key_proof_),
+        nonce_(arena, from.nonce_),
+        short_code_(arena, from.short_code_),
+        hostname_(arena, from.hostname_),
+        platform_(arena, from.platform_),
+        os_arch_(arena, from.os_arch_),
+        agent_version_(arena, from.agent_version_) {}
+
+EnrollRequest::EnrollRequest(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const EnrollRequest& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, EnrollRequest_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  EnrollRequest* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  _impl_.timestamp_unix_seconds_ = from._impl_.timestamp_unix_seconds_;
+
+  // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.EnrollRequest)
+}
+PROTOBUF_NDEBUG_INLINE EnrollRequest::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        device_id_(arena),
+        hardware_fingerprint_hash_(arena),
+        installer_key_id_(arena),
+        installer_key_proof_(arena),
+        nonce_(arena),
+        short_code_(arena),
+        hostname_(arena),
+        platform_(arena),
+        os_arch_(arena),
+        agent_version_(arena) {}
+
+inline void EnrollRequest::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  _impl_.timestamp_unix_seconds_ = {};
+}
+EnrollRequest::~EnrollRequest() {
+  // @@protoc_insertion_point(destructor:terminal_agent.v1.EnrollRequest)
+  SharedDtor(*this);
+}
+inline void EnrollRequest::SharedDtor(MessageLite& self) {
+  EnrollRequest& this_ = static_cast<EnrollRequest&>(self);
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.device_id_.Destroy();
+  this_._impl_.hardware_fingerprint_hash_.Destroy();
+  this_._impl_.installer_key_id_.Destroy();
+  this_._impl_.installer_key_proof_.Destroy();
+  this_._impl_.nonce_.Destroy();
+  this_._impl_.short_code_.Destroy();
+  this_._impl_.hostname_.Destroy();
+  this_._impl_.platform_.Destroy();
+  this_._impl_.os_arch_.Destroy();
+  this_._impl_.agent_version_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL EnrollRequest::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) EnrollRequest(arena);
+}
+constexpr auto EnrollRequest::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(EnrollRequest),
+                                            alignof(EnrollRequest));
+}
+constexpr auto EnrollRequest::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_EnrollRequest_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &EnrollRequest::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<EnrollRequest>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &EnrollRequest::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<EnrollRequest>(), &EnrollRequest::ByteSizeLong,
+              &EnrollRequest::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_._cached_size_),
+          false,
+      },
+      &EnrollRequest::kDescriptorMethods,
+      &descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull EnrollRequest_class_data_ =
+        EnrollRequest::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+EnrollRequest::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&EnrollRequest_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(EnrollRequest_class_data_.tc_table);
+  return EnrollRequest_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<4, 11, 0, 168, 2>
+EnrollRequest::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_._has_bits_),
+    0, // no _extensions_
+    11, 120,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294965248,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    11,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    EnrollRequest_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::terminal_agent::v1::EnrollRequest>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // string device_id = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 0, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.device_id_)}},
+    // string hardware_fingerprint_hash = 2;
+    {::_pbi::TcParser::FastUS1,
+     {18, 1, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.hardware_fingerprint_hash_)}},
+    // string installer_key_id = 3;
+    {::_pbi::TcParser::FastUS1,
+     {26, 2, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.installer_key_id_)}},
+    // string installer_key_proof = 4;
+    {::_pbi::TcParser::FastUS1,
+     {34, 3, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.installer_key_proof_)}},
+    // string nonce = 5;
+    {::_pbi::TcParser::FastUS1,
+     {42, 4, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.nonce_)}},
+    // int64 timestamp_unix_seconds = 6;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EnrollRequest, _impl_.timestamp_unix_seconds_), 10>(),
+     {48, 10, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.timestamp_unix_seconds_)}},
+    // string short_code = 7;
+    {::_pbi::TcParser::FastUS1,
+     {58, 5, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.short_code_)}},
+    // string hostname = 8;
+    {::_pbi::TcParser::FastUS1,
+     {66, 6, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.hostname_)}},
+    // string platform = 9;
+    {::_pbi::TcParser::FastUS1,
+     {74, 7, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.platform_)}},
+    // string os_arch = 10;
+    {::_pbi::TcParser::FastUS1,
+     {82, 8, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.os_arch_)}},
+    // string agent_version = 11;
+    {::_pbi::TcParser::FastUS1,
+     {90, 9, 0, PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.agent_version_)}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string device_id = 1;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.device_id_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string hardware_fingerprint_hash = 2;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.hardware_fingerprint_hash_), _Internal::kHasBitsOffset + 1, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string installer_key_id = 3;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.installer_key_id_), _Internal::kHasBitsOffset + 2, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string installer_key_proof = 4;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.installer_key_proof_), _Internal::kHasBitsOffset + 3, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string nonce = 5;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.nonce_), _Internal::kHasBitsOffset + 4, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int64 timestamp_unix_seconds = 6;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.timestamp_unix_seconds_), _Internal::kHasBitsOffset + 10, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+    // string short_code = 7;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.short_code_), _Internal::kHasBitsOffset + 5, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string hostname = 8;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.hostname_), _Internal::kHasBitsOffset + 6, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string platform = 9;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.platform_), _Internal::kHasBitsOffset + 7, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string os_arch = 10;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.os_arch_), _Internal::kHasBitsOffset + 8, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string agent_version = 11;
+    {PROTOBUF_FIELD_OFFSET(EnrollRequest, _impl_.agent_version_), _Internal::kHasBitsOffset + 9, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+  }},
+  // no aux_entries
+  {{
+    "\37\11\31\20\23\5\0\12\10\10\7\15\0\0\0\0"
+    "terminal_agent.v1.EnrollRequest"
+    "device_id"
+    "hardware_fingerprint_hash"
+    "installer_key_id"
+    "installer_key_proof"
+    "nonce"
+    "short_code"
+    "hostname"
+    "platform"
+    "os_arch"
+    "agent_version"
+  }},
+};
+PROTOBUF_NOINLINE void EnrollRequest::Clear() {
+// @@protoc_insertion_point(message_clear_start:terminal_agent.v1.EnrollRequest)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if ((cached_has_bits & 0x000000ffu) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      _impl_.device_id_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      _impl_.hardware_fingerprint_hash_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      _impl_.installer_key_id_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      _impl_.installer_key_proof_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      _impl_.nonce_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      _impl_.short_code_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      _impl_.hostname_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      _impl_.platform_.ClearNonDefaultToEmpty();
+    }
+  }
+  if ((cached_has_bits & 0x00000300u) != 0) {
+    if ((cached_has_bits & 0x00000100u) != 0) {
+      _impl_.os_arch_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000200u) != 0) {
+      _impl_.agent_version_.ClearNonDefaultToEmpty();
+    }
+  }
+  _impl_.timestamp_unix_seconds_ = ::int64_t{0};
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL EnrollRequest::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const EnrollRequest& this_ = static_cast<const EnrollRequest&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL EnrollRequest::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const EnrollRequest& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(serialize_to_array_start:terminal_agent.v1.EnrollRequest)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // string device_id = 1;
+  if ((this_._impl_._has_bits_[0] & 0x00000001u) != 0) {
+    if (!this_._internal_device_id().empty()) {
+      const ::std::string& _s = this_._internal_device_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.device_id");
+      target = stream->WriteStringMaybeAliased(1, _s, target);
+    }
+  }
+
+  // string hardware_fingerprint_hash = 2;
+  if ((this_._impl_._has_bits_[0] & 0x00000002u) != 0) {
+    if (!this_._internal_hardware_fingerprint_hash().empty()) {
+      const ::std::string& _s = this_._internal_hardware_fingerprint_hash();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.hardware_fingerprint_hash");
+      target = stream->WriteStringMaybeAliased(2, _s, target);
+    }
+  }
+
+  // string installer_key_id = 3;
+  if ((this_._impl_._has_bits_[0] & 0x00000004u) != 0) {
+    if (!this_._internal_installer_key_id().empty()) {
+      const ::std::string& _s = this_._internal_installer_key_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.installer_key_id");
+      target = stream->WriteStringMaybeAliased(3, _s, target);
+    }
+  }
+
+  // string installer_key_proof = 4;
+  if ((this_._impl_._has_bits_[0] & 0x00000008u) != 0) {
+    if (!this_._internal_installer_key_proof().empty()) {
+      const ::std::string& _s = this_._internal_installer_key_proof();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.installer_key_proof");
+      target = stream->WriteStringMaybeAliased(4, _s, target);
+    }
+  }
+
+  // string nonce = 5;
+  if ((this_._impl_._has_bits_[0] & 0x00000010u) != 0) {
+    if (!this_._internal_nonce().empty()) {
+      const ::std::string& _s = this_._internal_nonce();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.nonce");
+      target = stream->WriteStringMaybeAliased(5, _s, target);
+    }
+  }
+
+  // int64 timestamp_unix_seconds = 6;
+  if ((this_._impl_._has_bits_[0] & 0x00000400u) != 0) {
+    if (this_._internal_timestamp_unix_seconds() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<6>(
+              stream, this_._internal_timestamp_unix_seconds(), target);
+    }
+  }
+
+  // string short_code = 7;
+  if ((this_._impl_._has_bits_[0] & 0x00000020u) != 0) {
+    if (!this_._internal_short_code().empty()) {
+      const ::std::string& _s = this_._internal_short_code();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.short_code");
+      target = stream->WriteStringMaybeAliased(7, _s, target);
+    }
+  }
+
+  // string hostname = 8;
+  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+    if (!this_._internal_hostname().empty()) {
+      const ::std::string& _s = this_._internal_hostname();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.hostname");
+      target = stream->WriteStringMaybeAliased(8, _s, target);
+    }
+  }
+
+  // string platform = 9;
+  if ((this_._impl_._has_bits_[0] & 0x00000080u) != 0) {
+    if (!this_._internal_platform().empty()) {
+      const ::std::string& _s = this_._internal_platform();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.platform");
+      target = stream->WriteStringMaybeAliased(9, _s, target);
+    }
+  }
+
+  // string os_arch = 10;
+  if ((this_._impl_._has_bits_[0] & 0x00000100u) != 0) {
+    if (!this_._internal_os_arch().empty()) {
+      const ::std::string& _s = this_._internal_os_arch();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.os_arch");
+      target = stream->WriteStringMaybeAliased(10, _s, target);
+    }
+  }
+
+  // string agent_version = 11;
+  if ((this_._impl_._has_bits_[0] & 0x00000200u) != 0) {
+    if (!this_._internal_agent_version().empty()) {
+      const ::std::string& _s = this_._internal_agent_version();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollRequest.agent_version");
+      target = stream->WriteStringMaybeAliased(11, _s, target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:terminal_agent.v1.EnrollRequest)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t EnrollRequest::ByteSizeLong(const MessageLite& base) {
+  const EnrollRequest& this_ = static_cast<const EnrollRequest&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t EnrollRequest::ByteSizeLong() const {
+  const EnrollRequest& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:terminal_agent.v1.EnrollRequest)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x000000ffu) != 0) {
+    // string device_id = 1;
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!this_._internal_device_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_device_id());
+      }
+    }
+    // string hardware_fingerprint_hash = 2;
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!this_._internal_hardware_fingerprint_hash().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_hardware_fingerprint_hash());
+      }
+    }
+    // string installer_key_id = 3;
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!this_._internal_installer_key_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_installer_key_id());
+      }
+    }
+    // string installer_key_proof = 4;
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (!this_._internal_installer_key_proof().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_installer_key_proof());
+      }
+    }
+    // string nonce = 5;
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (!this_._internal_nonce().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_nonce());
+      }
+    }
+    // string short_code = 7;
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!this_._internal_short_code().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_short_code());
+      }
+    }
+    // string hostname = 8;
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!this_._internal_hostname().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_hostname());
+      }
+    }
+    // string platform = 9;
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (!this_._internal_platform().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_platform());
+      }
+    }
+  }
+  if ((cached_has_bits & 0x00000700u) != 0) {
+    // string os_arch = 10;
+    if ((cached_has_bits & 0x00000100u) != 0) {
+      if (!this_._internal_os_arch().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_os_arch());
+      }
+    }
+    // string agent_version = 11;
+    if ((cached_has_bits & 0x00000200u) != 0) {
+      if (!this_._internal_agent_version().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_agent_version());
+      }
+    }
+    // int64 timestamp_unix_seconds = 6;
+    if ((cached_has_bits & 0x00000400u) != 0) {
+      if (this_._internal_timestamp_unix_seconds() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_timestamp_unix_seconds());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void EnrollRequest::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::google::protobuf::MessageLite& from_msg) {
+  auto* const _this = static_cast<EnrollRequest*>(&to_msg);
+  auto& from = static_cast<const EnrollRequest&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:terminal_agent.v1.EnrollRequest)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x000000ffu) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!from._internal_device_id().empty()) {
+        _this->_internal_set_device_id(from._internal_device_id());
+      } else {
+        if (_this->_impl_.device_id_.IsDefault()) {
+          _this->_internal_set_device_id("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!from._internal_hardware_fingerprint_hash().empty()) {
+        _this->_internal_set_hardware_fingerprint_hash(from._internal_hardware_fingerprint_hash());
+      } else {
+        if (_this->_impl_.hardware_fingerprint_hash_.IsDefault()) {
+          _this->_internal_set_hardware_fingerprint_hash("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!from._internal_installer_key_id().empty()) {
+        _this->_internal_set_installer_key_id(from._internal_installer_key_id());
+      } else {
+        if (_this->_impl_.installer_key_id_.IsDefault()) {
+          _this->_internal_set_installer_key_id("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (!from._internal_installer_key_proof().empty()) {
+        _this->_internal_set_installer_key_proof(from._internal_installer_key_proof());
+      } else {
+        if (_this->_impl_.installer_key_proof_.IsDefault()) {
+          _this->_internal_set_installer_key_proof("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (!from._internal_nonce().empty()) {
+        _this->_internal_set_nonce(from._internal_nonce());
+      } else {
+        if (_this->_impl_.nonce_.IsDefault()) {
+          _this->_internal_set_nonce("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!from._internal_short_code().empty()) {
+        _this->_internal_set_short_code(from._internal_short_code());
+      } else {
+        if (_this->_impl_.short_code_.IsDefault()) {
+          _this->_internal_set_short_code("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!from._internal_hostname().empty()) {
+        _this->_internal_set_hostname(from._internal_hostname());
+      } else {
+        if (_this->_impl_.hostname_.IsDefault()) {
+          _this->_internal_set_hostname("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (!from._internal_platform().empty()) {
+        _this->_internal_set_platform(from._internal_platform());
+      } else {
+        if (_this->_impl_.platform_.IsDefault()) {
+          _this->_internal_set_platform("");
+        }
+      }
+    }
+  }
+  if ((cached_has_bits & 0x00000700u) != 0) {
+    if ((cached_has_bits & 0x00000100u) != 0) {
+      if (!from._internal_os_arch().empty()) {
+        _this->_internal_set_os_arch(from._internal_os_arch());
+      } else {
+        if (_this->_impl_.os_arch_.IsDefault()) {
+          _this->_internal_set_os_arch("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000200u) != 0) {
+      if (!from._internal_agent_version().empty()) {
+        _this->_internal_set_agent_version(from._internal_agent_version());
+      } else {
+        if (_this->_impl_.agent_version_.IsDefault()) {
+          _this->_internal_set_agent_version("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000400u) != 0) {
+      if (from._internal_timestamp_unix_seconds() != 0) {
+        _this->_impl_.timestamp_unix_seconds_ = from._impl_.timestamp_unix_seconds_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void EnrollRequest::CopyFrom(const EnrollRequest& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:terminal_agent.v1.EnrollRequest)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void EnrollRequest::InternalSwap(EnrollRequest* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.device_id_, &other->_impl_.device_id_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.hardware_fingerprint_hash_, &other->_impl_.hardware_fingerprint_hash_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.installer_key_id_, &other->_impl_.installer_key_id_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.installer_key_proof_, &other->_impl_.installer_key_proof_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.nonce_, &other->_impl_.nonce_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.short_code_, &other->_impl_.short_code_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.hostname_, &other->_impl_.hostname_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.platform_, &other->_impl_.platform_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.os_arch_, &other->_impl_.os_arch_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.agent_version_, &other->_impl_.agent_version_, arena);
+  swap(_impl_.timestamp_unix_seconds_, other->_impl_.timestamp_unix_seconds_);
+}
+
+::google::protobuf::Metadata EnrollRequest::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class EnrollResponse::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<EnrollResponse>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_._has_bits_);
+};
+
+EnrollResponse::EnrollResponse(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, EnrollResponse_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:terminal_agent.v1.EnrollResponse)
+}
+PROTOBUF_NDEBUG_INLINE EnrollResponse::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    const ::terminal_agent::v1::EnrollResponse& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        message_(arena, from.message_),
+        device_id_(arena, from.device_id_),
+        device_token_(arena, from.device_token_) {}
+
+EnrollResponse::EnrollResponse(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const EnrollResponse& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, EnrollResponse_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  EnrollResponse* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::memcpy(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, status_),
+           reinterpret_cast<const char *>(&from._impl_) +
+               offsetof(Impl_, status_),
+           offsetof(Impl_, retry_after_seconds_) -
+               offsetof(Impl_, status_) +
+               sizeof(Impl_::retry_after_seconds_));
+
+  // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.EnrollResponse)
+}
+PROTOBUF_NDEBUG_INLINE EnrollResponse::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        message_(arena),
+        device_id_(arena),
+        device_token_(arena) {}
+
+inline void EnrollResponse::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, status_),
+           0,
+           offsetof(Impl_, retry_after_seconds_) -
+               offsetof(Impl_, status_) +
+               sizeof(Impl_::retry_after_seconds_));
+}
+EnrollResponse::~EnrollResponse() {
+  // @@protoc_insertion_point(destructor:terminal_agent.v1.EnrollResponse)
+  SharedDtor(*this);
+}
+inline void EnrollResponse::SharedDtor(MessageLite& self) {
+  EnrollResponse& this_ = static_cast<EnrollResponse&>(self);
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.message_.Destroy();
+  this_._impl_.device_id_.Destroy();
+  this_._impl_.device_token_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL EnrollResponse::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) EnrollResponse(arena);
+}
+constexpr auto EnrollResponse::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(EnrollResponse),
+                                            alignof(EnrollResponse));
+}
+constexpr auto EnrollResponse::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_EnrollResponse_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &EnrollResponse::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<EnrollResponse>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &EnrollResponse::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<EnrollResponse>(), &EnrollResponse::ByteSizeLong,
+              &EnrollResponse::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_._cached_size_),
+          false,
+      },
+      &EnrollResponse::kDescriptorMethods,
+      &descriptor_table_terminal_5fagent_2fv1_2fservice_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull EnrollResponse_class_data_ =
+        EnrollResponse::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+EnrollResponse::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&EnrollResponse_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(EnrollResponse_class_data_.tc_table);
+  return EnrollResponse_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<3, 7, 0, 69, 2>
+EnrollResponse::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_._has_bits_),
+    0, // no _extensions_
+    7, 56,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967168,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    7,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    EnrollResponse_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::terminal_agent::v1::EnrollResponse>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // .terminal_agent.v1.EnrollmentStatus status = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(EnrollResponse, _impl_.status_), 3>(),
+     {8, 3, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.status_)}},
+    // bool accepted = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(EnrollResponse, _impl_.accepted_), 4>(),
+     {16, 4, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.accepted_)}},
+    // string message = 3;
+    {::_pbi::TcParser::FastUS1,
+     {26, 0, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.message_)}},
+    // string device_id = 4;
+    {::_pbi::TcParser::FastUS1,
+     {34, 1, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.device_id_)}},
+    // string device_token = 5;
+    {::_pbi::TcParser::FastUS1,
+     {42, 2, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.device_token_)}},
+    // int32 retry_after_seconds = 6;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(EnrollResponse, _impl_.retry_after_seconds_), 6>(),
+     {48, 6, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.retry_after_seconds_)}},
+    // int64 server_time_unix_seconds = 7;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EnrollResponse, _impl_.server_time_unix_seconds_), 5>(),
+     {56, 5, 0, PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.server_time_unix_seconds_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // .terminal_agent.v1.EnrollmentStatus status = 1;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.status_), _Internal::kHasBitsOffset + 3, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+    // bool accepted = 2;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.accepted_), _Internal::kHasBitsOffset + 4, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kBool)},
+    // string message = 3;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.message_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string device_id = 4;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.device_id_), _Internal::kHasBitsOffset + 1, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string device_token = 5;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.device_token_), _Internal::kHasBitsOffset + 2, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int32 retry_after_seconds = 6;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.retry_after_seconds_), _Internal::kHasBitsOffset + 6, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // int64 server_time_unix_seconds = 7;
+    {PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.server_time_unix_seconds_), _Internal::kHasBitsOffset + 5, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+  }},
+  // no aux_entries
+  {{
+    "\40\0\0\7\11\14\0\0"
+    "terminal_agent.v1.EnrollResponse"
+    "message"
+    "device_id"
+    "device_token"
+  }},
+};
+PROTOBUF_NOINLINE void EnrollResponse::Clear() {
+// @@protoc_insertion_point(message_clear_start:terminal_agent.v1.EnrollResponse)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if ((cached_has_bits & 0x00000007u) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      _impl_.message_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      _impl_.device_id_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      _impl_.device_token_.ClearNonDefaultToEmpty();
+    }
+  }
+  if ((cached_has_bits & 0x00000078u) != 0) {
+    ::memset(&_impl_.status_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.retry_after_seconds_) -
+        reinterpret_cast<char*>(&_impl_.status_)) + sizeof(_impl_.retry_after_seconds_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL EnrollResponse::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const EnrollResponse& this_ = static_cast<const EnrollResponse&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL EnrollResponse::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const EnrollResponse& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(serialize_to_array_start:terminal_agent.v1.EnrollResponse)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // .terminal_agent.v1.EnrollmentStatus status = 1;
+  if ((this_._impl_._has_bits_[0] & 0x00000008u) != 0) {
+    if (this_._internal_status() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          1, this_._internal_status(), target);
+    }
+  }
+
+  // bool accepted = 2;
+  if ((this_._impl_._has_bits_[0] & 0x00000010u) != 0) {
+    if (this_._internal_accepted() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteBoolToArray(
+          2, this_._internal_accepted(), target);
+    }
+  }
+
+  // string message = 3;
+  if ((this_._impl_._has_bits_[0] & 0x00000001u) != 0) {
+    if (!this_._internal_message().empty()) {
+      const ::std::string& _s = this_._internal_message();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollResponse.message");
+      target = stream->WriteStringMaybeAliased(3, _s, target);
+    }
+  }
+
+  // string device_id = 4;
+  if ((this_._impl_._has_bits_[0] & 0x00000002u) != 0) {
+    if (!this_._internal_device_id().empty()) {
+      const ::std::string& _s = this_._internal_device_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollResponse.device_id");
+      target = stream->WriteStringMaybeAliased(4, _s, target);
+    }
+  }
+
+  // string device_token = 5;
+  if ((this_._impl_._has_bits_[0] & 0x00000004u) != 0) {
+    if (!this_._internal_device_token().empty()) {
+      const ::std::string& _s = this_._internal_device_token();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.EnrollResponse.device_token");
+      target = stream->WriteStringMaybeAliased(5, _s, target);
+    }
+  }
+
+  // int32 retry_after_seconds = 6;
+  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+    if (this_._internal_retry_after_seconds() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<6>(
+              stream, this_._internal_retry_after_seconds(), target);
+    }
+  }
+
+  // int64 server_time_unix_seconds = 7;
+  if ((this_._impl_._has_bits_[0] & 0x00000020u) != 0) {
+    if (this_._internal_server_time_unix_seconds() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<7>(
+              stream, this_._internal_server_time_unix_seconds(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:terminal_agent.v1.EnrollResponse)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t EnrollResponse::ByteSizeLong(const MessageLite& base) {
+  const EnrollResponse& this_ = static_cast<const EnrollResponse&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t EnrollResponse::ByteSizeLong() const {
+  const EnrollResponse& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:terminal_agent.v1.EnrollResponse)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x0000007fu) != 0) {
+    // string message = 3;
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!this_._internal_message().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_message());
+      }
+    }
+    // string device_id = 4;
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!this_._internal_device_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_device_id());
+      }
+    }
+    // string device_token = 5;
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!this_._internal_device_token().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_device_token());
+      }
+    }
+    // .terminal_agent.v1.EnrollmentStatus status = 1;
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (this_._internal_status() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_status());
+      }
+    }
+    // bool accepted = 2;
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (this_._internal_accepted() != 0) {
+        total_size += 2;
+      }
+    }
+    // int64 server_time_unix_seconds = 7;
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (this_._internal_server_time_unix_seconds() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_server_time_unix_seconds());
+      }
+    }
+    // int32 retry_after_seconds = 6;
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (this_._internal_retry_after_seconds() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_retry_after_seconds());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void EnrollResponse::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::google::protobuf::MessageLite& from_msg) {
+  auto* const _this = static_cast<EnrollResponse*>(&to_msg);
+  auto& from = static_cast<const EnrollResponse&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:terminal_agent.v1.EnrollResponse)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x0000007fu) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!from._internal_message().empty()) {
+        _this->_internal_set_message(from._internal_message());
+      } else {
+        if (_this->_impl_.message_.IsDefault()) {
+          _this->_internal_set_message("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!from._internal_device_id().empty()) {
+        _this->_internal_set_device_id(from._internal_device_id());
+      } else {
+        if (_this->_impl_.device_id_.IsDefault()) {
+          _this->_internal_set_device_id("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!from._internal_device_token().empty()) {
+        _this->_internal_set_device_token(from._internal_device_token());
+      } else {
+        if (_this->_impl_.device_token_.IsDefault()) {
+          _this->_internal_set_device_token("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (from._internal_status() != 0) {
+        _this->_impl_.status_ = from._impl_.status_;
+      }
+    }
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (from._internal_accepted() != 0) {
+        _this->_impl_.accepted_ = from._impl_.accepted_;
+      }
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (from._internal_server_time_unix_seconds() != 0) {
+        _this->_impl_.server_time_unix_seconds_ = from._impl_.server_time_unix_seconds_;
+      }
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (from._internal_retry_after_seconds() != 0) {
+        _this->_impl_.retry_after_seconds_ = from._impl_.retry_after_seconds_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void EnrollResponse::CopyFrom(const EnrollResponse& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:terminal_agent.v1.EnrollResponse)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void EnrollResponse::InternalSwap(EnrollResponse* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.message_, &other->_impl_.message_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.device_id_, &other->_impl_.device_id_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.device_token_, &other->_impl_.device_token_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.retry_after_seconds_)
+      + sizeof(EnrollResponse::_impl_.retry_after_seconds_)
+      - PROTOBUF_FIELD_OFFSET(EnrollResponse, _impl_.status_)>(
+          reinterpret_cast<char*>(&_impl_.status_),
+          reinterpret_cast<char*>(&other->_impl_.status_));
+}
+
+::google::protobuf::Metadata EnrollResponse::GetMetadata() const {
   return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
 }
 // @@protoc_insertion_point(namespace_scope)

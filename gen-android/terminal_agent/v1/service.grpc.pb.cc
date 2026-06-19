@@ -24,6 +24,7 @@ namespace terminal_agent {
 namespace v1 {
 
 static const char* DeviceService_method_names[] = {
+  "/terminal_agent.v1.DeviceService/Enroll",
   "/terminal_agent.v1.DeviceService/Heartbeat",
   "/terminal_agent.v1.DeviceService/ReportStatus",
   "/terminal_agent.v1.DeviceService/ReportEvent",
@@ -39,13 +40,37 @@ std::unique_ptr< DeviceService::Stub> DeviceService::NewStub(const std::shared_p
 }
 
 DeviceService::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options)
-  : channel_(channel), rpcmethod_Heartbeat_(DeviceService_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_ReportStatus_(DeviceService_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_ReportEvent_(DeviceService_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_ReportCommandResult_(DeviceService_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_ReportReleaseStatus_(DeviceService_method_names[4], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_PushCommand_(DeviceService_method_names[5], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  : channel_(channel), rpcmethod_Enroll_(DeviceService_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_Heartbeat_(DeviceService_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_ReportStatus_(DeviceService_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_ReportEvent_(DeviceService_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_ReportCommandResult_(DeviceService_method_names[4], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_ReportReleaseStatus_(DeviceService_method_names[5], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_PushCommand_(DeviceService_method_names[6], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
+
+::grpc::Status DeviceService::Stub::Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::terminal_agent::v1::EnrollResponse* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_Enroll_, context, request, response);
+}
+
+void DeviceService::Stub::async::Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_Enroll_, context, request, response, std::move(f));
+}
+
+void DeviceService::Stub::async::Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, ::grpc::ClientUnaryReactor* reactor) {
+  ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_Enroll_, context, request, response, reactor);
+}
+
+::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>* DeviceService::Stub::PrepareAsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::terminal_agent::v1::EnrollResponse, ::terminal_agent::v1::EnrollRequest, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_Enroll_, context, request);
+}
+
+::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>* DeviceService::Stub::AsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+  auto* result =
+    this->PrepareAsyncEnrollRaw(context, request, cq);
+  result->StartCall();
+  return result;
+}
 
 ::grpc::Status DeviceService::Stub::Heartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::terminal_agent::v1::HeartbeatResponse* response) {
   return ::grpc::internal::BlockingUnaryCall< ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_Heartbeat_, context, request, response);
@@ -189,6 +214,16 @@ DeviceService::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       DeviceService_method_names[0],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
+      new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+          [](DeviceService::Service* service,
+             ::grpc::ServerContext* ctx,
+             const ::terminal_agent::v1::EnrollRequest* req,
+             ::terminal_agent::v1::EnrollResponse* resp) {
+               return service->Enroll(ctx, req, resp);
+             }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      DeviceService_method_names[1],
+      ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
              ::grpc::ServerContext* ctx,
@@ -197,7 +232,7 @@ DeviceService::Service::Service() {
                return service->Heartbeat(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      DeviceService_method_names[1],
+      DeviceService_method_names[2],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::StatusReport, ::terminal_agent::v1::StatusReportResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
@@ -207,7 +242,7 @@ DeviceService::Service::Service() {
                return service->ReportStatus(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      DeviceService_method_names[2],
+      DeviceService_method_names[3],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::EventReport, ::terminal_agent::v1::EventReportResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
@@ -217,7 +252,7 @@ DeviceService::Service::Service() {
                return service->ReportEvent(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      DeviceService_method_names[3],
+      DeviceService_method_names[4],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::CommandResult, ::terminal_agent::v1::CommandResultResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
@@ -227,7 +262,7 @@ DeviceService::Service::Service() {
                return service->ReportCommandResult(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      DeviceService_method_names[4],
+      DeviceService_method_names[5],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::ReleaseStatusRequest, ::terminal_agent::v1::ReleaseStatusResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
@@ -237,7 +272,7 @@ DeviceService::Service::Service() {
                return service->ReportReleaseStatus(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      DeviceService_method_names[5],
+      DeviceService_method_names[6],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< DeviceService::Service, ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](DeviceService::Service* service,
@@ -249,6 +284,13 @@ DeviceService::Service::Service() {
 }
 
 DeviceService::Service::~Service() {
+}
+
+::grpc::Status DeviceService::Service::Enroll(::grpc::ServerContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response) {
+  (void) context;
+  (void) request;
+  (void) response;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
 ::grpc::Status DeviceService::Service::Heartbeat(::grpc::ServerContext* context, const ::terminal_agent::v1::HeartbeatRequest* request, ::terminal_agent::v1::HeartbeatResponse* response) {

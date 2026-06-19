@@ -20,6 +20,11 @@ import "terminal_agent/v1/device.proto";
 //
 // 设备端只需要连接这一个 service 即可完成所有操作
 service DeviceService {
+  // Enroll：设备首启自助注册，设备此时还没有 token，入口免鉴权。
+  //
+  // 安全边界：调用方必须携带批次装机密钥证明 + nonce/timestamp，服务端校验
+  // TTL、批次限量、吊销状态和重放窗口后才签发单设备 token。
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
 
   // 心跳
   // 设备定期（建议 30-60 秒）调用，告知服务端"我还活着"
@@ -115,4 +120,36 @@ message CommandResultResponse {
   // 成功时："ok"
   // 失败时：原因，如 "command_id 不存在"、"指令已超时"
   string message = 2;
+}
+
+enum EnrollmentStatus {
+  ENROLLMENT_STATUS_UNSPECIFIED = 0;
+  ENROLLMENT_STATUS_PENDING = 1;
+  ENROLLMENT_STATUS_ACTIVE = 2;
+  ENROLLMENT_STATUS_REJECTED = 3;
+  ENROLLMENT_STATUS_REVOKED = 4;
+}
+
+message EnrollRequest {
+  string device_id = 1;
+  string hardware_fingerprint_hash = 2;
+  string installer_key_id = 3;
+  string installer_key_proof = 4;
+  string nonce = 5;
+  int64 timestamp_unix_seconds = 6;
+  string short_code = 7;
+  string hostname = 8;
+  string platform = 9;
+  string os_arch = 10;
+  string agent_version = 11;
+}
+
+message EnrollResponse {
+  EnrollmentStatus status = 1;
+  bool accepted = 2;
+  string message = 3;
+  string device_id = 4;
+  string device_token = 5;
+  int32 retry_after_seconds = 6;
+  int64 server_time_unix_seconds = 7;
 }

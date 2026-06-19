@@ -51,6 +51,17 @@ class DeviceService final {
   class StubInterface {
    public:
     virtual ~StubInterface() {}
+    // Enroll：设备首启自助注册，设备此时还没有 token，入口免鉴权。
+    //
+    // 安全边界：调用方必须携带批次装机密钥证明 + nonce/timestamp，服务端校验
+    // TTL、批次限量、吊销状态和重放窗口后才签发单设备 token。
+    virtual ::grpc::Status Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::terminal_agent::v1::EnrollResponse* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>> AsyncEnroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>>(AsyncEnrollRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>> PrepareAsyncEnroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>>(PrepareAsyncEnrollRaw(context, request, cq));
+    }
     // 心跳
     // 设备定期（建议 30-60 秒）调用，告知服务端"我还活着"
     // 服务端更新 last_heartbeat，并通过响应告知是否有待执行指令
@@ -135,6 +146,12 @@ class DeviceService final {
     class async_interface {
      public:
       virtual ~async_interface() {}
+      // Enroll：设备首启自助注册，设备此时还没有 token，入口免鉴权。
+      //
+      // 安全边界：调用方必须携带批次装机密钥证明 + nonce/timestamp，服务端校验
+      // TTL、批次限量、吊销状态和重放窗口后才签发单设备 token。
+      virtual void Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       // 心跳
       // 设备定期（建议 30-60 秒）调用，告知服务端"我还活着"
       // 服务端更新 last_heartbeat，并通过响应告知是否有待执行指令
@@ -191,6 +208,8 @@ class DeviceService final {
     virtual class async_interface* async() { return nullptr; }
     class async_interface* experimental_async() { return async(); }
    private:
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>* AsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::EnrollResponse>* PrepareAsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::HeartbeatResponse>* AsyncHeartbeatRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::HeartbeatResponse>* PrepareAsyncHeartbeatRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::terminal_agent::v1::StatusReportResponse>* AsyncReportStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::StatusReport& request, ::grpc::CompletionQueue* cq) = 0;
@@ -207,6 +226,13 @@ class DeviceService final {
   class Stub final : public StubInterface {
    public:
     Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    ::grpc::Status Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::terminal_agent::v1::EnrollResponse* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>> AsyncEnroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>>(AsyncEnrollRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>> PrepareAsyncEnroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>>(PrepareAsyncEnrollRaw(context, request, cq));
+    }
     ::grpc::Status Heartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::terminal_agent::v1::HeartbeatResponse* response) override;
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::HeartbeatResponse>> AsyncHeartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::HeartbeatResponse>>(AsyncHeartbeatRaw(context, request, cq));
@@ -252,6 +278,8 @@ class DeviceService final {
     class async final :
       public StubInterface::async_interface {
      public:
+      void Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, std::function<void(::grpc::Status)>) override;
+      void Enroll(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
       void Heartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest* request, ::terminal_agent::v1::HeartbeatResponse* response, std::function<void(::grpc::Status)>) override;
       void Heartbeat(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest* request, ::terminal_agent::v1::HeartbeatResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
       void ReportStatus(::grpc::ClientContext* context, const ::terminal_agent::v1::StatusReport* request, ::terminal_agent::v1::StatusReportResponse* response, std::function<void(::grpc::Status)>) override;
@@ -275,6 +303,8 @@ class DeviceService final {
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
     class async async_stub_{this};
+    ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>* AsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::EnrollResponse>* PrepareAsyncEnrollRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::EnrollRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::HeartbeatResponse>* AsyncHeartbeatRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::HeartbeatResponse>* PrepareAsyncHeartbeatRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::HeartbeatRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::StatusReportResponse>* AsyncReportStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::StatusReport& request, ::grpc::CompletionQueue* cq) override;
@@ -287,6 +317,7 @@ class DeviceService final {
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::ReleaseStatusResponse>* PrepareAsyncReportReleaseStatusRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::ReleaseStatusRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* AsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::terminal_agent::v1::CommandResultResponse>* PrepareAsyncPushCommandRaw(::grpc::ClientContext* context, const ::terminal_agent::v1::Command& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Enroll_;
     const ::grpc::internal::RpcMethod rpcmethod_Heartbeat_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportStatus_;
     const ::grpc::internal::RpcMethod rpcmethod_ReportEvent_;
@@ -300,6 +331,11 @@ class DeviceService final {
    public:
     Service();
     virtual ~Service();
+    // Enroll：设备首启自助注册，设备此时还没有 token，入口免鉴权。
+    //
+    // 安全边界：调用方必须携带批次装机密钥证明 + nonce/timestamp，服务端校验
+    // TTL、批次限量、吊销状态和重放窗口后才签发单设备 token。
+    virtual ::grpc::Status Enroll(::grpc::ServerContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response);
     // 心跳
     // 设备定期（建议 30-60 秒）调用，告知服务端"我还活着"
     // 服务端更新 last_heartbeat，并通过响应告知是否有待执行指令
@@ -347,12 +383,32 @@ class DeviceService final {
     virtual ::grpc::Status PushCommand(::grpc::ServerContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response);
   };
   template <class BaseClass>
+  class WithAsyncMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Enroll() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestEnroll(::grpc::ServerContext* context, ::terminal_agent::v1::EnrollRequest* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::EnrollResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithAsyncMethod_Heartbeat : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodAsync(0);
+      ::grpc::Service::MarkMethodAsync(1);
     }
     ~WithAsyncMethod_Heartbeat() override {
       BaseClassMustBeDerivedFromService(this);
@@ -363,7 +419,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestHeartbeat(::grpc::ServerContext* context, ::terminal_agent::v1::HeartbeatRequest* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::HeartbeatResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -372,7 +428,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodAsync(1);
+      ::grpc::Service::MarkMethodAsync(2);
     }
     ~WithAsyncMethod_ReportStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -383,7 +439,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportStatus(::grpc::ServerContext* context, ::terminal_agent::v1::StatusReport* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::StatusReportResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -392,7 +448,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodAsync(2);
+      ::grpc::Service::MarkMethodAsync(3);
     }
     ~WithAsyncMethod_ReportEvent() override {
       BaseClassMustBeDerivedFromService(this);
@@ -403,7 +459,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportEvent(::grpc::ServerContext* context, ::terminal_agent::v1::EventReport* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::EventReportResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -412,7 +468,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodAsync(3);
+      ::grpc::Service::MarkMethodAsync(4);
     }
     ~WithAsyncMethod_ReportCommandResult() override {
       BaseClassMustBeDerivedFromService(this);
@@ -423,7 +479,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportCommandResult(::grpc::ServerContext* context, ::terminal_agent::v1::CommandResult* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::CommandResultResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -432,7 +488,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodAsync(4);
+      ::grpc::Service::MarkMethodAsync(5);
     }
     ~WithAsyncMethod_ReportReleaseStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -443,7 +499,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportReleaseStatus(::grpc::ServerContext* context, ::terminal_agent::v1::ReleaseStatusRequest* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::ReleaseStatusResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -452,7 +508,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_PushCommand() {
-      ::grpc::Service::MarkMethodAsync(5);
+      ::grpc::Service::MarkMethodAsync(6);
     }
     ~WithAsyncMethod_PushCommand() override {
       BaseClassMustBeDerivedFromService(this);
@@ -463,23 +519,50 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestPushCommand(::grpc::ServerContext* context, ::terminal_agent::v1::Command* request, ::grpc::ServerAsyncResponseWriter< ::terminal_agent::v1::CommandResultResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(6, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_Heartbeat<WithAsyncMethod_ReportStatus<WithAsyncMethod_ReportEvent<WithAsyncMethod_ReportCommandResult<WithAsyncMethod_ReportReleaseStatus<WithAsyncMethod_PushCommand<Service > > > > > > AsyncService;
+  typedef WithAsyncMethod_Enroll<WithAsyncMethod_Heartbeat<WithAsyncMethod_ReportStatus<WithAsyncMethod_ReportEvent<WithAsyncMethod_ReportCommandResult<WithAsyncMethod_ReportReleaseStatus<WithAsyncMethod_PushCommand<Service > > > > > > > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Enroll() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::EnrollRequest* request, ::terminal_agent::v1::EnrollResponse* response) { return this->Enroll(context, request, response); }));}
+    void SetMessageAllocatorFor_Enroll(
+        ::grpc::MessageAllocator< ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Enroll(
+      ::grpc::CallbackServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/)  { return nullptr; }
+  };
   template <class BaseClass>
   class WithCallbackMethod_Heartbeat : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodCallback(0,
+      ::grpc::Service::MarkMethodCallback(1,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::HeartbeatRequest* request, ::terminal_agent::v1::HeartbeatResponse* response) { return this->Heartbeat(context, request, response); }));}
     void SetMessageAllocatorFor_Heartbeat(
         ::grpc::MessageAllocator< ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -500,13 +583,13 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodCallback(1,
+      ::grpc::Service::MarkMethodCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::StatusReport, ::terminal_agent::v1::StatusReportResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::StatusReport* request, ::terminal_agent::v1::StatusReportResponse* response) { return this->ReportStatus(context, request, response); }));}
     void SetMessageAllocatorFor_ReportStatus(
         ::grpc::MessageAllocator< ::terminal_agent::v1::StatusReport, ::terminal_agent::v1::StatusReportResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::StatusReport, ::terminal_agent::v1::StatusReportResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -527,13 +610,13 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodCallback(2,
+      ::grpc::Service::MarkMethodCallback(3,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::EventReport, ::terminal_agent::v1::EventReportResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::EventReport* request, ::terminal_agent::v1::EventReportResponse* response) { return this->ReportEvent(context, request, response); }));}
     void SetMessageAllocatorFor_ReportEvent(
         ::grpc::MessageAllocator< ::terminal_agent::v1::EventReport, ::terminal_agent::v1::EventReportResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(3);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::EventReport, ::terminal_agent::v1::EventReportResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -554,13 +637,13 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodCallback(3,
+      ::grpc::Service::MarkMethodCallback(4,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::CommandResult, ::terminal_agent::v1::CommandResultResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::CommandResult* request, ::terminal_agent::v1::CommandResultResponse* response) { return this->ReportCommandResult(context, request, response); }));}
     void SetMessageAllocatorFor_ReportCommandResult(
         ::grpc::MessageAllocator< ::terminal_agent::v1::CommandResult, ::terminal_agent::v1::CommandResultResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(3);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(4);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::CommandResult, ::terminal_agent::v1::CommandResultResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -581,13 +664,13 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodCallback(4,
+      ::grpc::Service::MarkMethodCallback(5,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::ReleaseStatusRequest, ::terminal_agent::v1::ReleaseStatusResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::ReleaseStatusRequest* request, ::terminal_agent::v1::ReleaseStatusResponse* response) { return this->ReportReleaseStatus(context, request, response); }));}
     void SetMessageAllocatorFor_ReportReleaseStatus(
         ::grpc::MessageAllocator< ::terminal_agent::v1::ReleaseStatusRequest, ::terminal_agent::v1::ReleaseStatusResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(4);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(5);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::ReleaseStatusRequest, ::terminal_agent::v1::ReleaseStatusResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -608,13 +691,13 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_PushCommand() {
-      ::grpc::Service::MarkMethodCallback(5,
+      ::grpc::Service::MarkMethodCallback(6,
           new ::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::terminal_agent::v1::Command* request, ::terminal_agent::v1::CommandResultResponse* response) { return this->PushCommand(context, request, response); }));}
     void SetMessageAllocatorFor_PushCommand(
         ::grpc::MessageAllocator< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(5);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(6);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -629,15 +712,32 @@ class DeviceService final {
     virtual ::grpc::ServerUnaryReactor* PushCommand(
       ::grpc::CallbackServerContext* /*context*/, const ::terminal_agent::v1::Command* /*request*/, ::terminal_agent::v1::CommandResultResponse* /*response*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_Heartbeat<WithCallbackMethod_ReportStatus<WithCallbackMethod_ReportEvent<WithCallbackMethod_ReportCommandResult<WithCallbackMethod_ReportReleaseStatus<WithCallbackMethod_PushCommand<Service > > > > > > CallbackService;
+  typedef WithCallbackMethod_Enroll<WithCallbackMethod_Heartbeat<WithCallbackMethod_ReportStatus<WithCallbackMethod_ReportEvent<WithCallbackMethod_ReportCommandResult<WithCallbackMethod_ReportReleaseStatus<WithCallbackMethod_PushCommand<Service > > > > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Enroll() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
   template <class BaseClass>
   class WithGenericMethod_Heartbeat : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodGeneric(0);
+      ::grpc::Service::MarkMethodGeneric(1);
     }
     ~WithGenericMethod_Heartbeat() override {
       BaseClassMustBeDerivedFromService(this);
@@ -654,7 +754,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodGeneric(1);
+      ::grpc::Service::MarkMethodGeneric(2);
     }
     ~WithGenericMethod_ReportStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -671,7 +771,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodGeneric(2);
+      ::grpc::Service::MarkMethodGeneric(3);
     }
     ~WithGenericMethod_ReportEvent() override {
       BaseClassMustBeDerivedFromService(this);
@@ -688,7 +788,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodGeneric(3);
+      ::grpc::Service::MarkMethodGeneric(4);
     }
     ~WithGenericMethod_ReportCommandResult() override {
       BaseClassMustBeDerivedFromService(this);
@@ -705,7 +805,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodGeneric(4);
+      ::grpc::Service::MarkMethodGeneric(5);
     }
     ~WithGenericMethod_ReportReleaseStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -722,7 +822,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_PushCommand() {
-      ::grpc::Service::MarkMethodGeneric(5);
+      ::grpc::Service::MarkMethodGeneric(6);
     }
     ~WithGenericMethod_PushCommand() override {
       BaseClassMustBeDerivedFromService(this);
@@ -734,12 +834,32 @@ class DeviceService final {
     }
   };
   template <class BaseClass>
+  class WithRawMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Enroll() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestEnroll(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithRawMethod_Heartbeat : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodRaw(0);
+      ::grpc::Service::MarkMethodRaw(1);
     }
     ~WithRawMethod_Heartbeat() override {
       BaseClassMustBeDerivedFromService(this);
@@ -750,7 +870,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestHeartbeat(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -759,7 +879,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodRaw(1);
+      ::grpc::Service::MarkMethodRaw(2);
     }
     ~WithRawMethod_ReportStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -770,7 +890,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportStatus(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -779,7 +899,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodRaw(2);
+      ::grpc::Service::MarkMethodRaw(3);
     }
     ~WithRawMethod_ReportEvent() override {
       BaseClassMustBeDerivedFromService(this);
@@ -790,7 +910,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportEvent(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -799,7 +919,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodRaw(3);
+      ::grpc::Service::MarkMethodRaw(4);
     }
     ~WithRawMethod_ReportCommandResult() override {
       BaseClassMustBeDerivedFromService(this);
@@ -810,7 +930,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportCommandResult(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -819,7 +939,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodRaw(4);
+      ::grpc::Service::MarkMethodRaw(5);
     }
     ~WithRawMethod_ReportReleaseStatus() override {
       BaseClassMustBeDerivedFromService(this);
@@ -830,7 +950,7 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestReportReleaseStatus(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(4, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -839,7 +959,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_PushCommand() {
-      ::grpc::Service::MarkMethodRaw(5);
+      ::grpc::Service::MarkMethodRaw(6);
     }
     ~WithRawMethod_PushCommand() override {
       BaseClassMustBeDerivedFromService(this);
@@ -850,8 +970,30 @@ class DeviceService final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestPushCommand(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(5, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(6, context, request, response, new_call_cq, notification_cq, tag);
     }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Enroll() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Enroll(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Enroll(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
   class WithRawCallbackMethod_Heartbeat : public BaseClass {
@@ -859,7 +1001,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodRawCallback(0,
+      ::grpc::Service::MarkMethodRawCallback(1,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Heartbeat(context, request, response); }));
@@ -881,7 +1023,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodRawCallback(1,
+      ::grpc::Service::MarkMethodRawCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->ReportStatus(context, request, response); }));
@@ -903,7 +1045,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodRawCallback(2,
+      ::grpc::Service::MarkMethodRawCallback(3,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->ReportEvent(context, request, response); }));
@@ -925,7 +1067,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodRawCallback(3,
+      ::grpc::Service::MarkMethodRawCallback(4,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->ReportCommandResult(context, request, response); }));
@@ -947,7 +1089,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodRawCallback(4,
+      ::grpc::Service::MarkMethodRawCallback(5,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->ReportReleaseStatus(context, request, response); }));
@@ -969,7 +1111,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_PushCommand() {
-      ::grpc::Service::MarkMethodRawCallback(5,
+      ::grpc::Service::MarkMethodRawCallback(6,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->PushCommand(context, request, response); }));
@@ -986,12 +1128,39 @@ class DeviceService final {
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
+  class WithStreamedUnaryMethod_Enroll : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Enroll() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::terminal_agent::v1::EnrollRequest, ::terminal_agent::v1::EnrollResponse>* streamer) {
+                       return this->StreamedEnroll(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Enroll() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Enroll(::grpc::ServerContext* /*context*/, const ::terminal_agent::v1::EnrollRequest* /*request*/, ::terminal_agent::v1::EnrollResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedEnroll(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::terminal_agent::v1::EnrollRequest,::terminal_agent::v1::EnrollResponse>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
   class WithStreamedUnaryMethod_Heartbeat : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_Heartbeat() {
-      ::grpc::Service::MarkMethodStreamed(0,
+      ::grpc::Service::MarkMethodStreamed(1,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::HeartbeatRequest, ::terminal_agent::v1::HeartbeatResponse>(
             [this](::grpc::ServerContext* context,
@@ -1018,7 +1187,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_ReportStatus() {
-      ::grpc::Service::MarkMethodStreamed(1,
+      ::grpc::Service::MarkMethodStreamed(2,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::StatusReport, ::terminal_agent::v1::StatusReportResponse>(
             [this](::grpc::ServerContext* context,
@@ -1045,7 +1214,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_ReportEvent() {
-      ::grpc::Service::MarkMethodStreamed(2,
+      ::grpc::Service::MarkMethodStreamed(3,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::EventReport, ::terminal_agent::v1::EventReportResponse>(
             [this](::grpc::ServerContext* context,
@@ -1072,7 +1241,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_ReportCommandResult() {
-      ::grpc::Service::MarkMethodStreamed(3,
+      ::grpc::Service::MarkMethodStreamed(4,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::CommandResult, ::terminal_agent::v1::CommandResultResponse>(
             [this](::grpc::ServerContext* context,
@@ -1099,7 +1268,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_ReportReleaseStatus() {
-      ::grpc::Service::MarkMethodStreamed(4,
+      ::grpc::Service::MarkMethodStreamed(5,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::ReleaseStatusRequest, ::terminal_agent::v1::ReleaseStatusResponse>(
             [this](::grpc::ServerContext* context,
@@ -1126,7 +1295,7 @@ class DeviceService final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_PushCommand() {
-      ::grpc::Service::MarkMethodStreamed(5,
+      ::grpc::Service::MarkMethodStreamed(6,
         new ::grpc::internal::StreamedUnaryHandler<
           ::terminal_agent::v1::Command, ::terminal_agent::v1::CommandResultResponse>(
             [this](::grpc::ServerContext* context,
@@ -1147,9 +1316,9 @@ class DeviceService final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status StreamedPushCommand(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::terminal_agent::v1::Command,::terminal_agent::v1::CommandResultResponse>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > StreamedUnaryService;
+  typedef WithStreamedUnaryMethod_Enroll<WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > > StreamedUnaryService;
   typedef Service SplitStreamedService;
-  typedef WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > StreamedService;
+  typedef WithStreamedUnaryMethod_Enroll<WithStreamedUnaryMethod_Heartbeat<WithStreamedUnaryMethod_ReportStatus<WithStreamedUnaryMethod_ReportEvent<WithStreamedUnaryMethod_ReportCommandResult<WithStreamedUnaryMethod_ReportReleaseStatus<WithStreamedUnaryMethod_PushCommand<Service > > > > > > > StreamedService;
 };
 
 // ─── CommandService ──────────────────────────────────────
