@@ -5,11 +5,33 @@ server_host=deviceops.example.com
 server_port=9090
 use_tls=true
 
-device_id=DEV-WIN-001
-token=replace-with-device-token
+# --- Identity: pick ONE of the two ---
+# (A) Self-enroll (recommended). One installer key is shared per batch; the
+#     device derives its own device_id/token on first start and shows as
+#     "pending" in the dashboard until an operator approves it.
+#     Leave device_id/token empty in this mode.
+installer_key_id=
+installer_key=
 
-agent_url=https://deviceops.example.com/api/v1/files/<file_id>/download
-agent_sha256=replace-with-package-sha256
+# (B) Static credentials (legacy / optional). Only used when no installer_key
+#     is set. Leave empty when self-enrolling.
+device_id=
+token=
+
+# Optional. Absolute paths where the device persists its enrolled credential
+# and short-code status. Leave empty to use %PROGRAMDATA%\DeviceOps defaults.
+enrollment_token_file=
+enrollment_status_file=
+
+# --- Package source: local/offline takes priority, online is the fallback ---
+# Offline: drop device-agent.exe (or a *.zip) beside install-device-agent.cmd
+# and leave local_package empty — the script auto-detects it. Or point
+# local_package at a specific file (relative to the cmd, or absolute).
+local_package=
+# Online: only needed when there is no local package. agent_sha256 is required
+# for downloads; for a local package it is an optional integrity check.
+agent_url=
+agent_sha256=
 
 # Optional. If omitted, the script uses ProgramFiles\DeviceOps\device-agent.
 install_dir=

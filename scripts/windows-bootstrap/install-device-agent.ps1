@@ -24,8 +24,13 @@ param(
   [string]$UseTls,
   [string]$DeviceId,
   [string]$Token,
+  [string]$InstallerKeyId,
+  [string]$InstallerKey,
+  [string]$EnrollmentTokenFile,
+  [string]$EnrollmentStatusFile,
   [string]$AgentUrl,
   [string]$AgentSha256,
+  [string]$PackagePath,
   [string]$InstallDir,
   [string]$ServiceName,
   [string]$LogDir,
@@ -259,6 +264,39 @@ function Find-AgentExe([string]$StageDir) {
   return $hit.FullName
 }
 
+function Resolve-LocalPackage([string]$ExplicitPath, [string]$AnswerPath) {
+  # 包来源优先级:① -PackagePath ② answer local_package ③ 与脚本同目录的 exe/zip。
+  # 命中返回绝对路径;全未命中返回 '' (调用方回退 agent_url 下载)。
+  $candidates = @()
+  if ($ExplicitPath) { $candidates += $ExplicitPath }
+  if ($AnswerPath) {
+    if ([System.IO.Path]::IsPathRooted($AnswerPath)) {
+      $candidates += $AnswerPath
+    } else {
+      $candidates += (Join-Path $ScriptDir $AnswerPath)
+    }
+  }
+  foreach ($c in $candidates) {
+    if (Test-Path -LiteralPath $c) {
+      Write-Log ('Using local package: ' + $c)
+      return (Resolve-Path -LiteralPath $c).Path
+    }
+    Write-Log ('WARN: configured local package not found, skipping: ' + $c)
+  }
+  # 同目录自动探测:优先裸 exe,其次单个 zip。
+  $sideExe = Join-Path $ScriptDir 'device-agent.exe'
+  if (Test-Path -LiteralPath $sideExe) {
+    Write-Log ('Using side-by-side package: ' + $sideExe)
+    return $sideExe
+  }
+  $sideZip = Get-ChildItem -LiteralPath $ScriptDir -Filter '*.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($sideZip -ne $null) {
+    Write-Log ('Using side-by-side package: ' + $sideZip.FullName)
+    return $sideZip.FullName
+  }
+  return ''
+}
+
 function Install-AgentFiles([string]$AgentExe, [string]$TargetDir) {
   $sourceDir = Split-Path -Parent $AgentExe
   if (-not (Test-Path $TargetDir)) {
@@ -289,6 +327,10 @@ function Write-AgentConfig([string]$Path) {
 {
   "device_id": "$(ConvertTo-JsonString $DeviceId)",
   "token": "$(ConvertTo-JsonString $Token)",
+  "installer_key_id": "$(ConvertTo-JsonString $InstallerKeyId)",
+  "installer_key": "$(ConvertTo-JsonString $InstallerKey)",
+  "enrollment_token_file": "$(ConvertTo-JsonString $EnrollmentTokenFile)",
+  "enrollment_status_file": "$(ConvertTo-JsonString $EnrollmentStatusFile)",
   "server_host": "$(ConvertTo-JsonString $ServerHost)",
   "server_port": $ServerPort,
   "use_tls": $UseTls,
@@ -367,11 +409,19 @@ try {
   $UseTls = To-BoolString (Pick-Value $answer @('use_tls', 'tls') $UseTls 'false') 'false'
   $DeviceId = Pick-Value $answer @('device_id', 'device') $DeviceId ''
   $Token = Pick-Value $answer @('token', 'device_token') $Token ''
+  $InstallerKeyId = Pick-Value $answer @('installer_key_id') $InstallerKeyId ''
+  $InstallerKey = Pick-Value $answer @('installer_key') $InstallerKey ''
   $AgentUrl = Pick-Value $answer @('agent_url', 'package_url', 'download_url') $AgentUrl ''
   $AgentSha256 = Pick-Value $answer @('agent_sha256', 'package_sha256', 'sha256') $AgentSha256 ''
+  $LocalPackage = Pick-Value $answer @('local_package', 'package_path') '' ''
   $InstallDir = Pick-Value $answer @('install_dir') $InstallDir $DefaultInstallDir
   $ServiceName = Pick-Value $answer @('service_name') $ServiceName 'DeviceAgent'
   $LogDir = Pick-Value $answer @('log_dir') $LogDir (Join-Path $env:ProgramData 'DeviceOps\device-agent\logs')
+  # 服务工作目录是 System32,enrollment 凭据/状态文件必须落绝对路径;
+  # 缺省对齐 device-agent default_token_file 的 %PROGRAMDATA%\DeviceOps 位置。
+  $EnrollmentDefaultDir = Join-Path $env:ProgramData 'DeviceOps'
+  $EnrollmentTokenFile = Pick-Value $answer @('enrollment_token_file') $EnrollmentTokenFile (Join-Path $EnrollmentDefaultDir 'device-agent-enrollment.json')
+  $EnrollmentStatusFile = Pick-Value $answer @('enrollment_status_file') $EnrollmentStatusFile ($EnrollmentTokenFile + '.status')
   $VcRedistUrl = Pick-Value $answer @('vc_redist_url') $VcRedistUrl ''
   $VcRedistSha256 = Pick-Value $answer @('vc_redist_sha256') $VcRedistSha256 ''
   $UcrtUrl = Pick-Value $answer @('ucrt_url') $UcrtUrl ''
@@ -389,8 +439,27 @@ try {
     exit 0
   }
 
-  if (-not $ServerHost -or -not $DeviceId -or -not $Token -or -not $AgentUrl -or -not $AgentSha256) {
-    Fail 3 'missing required server_host/device_id/token/agent_url/agent_sha256'
+  # 身份校验放宽:server_host 必填;身份二选一 ——
+  #   自助注册(installer_key_id + installer_key,device_id/token 留空设备首启自动派生)
+  #   或 静态凭据(device_id + token,兼容旧路径)。
+  if (-not $ServerHost) {
+    Fail 3 'missing required server_host'
+  }
+  $hasInstallerKey = ($InstallerKeyId -and $InstallerKey)
+  $hasStaticCred = ($DeviceId -and $Token)
+  if (-not $hasInstallerKey -and -not $hasStaticCred) {
+    Fail 3 'missing identity: provide installer_key_id+installer_key (self-enroll) or device_id+token (static)'
+  }
+  if ($hasInstallerKey) {
+    Write-Log 'Identity mode: self-enroll (installer_key)'
+  } else {
+    Write-Log 'Identity mode: static device_id/token'
+  }
+
+  # 包来源:本地包优先,否则回退 agent_url 在线下载。
+  $resolvedPackage = Resolve-LocalPackage $PackagePath $LocalPackage
+  if (-not $resolvedPackage -and (-not $AgentUrl -or -not $AgentSha256)) {
+    Fail 3 'no package source: provide a local package (-PackagePath / local_package / side-by-side device-agent.exe or *.zip) or agent_url + agent_sha256'
   }
 
   $os = Get-OSInfo
@@ -405,11 +474,19 @@ try {
     New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
   }
 
-  $packageLeaf = Split-Path -Leaf ([Uri]$AgentUrl).AbsolutePath
-  if (-not $packageLeaf) { $packageLeaf = 'device-agent-package.zip' }
-  $packagePath = Join-Path $BootstrapRoot $packageLeaf
-  Download-File $AgentUrl $packagePath
-  Assert-Sha256 $packagePath $AgentSha256 5
+  if ($resolvedPackage) {
+    # 本地/离线包:不下载;若 answer 提供 sha256 则照样校验。
+    $packagePath = $resolvedPackage
+    Write-Log ('Local package selected (offline mode): ' + $packagePath)
+    Assert-Sha256 $packagePath $AgentSha256 5
+  } else {
+    # 在线模式:下载 agent_url,sha256 必校。
+    $packageLeaf = Split-Path -Leaf ([Uri]$AgentUrl).AbsolutePath
+    if (-not $packageLeaf) { $packageLeaf = 'device-agent-package.zip' }
+    $packagePath = Join-Path $BootstrapRoot $packageLeaf
+    Download-File $AgentUrl $packagePath
+    Assert-Sha256 $packagePath $AgentSha256 5
+  }
 
   $stageDir = Join-Path $BootstrapRoot 'stage'
   Extract-Package $packagePath $stageDir
