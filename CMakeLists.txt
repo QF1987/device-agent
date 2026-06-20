@@ -9,6 +9,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+function(find_device_agent_protobuf)
+    find_package(protobuf CONFIG QUIET)
+    if(NOT protobuf_FOUND)
+        find_package(Protobuf REQUIRED)
+    endif()
+endfunction()
+
 set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
@@ -203,7 +210,7 @@ extern "C" const char* device_agent_libtorrent_version() {
     # find_dependency(absl) checks for absl_ABSL_NO_VERSION_CHECK
     set(absl_ABSL_NO_VERSION_CHECK TRUE CACHE BOOL "")
     set(utf8_range_UTF8_RANGE_NO_VERSION_CHECK TRUE CACHE BOOL "")
-    find_package(protobuf CONFIG REQUIRED)
+    find_device_agent_protobuf()
 
     # gRPC: config is at lib/cmake/grpc/gRPCConfig.cmake
     set(gRPC_DIR "${GRPC_ANDROID_INSTALL_DIR}/lib/cmake/grpc")
@@ -323,7 +330,7 @@ elseif(WIN32)
 
     option(DEVICE_AGENT_BUILD_WINDOWS_AGENT "Build full Windows device-agent executable" OFF)
     if(DEVICE_AGENT_BUILD_WINDOWS_AGENT)
-        find_package(protobuf CONFIG REQUIRED)
+        find_device_agent_protobuf()
         find_package(gRPC CONFIG REQUIRED)
 
         set(GEN_WINDOWS_DIR "${CMAKE_BINARY_DIR}/gen-windows")
@@ -418,7 +425,7 @@ else()
     option(BUILD_P2P_DOCKER_TOOLS "Build Linux P2P Docker spike tools" ON)
 
     find_package(Threads REQUIRED)
-    find_package(protobuf CONFIG REQUIRED)
+    find_device_agent_protobuf()
     find_package(gRPC CONFIG REQUIRED)
     find_package(OpenSSL REQUIRED)
     find_package(PkgConfig REQUIRED)

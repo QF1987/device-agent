@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -19,6 +20,47 @@ int main() {
     const std::string device_id = derive_device_id("win", "secret", material);
     assert(device_id.rfind("win-", 0) == 0);
     assert(device_id.size() == 68);
+
+    const std::string linux_dir = "/tmp/device-agent-enrollment-linux-test";
+    std::filesystem::create_directories(linux_dir);
+    {
+        std::ofstream(linux_dir + "/machine-id") << "  MID-ABC  \n";
+        std::ofstream(linux_dir + "/dbus-machine-id") << "DBUS-DEF\n";
+        std::ofstream(linux_dir + "/product_uuid") << "DMI-UUID\n";
+        std::ofstream(linux_dir + "/board_serial") << "BOARD-SERIAL\n";
+    }
+    const std::string linux_material = collect_linux_hardware_material_from_paths(
+        linux_dir + "/machine-id",
+        linux_dir + "/dbus-machine-id",
+        linux_dir + "/product_uuid",
+        linux_dir + "/board_serial");
+    assert(linux_material.find("machine_id=mid-abc") != std::string::npos);
+    assert(linux_material.find("dbus_machine_id=dbus-def") != std::string::npos);
+    assert(linux_material.find("dmi_product_uuid=dmi-uuid") != std::string::npos);
+    assert(linux_material.find("dmi_board_serial=board-serial") != std::string::npos);
+    const std::string linux_id = derive_device_id("linux", "secret", linux_material);
+    assert(linux_id.rfind("linux-", 0) == 0);
+    assert(linux_id.size() == 70);
+
+    const std::string linux_no_dmi = collect_linux_hardware_material_from_paths(
+        linux_dir + "/machine-id",
+        linux_dir + "/dbus-machine-id",
+        linux_dir + "/missing-product-uuid",
+        linux_dir + "/missing-board-serial");
+    assert(linux_no_dmi.find("machine_id=mid-abc") != std::string::npos);
+    assert(linux_no_dmi.find("dmi_product_uuid") == std::string::npos);
+    assert(derive_device_id("linux", "secret", linux_no_dmi) ==
+           derive_device_id("linux", "secret", linux_no_dmi));
+    std::filesystem::remove_all(linux_dir);
+
+    const std::string mac_uuid = parse_macos_ioplatform_uuid(
+        "    | |   \"IOPlatformUUID\" = \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n");
+    assert(mac_uuid == "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE");
+    const std::string mac_material = normalize_hardware_material("ioplatform_uuid=" + mac_uuid);
+    const std::string mac_id = derive_device_id("mac", "secret", mac_material);
+    assert(mac_id.rfind("mac-", 0) == 0);
+    assert(mac_id.size() == 68);
+    assert(parse_macos_ioplatform_uuid("no uuid here").empty());
 
     const std::string code = short_registration_code(device_id);
     assert(code.size() == 9);

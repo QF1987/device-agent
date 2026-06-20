@@ -32,6 +32,11 @@ std::string installer_key_proof(const std::string& installer_key,
 std::string derive_device_id(const std::string& platform_prefix,
                              const std::string& installer_key,
                              const std::string& hardware_material);
+std::string collect_linux_hardware_material_from_paths(const std::string& machine_id_path,
+                                                       const std::string& dbus_machine_id_path,
+                                                       const std::string& product_uuid_path,
+                                                       const std::string& board_serial_path);
+std::string parse_macos_ioplatform_uuid(const std::string& ioreg_output);
 std::string generate_nonce();
 std::string short_registration_code(const std::string& device_id);
 std::string default_token_file();

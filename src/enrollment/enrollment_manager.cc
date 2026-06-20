@@ -227,6 +227,43 @@ std::string run_command_first_value(const std::string& command) {
     return best;
 }
 
+std::string run_command_output(const std::string& command) {
+#ifdef _WIN32
+    FILE* pipe = _popen(command.c_str(), "r");
+#else
+    FILE* pipe = popen(command.c_str(), "r");
+#endif
+    if (pipe == nullptr) return "";
+    char buffer[512];
+    std::string out;
+    while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        out += buffer;
+    }
+#ifdef _WIN32
+    _pclose(pipe);
+#else
+    pclose(pipe);
+#endif
+    return out;
+}
+
+void append_hardware_part(std::vector<std::string>* parts,
+                          const std::string& key,
+                          const std::string& value) {
+    const std::string trimmed = trim(value);
+    if (!trimmed.empty()) {
+        parts->push_back(key + "=" + trimmed);
+    }
+}
+
+std::string join_hardware_parts(const std::vector<std::string>& parts) {
+    std::ostringstream oss;
+    for (const auto& part : parts) {
+        oss << part << "\n";
+    }
+    return normalize_hardware_material(oss.str());
+}
+
 std::string hostname() {
     char buf[256] = {};
 #ifdef _WIN32
@@ -392,6 +429,42 @@ std::string derive_device_id(const std::string& platform_prefix,
            hmac_sha256_hex(installer_key, normalize_hardware_material(hardware_material));
 }
 
+std::string collect_linux_hardware_material_from_paths(const std::string& machine_id_path,
+                                                       const std::string& dbus_machine_id_path,
+                                                       const std::string& product_uuid_path,
+                                                       const std::string& board_serial_path) {
+    std::vector<std::string> parts;
+    append_hardware_part(&parts, "machine_id", read_first_line(machine_id_path));
+    append_hardware_part(&parts, "dbus_machine_id", read_first_line(dbus_machine_id_path));
+    append_hardware_part(&parts, "dmi_product_uuid", read_first_line(product_uuid_path));
+    append_hardware_part(&parts, "dmi_board_serial", read_first_line(board_serial_path));
+    return join_hardware_parts(parts);
+}
+
+std::string parse_macos_ioplatform_uuid(const std::string& ioreg_output) {
+    std::istringstream input(ioreg_output);
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.find("IOPlatformUUID") == std::string::npos) {
+            continue;
+        }
+        const auto equals = line.find('=');
+        if (equals == std::string::npos) {
+            continue;
+        }
+        const auto first_quote = line.find('"', equals);
+        if (first_quote == std::string::npos) {
+            continue;
+        }
+        const auto second_quote = line.find('"', first_quote + 1);
+        if (second_quote == std::string::npos) {
+            continue;
+        }
+        return trim(line.substr(first_quote + 1, second_quote - first_quote - 1));
+    }
+    return "";
+}
+
 std::string generate_nonce() {
     std::array<unsigned char, 16> bytes{};
     std::random_device rd;
@@ -492,30 +565,36 @@ std::string platform_prefix() {
 }
 
 std::string collect_hardware_material() {
-    std::vector<std::string> parts;
 #ifdef _WIN32
-    parts.push_back("smbios_uuid=" + run_command_first_value("wmic csproduct get uuid"));
-    parts.push_back("board_serial=" + run_command_first_value("wmic baseboard get serialnumber"));
-    parts.push_back("machine_guid=" + run_command_first_value(
+    std::vector<std::string> parts;
+    append_hardware_part(&parts, "smbios_uuid", run_command_first_value("wmic csproduct get uuid"));
+    append_hardware_part(&parts, "board_serial", run_command_first_value("wmic baseboard get serialnumber"));
+    append_hardware_part(&parts, "machine_guid", run_command_first_value(
         "reg query HKLM\\SOFTWARE\\Microsoft\\Cryptography /v MachineGuid"));
+    return join_hardware_parts(parts);
 #elif defined(__ANDROID__)
+    std::vector<std::string> parts;
     char serial[PROP_VALUE_MAX] = {};
     __system_property_get("ro.serialno", serial);
-    parts.push_back("android_id=" + env_or_empty("DEVICE_AGENT_ANDROID_ID"));
-    parts.push_back("serial=" + std::string(serial));
-    parts.push_back("hostname=" + hostname());
+    append_hardware_part(&parts, "android_id", env_or_empty("DEVICE_AGENT_ANDROID_ID"));
+    append_hardware_part(&parts, "serial", std::string(serial));
+    append_hardware_part(&parts, "hostname", hostname());
+    return join_hardware_parts(parts);
+#elif defined(__APPLE__)
+    const std::string uuid = parse_macos_ioplatform_uuid(
+        run_command_output("ioreg -rd1 -c IOPlatformExpertDevice"));
+    std::vector<std::string> parts;
+    append_hardware_part(&parts, "ioplatform_uuid", uuid);
+    return join_hardware_parts(parts);
+#elif defined(__linux__)
+    return collect_linux_hardware_material_from_paths(
+        "/etc/machine-id",
+        "/var/lib/dbus/machine-id",
+        "/sys/class/dmi/id/product_uuid",
+        "/sys/class/dmi/id/board_serial");
 #else
-    parts.push_back("machine_id=" + read_first_line("/etc/machine-id"));
-    parts.push_back("dbus_machine_id=" + read_first_line("/var/lib/dbus/machine-id"));
-    parts.push_back("hostname=" + hostname());
+    return "";
 #endif
-    std::ostringstream oss;
-    for (const auto& part : parts) {
-        if (!trim(part).empty()) {
-            oss << part << "\n";
-        }
-    }
-    return normalize_hardware_material(oss.str());
 }
 
 bool ensure_enrolled(Config* config) {
