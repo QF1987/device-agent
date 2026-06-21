@@ -250,7 +250,14 @@ function Extract-Package([string]$PackagePath, [string]$StageDir) {
       Start-Sleep -Seconds 3
     }
   } elseif ($ext -eq '.exe') {
+    # 裸 exe 包:device-agent.exe 依赖同目录的 DLL(libprotobuf/libssl/libcrypto/abseil/...),
+    # 必须把同目录所有 *.dll 一并带上,否则进程/服务启动即「找不到 libprotobuf.dll」(服务表现为 1053)。
+    # 离线本地包与 turnkey 解压出的 kit 目录都走这条裸 exe 分支,故 DLL 同带是装机成功的前提。
     Copy-Item -LiteralPath $PackagePath -Destination (Join-Path $StageDir 'device-agent.exe') -Force
+    $exeDir = Split-Path -Parent $PackagePath
+    Get-ChildItem -LiteralPath $exeDir -Filter '*.dll' -ErrorAction SilentlyContinue | ForEach-Object {
+      Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $StageDir $_.Name) -Force
+    }
   } else {
     Fail 6 ('unsupported package type: ' + $ext)
   }
@@ -351,12 +358,16 @@ function Install-Service([string]$Name, [string]$ExePath, [string]$ConfigPath) {
   Remove-ServiceIfExists $Name
   $binPath = ('"{0}" --service --service-name "{1}" -c "{2}"' -f $ExePath, $Name, $ConfigPath)
   Write-Log ('Creating service ' + $Name)
-  & sc.exe create $Name binPath= $binPath start= auto DisplayName= 'DeviceOps device-agent' | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    Fail 7 ('sc create failed for ' + $Name)
+  # 用 New-Service（直达 CreateService API）建服务:PowerShell 把含内嵌引号的 binPath
+  # 透传给 sc.exe 时会拆坏引号,装到默认含空格的 "Program Files" 路径下 sc create 必 1639
+  # (ERROR_INVALID_COMMAND_LINE)。New-Service 不经 sc.exe 命令行,引号原样进 API。
+  try {
+    New-Service -Name $Name -BinaryPathName $binPath -StartupType Automatic `
+      -DisplayName 'DeviceOps device-agent' -Description 'DeviceOps device-agent service' | Out-Null
+  } catch {
+    Fail 7 ('New-Service failed for ' + $Name + ': ' + $_.Exception.Message)
   }
   & sc.exe failure $Name reset= 60 actions= restart/5000/restart/30000/restart/60000 | Out-Null
-  & sc.exe description $Name 'DeviceOps device-agent service' | Out-Null
   Start-Service -Name $Name
   Start-Sleep -Seconds 2
   $svc = Get-Service -Name $Name -ErrorAction Stop
