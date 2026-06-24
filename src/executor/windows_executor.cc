@@ -19,6 +19,8 @@ namespace device_agent {
 
 namespace {
 
+constexpr DWORD kInstallPackageTimeoutMs = 30UL * 60UL * 1000UL;
+
 std::wstring utf8_to_wide(const std::string& s) {
     if (s.empty()) {
         return std::wstring();
@@ -208,7 +210,23 @@ void WindowsExecutor::installPackage(const std::string& packagePath,
     }
 
     LOG_INFO("WindowsExecutor: installer started cmd_id=" + command_id);
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, kInstallPackageTimeoutMs);
+    if (wait_result == WAIT_TIMEOUT) {
+        TerminateProcess(pi.hProcess, 1);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        err = "installer timed out after 30 minutes";
+        LOG_ERROR("WindowsExecutor: " + err + " cmd_id=" + command_id);
+        return;
+    }
+    if (wait_result == WAIT_FAILED) {
+        const DWORD code = GetLastError();
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        err = "WaitForSingleObject failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
+        LOG_ERROR("WindowsExecutor: " + err);
+        return;
+    }
 
     DWORD exit_code = 0;
     if (!GetExitCodeProcess(pi.hProcess, &exit_code)) {
