@@ -53,6 +53,25 @@ public:
     //   err：失败时填充错误描述
     // 注意：LinuxExecutor 此方法永远返回 "not supported"
     virtual void upgradeApp(const std::string& apkUrl, const std::string& md5, const std::string& command_id, std::string& err) = 0;
+
+    // installPackage：桌面端静默安装本地安装包。
+    //   packagePath：本地安装包路径
+    //   args：静默安装参数
+    //   successCodes：逗号分隔的成功退出码，空时按 0
+    //   command_id：指令 UUID，用于日志串联
+    //   err：失败时填充错误描述
+    // 默认实现保持非 Windows 平台现状：不支持安装型 release。
+    virtual void installPackage(const std::string& packagePath,
+                                const std::string& args,
+                                const std::string& successCodes,
+                                const std::string& command_id,
+                                std::string& err) {
+        (void)packagePath;
+        (void)args;
+        (void)successCodes;
+        (void)command_id;
+        err = "installPackage is only supported on Windows";
+    }
 };
 
 // ─── LinuxExecutor：Linux/macOS 实现 ─────────────────────
@@ -84,6 +103,11 @@ public:
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) override;
+    void installPackage(const std::string& packagePath,
+                        const std::string& args,
+                        const std::string& successCodes,
+                        const std::string& command_id,
+                        std::string& err) override;
 };
 #endif
 

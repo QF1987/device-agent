@@ -11,6 +11,10 @@
 #include "download/idownload_manager.h"
 #include "logger/logger.h"
 
+#ifdef _WIN32
+#include "download/windows_download_manager.h"
+#endif
+
 #ifdef __ANDROID__
 #include "download/android_download_manager.h"
 #endif
@@ -134,6 +138,90 @@ static int64_t progress_report_step_bytes(int64_t total_bytes) {
     }
     const int64_t five_percent = total_bytes / 20;
     return std::max<int64_t>(five_percent, 1);
+}
+
+static void maybe_install_windows_package(
+        const DownloadRequest& req,
+        const std::shared_ptr<Executor>& executor,
+        const CommandHandler::ReleaseStatusReporter& release_status_reporter,
+        int64_t final_bytes,
+        const DownloadCompletionTelemetry& telemetry,
+        const std::string& install_args,
+        const std::string& install_success_codes) {
+#ifdef _WIN32
+    if (install_args.empty()) {
+        return;
+    }
+    if (!executor) {
+        LOG_ERROR("download_ready: install requested but executor is not configured");
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req,
+                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
+                final_bytes,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                "executor is not configured",
+                telemetry.completion_path,
+                telemetry.peer_bytes,
+                telemetry.web_seed_bytes));
+        }
+        return;
+    }
+
+    const std::string package_path = windows_resolve_dest_path(req);
+    LOG_INFO("download_ready: starting silent install package=" + package_path +
+             " cmd_id=" + req.command_id);
+    if (release_status_reporter) {
+        release_status_reporter(make_release_status(
+            req,
+            terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING,
+            final_bytes,
+            terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+            "",
+            telemetry.completion_path,
+            telemetry.peer_bytes,
+            telemetry.web_seed_bytes));
+    }
+
+    std::string install_err;
+    executor->installPackage(package_path, install_args, install_success_codes,
+                             req.command_id, install_err);
+    if (install_err.empty()) {
+        LOG_INFO("download_ready: silent install succeeded cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req,
+                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED,
+                final_bytes,
+                terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+                "",
+                telemetry.completion_path,
+                telemetry.peer_bytes,
+                telemetry.web_seed_bytes));
+        }
+    } else {
+        LOG_ERROR("download_ready: silent install failed: " + install_err);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req,
+                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
+                final_bytes,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                install_err,
+                telemetry.completion_path,
+                telemetry.peer_bytes,
+                telemetry.web_seed_bytes));
+        }
+    }
+#else
+    (void)req;
+    (void)executor;
+    (void)release_status_reporter;
+    (void)final_bytes;
+    (void)telemetry;
+    (void)install_args;
+    (void)install_success_codes;
+#endif
 }
 
 // ─── CommandHandler 实现 ───────────────────────────────────
@@ -268,6 +356,7 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
 
     } else if (cmd_type == "download_ready") {
         std::string batch_id, file_id, file_type, url, torrent_url, magnet_uri, sha256;
+        std::string install_args, install_success_codes;
         int64_t file_size = 0;
         extract_json_string(payload, "batch_id", batch_id);
         extract_json_string(payload, "file_id", file_id);
@@ -276,6 +365,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "torrent_url", torrent_url);
         extract_json_string(payload, "magnet_uri", magnet_uri);
         extract_json_string(payload, "sha256", sha256);
+        extract_json_string(payload, "install_args", install_args);
+        extract_json_string(payload, "install_success_codes", install_success_codes);
         extract_json_int64(payload, "file_size", file_size);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
@@ -363,7 +454,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                             progress.downloaded_bytes));
                     }
                 },
-                [req, release_status_reporter, last_downloaded_bytes](
+                [req, executor, release_status_reporter, last_downloaded_bytes,
+                 install_args, install_success_codes](
                         bool ok,
                         const std::string& err,
                         const DownloadCompletionTelemetry& telemetry) {
@@ -379,11 +471,11 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                         }
                     } else {
                         LOG_INFO("download_ready: download dispatched");
+                        int64_t final_bytes = *last_downloaded_bytes;
+                        if (final_bytes <= 0 && req.file_size > 0) {
+                            final_bytes = req.file_size;
+                        }
                         if (release_status_reporter) {
-                            int64_t final_bytes = *last_downloaded_bytes;
-                            if (final_bytes <= 0 && req.file_size > 0) {
-                                final_bytes = req.file_size;
-                            }
                             release_status_reporter(make_release_status(
                                 req,
                                 terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED,
@@ -394,6 +486,14 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                                 telemetry.peer_bytes,
                                 telemetry.web_seed_bytes));
                         }
+                        maybe_install_windows_package(
+                            req,
+                            executor,
+                            release_status_reporter,
+                            final_bytes,
+                            telemetry,
+                            install_args,
+                            install_success_codes);
                     }
                 });
             result.set_status("success");

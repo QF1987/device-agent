@@ -1,5 +1,6 @@
 #include "client/command_handler.h"
 #include "download/idownload_manager.h"
+#include "executor/executor.h"
 
 #include <iostream>
 #include <memory>
@@ -33,18 +34,54 @@ public:
     std::vector<device_agent::DownloadRequest> requests;
 };
 
-terminal_agent::v1::Command make_download_ready_command(const std::string& torrent_url) {
+class FakeExecutor : public device_agent::Executor {
+public:
+    std::string reboot(bool, const std::string&, std::string&) override {
+        return "pending";
+    }
+    void updateConfig(const std::string&, const std::string&, std::string&) override {}
+    void upgradeFirmware(const std::string&, const std::string&, std::string&) override {}
+    void upgradeApp(const std::string&, const std::string&, const std::string&, std::string&) override {}
+    void installPackage(const std::string& packagePath,
+                        const std::string& args,
+                        const std::string& successCodes,
+                        const std::string& command_id,
+                        std::string& err) override {
+        install_calls++;
+        last_package_path = packagePath;
+        last_args = args;
+        last_success_codes = successCodes;
+        last_command_id = command_id;
+        err = install_error;
+    }
+
+    int install_calls = 0;
+    std::string install_error;
+    std::string last_package_path;
+    std::string last_args;
+    std::string last_success_codes;
+    std::string last_command_id;
+};
+
+terminal_agent::v1::Command make_download_ready_command(const std::string& torrent_url,
+                                                        bool install = false) {
     terminal_agent::v1::Command cmd;
     cmd.set_command_id("cmd-1");
     cmd.set_command_type("download_ready");
-    cmd.set_payload_json(
+    std::string payload =
         "{\"batch_id\":\"batch-1\","
         "\"file_id\":\"file-1\","
         "\"file_type\":\"bin\","
         "\"download_url\":\"http://127.0.0.1:18080/file.bin\","
         "\"torrent_url\":\"" + torrent_url + "\","
         "\"sha256\":\"abc\","
-        "\"file_size\":1024}");
+        "\"file_size\":1024";
+    if (install) {
+        payload += ",\"install_args\":\"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-\","
+                   "\"install_success_codes\":\"0,3010\"";
+    }
+    payload += "}";
+    cmd.set_payload_json(payload);
     return cmd;
 }
 
@@ -107,6 +144,76 @@ int main() {
                          "web seed bytes should be forwarded from download telemetry");
         }
     }
+
+#ifdef _WIN32
+    {
+        std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
+        auto fake = std::make_shared<FakeDownloadManager>();
+        auto executor = std::make_shared<FakeExecutor>();
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        handler.set_download_manager(fake);
+        handler.set_executor(executor);
+        handler.set_download_directory("C:\\DeviceAgent\\downloads");
+        handler.set_release_status_reporter(
+            [&reports](const terminal_agent::v1::ReleaseStatusRequest& report) {
+                reports.push_back(report);
+                return true;
+            });
+
+        const auto result = handler.execute_sync(make_download_ready_command("", true), 0);
+
+        ok &= expect(result.status() == "success", "install command should dispatch");
+        ok &= expect(executor->install_calls == 1, "installPackage should be called once");
+        ok &= expect(executor->last_package_path == "C:\\DeviceAgent\\downloads\\file-1",
+                     "installPackage should receive resolved download path");
+        ok &= expect(executor->last_args == "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-",
+                     "install args should be forwarded");
+        ok &= expect(executor->last_success_codes == "0,3010",
+                     "success codes should be forwarded");
+        ok &= expect(reports.size() == 5,
+                     "install success path should report downloading/progress/downloaded/installing/installed");
+        if (reports.size() >= 5) {
+            ok &= expect(reports[2].status() == terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED,
+                         "install path should first report downloaded");
+            ok &= expect(reports[3].status() == terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING,
+                         "install path should report installing");
+            ok &= expect(reports[4].status() == terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED,
+                         "install path should report installed");
+        }
+    }
+
+    {
+        std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
+        auto fake = std::make_shared<FakeDownloadManager>();
+        auto executor = std::make_shared<FakeExecutor>();
+        executor->install_error = "installer exit code 5";
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        handler.set_download_manager(fake);
+        handler.set_executor(executor);
+        handler.set_release_status_reporter(
+            [&reports](const terminal_agent::v1::ReleaseStatusRequest& report) {
+                reports.push_back(report);
+                return true;
+            });
+
+        const auto result = handler.execute_sync(make_download_ready_command("", true), 0);
+
+        ok &= expect(result.status() == "success", "install failure command should still dispatch");
+        ok &= expect(executor->install_calls == 1, "failed install should call installPackage once");
+        ok &= expect(reports.size() == 5,
+                     "install failure path should report downloading/progress/downloaded/installing/install_failed");
+        if (reports.size() >= 5) {
+            ok &= expect(reports[4].status() == terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
+                         "install failure path should report install_failed");
+            ok &= expect(reports[4].error_code() == terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                         "install failure path should set INSTALL_ERROR");
+            ok &= expect(reports[4].error_message() == "installer exit code 5",
+                         "install failure path should forward install error");
+        }
+    }
+#endif
 
     {
         std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
