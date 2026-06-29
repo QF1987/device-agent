@@ -143,6 +143,98 @@ static int64_t progress_report_step_bytes(int64_t total_bytes) {
     return std::max<int64_t>(five_percent, 1);
 }
 
+#ifdef _WIN32
+// pre_uninstall:把注册表全路径(如 HKLM\SOFTWARE\WOW6432Node\...\Uninstall\{AppId}_is1)
+// 拆成 hive + 子键路径。支持 HKLM/HKCU/HKCR/HKU 及其全称。
+static bool parse_registry_hive(const std::string& full, HKEY& hive, std::wstring& subkey) {
+    const size_t bs = full.find('\\');
+    if (bs == std::string::npos) {
+        return false;
+    }
+    std::string prefix = full.substr(0, bs);
+    const std::string rest = full.substr(bs + 1);
+    for (auto& c : prefix) {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    if (prefix == "HKLM" || prefix == "HKEY_LOCAL_MACHINE") {
+        hive = HKEY_LOCAL_MACHINE;
+    } else if (prefix == "HKCU" || prefix == "HKEY_CURRENT_USER") {
+        hive = HKEY_CURRENT_USER;
+    } else if (prefix == "HKCR" || prefix == "HKEY_CLASSES_ROOT") {
+        hive = HKEY_CLASSES_ROOT;
+    } else if (prefix == "HKU" || prefix == "HKEY_USERS") {
+        hive = HKEY_USERS;
+    } else {
+        return false;
+    }
+    subkey = device_agent::remotedesktop::windows::widen(rest);
+    return true;
+}
+
+// 注册表键是否存在。无法解析路径时返回 false(视作已消失,不阻断后续 fresh 安装)。
+static bool registry_key_exists(const std::string& full) {
+    HKEY hive;
+    std::wstring subkey;
+    if (!parse_registry_hive(full, hive, subkey)) {
+        return false;
+    }
+    HKEY h = nullptr;
+    const LONG r = RegOpenKeyExW(hive, subkey.c_str(), 0, KEY_READ, &h);
+    if (r == ERROR_SUCCESS) {
+        RegCloseKey(h);
+        return true;
+    }
+    return false;
+}
+
+// 装前官方卸载(可选,best-effort,不阻断):跑卸载命令 → 轮询卸载注册表键消失 → 返回。
+// 卸载器异步,不能凭父进程退出码判完成(诊断§3),故以注册表键消失为完成信号。
+// 任何失败(命令起不来 / 键超时未消失)只记 warn 并继续按原样试静默。
+static void run_pre_uninstall(const std::string& command,
+                              const std::string& wait_registry_key_gone,
+                              int timeout_seconds,
+                              const std::string& command_id) {
+    if (command.empty()) {
+        return;
+    }
+    LOG_INFO("pre_uninstall: running uninstall command cmd_id=" + command_id);
+
+    std::wstring cmdline = device_agent::remotedesktop::windows::widen(command);
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    const BOOL ok = CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE,
+                                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        LOG_WARN("pre_uninstall: CreateProcess failed err=" + std::to_string(GetLastError()) +
+                 ", proceeding with install anyway cmd_id=" + command_id);
+    } else {
+        // 卸载器父进程通常很快返回(自拷临时副本后异步卸载);等其退出但不据此判完成。
+        WaitForSingleObject(pi.hProcess, 60UL * 1000UL);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+
+    if (wait_registry_key_gone.empty()) {
+        return;  // 没给检测键 → 不轮询,直接进 fresh 试静默。
+    }
+
+    const int limit = timeout_seconds > 0 ? timeout_seconds : 60;
+    int waited = 0;
+    while (registry_key_exists(wait_registry_key_gone)) {
+        if (waited >= limit) {
+            LOG_WARN("pre_uninstall: registry key still present after " + std::to_string(limit) +
+                     "s, proceeding with install anyway cmd_id=" + command_id);
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        waited += 2;
+    }
+    LOG_INFO("pre_uninstall: uninstall registry key gone after " + std::to_string(waited) +
+             "s, proceeding fresh cmd_id=" + command_id);
+}
+#endif  // _WIN32
+
 static void maybe_install_windows_package(
         const DownloadRequest& req,
         const std::shared_ptr<Executor>& executor,
@@ -152,7 +244,10 @@ static void maybe_install_windows_package(
         const std::string& action_type,
         const std::string& install_args,
         const std::string& install_success_codes,
-        int silent_probe_timeout_seconds) {
+        int silent_probe_timeout_seconds,
+        const std::string& pre_uninstall_command,
+        const std::string& pre_uninstall_wait_registry_key_gone,
+        int pre_uninstall_timeout_seconds) {
 #ifdef _WIN32
     // 安装意图触发判据 = 显式 action_type 或 install_args 非空。
     // 两者皆空 = 纯下载,行为不变(D5:APK/system 不受影响)。
@@ -225,6 +320,12 @@ static void maybe_install_windows_package(
             telemetry.web_seed_bytes));
     }
 
+    // 可选装前官方卸载(复装→fresh):best-effort,失败不阻断,继续按原样试静默。
+    if (!pre_uninstall_command.empty()) {
+        run_pre_uninstall(pre_uninstall_command, pre_uninstall_wait_registry_key_gone,
+                          pre_uninstall_timeout_seconds, req.command_id);
+    }
+
     std::string install_err;
     const InstallOutcome outcome = executor->installPackage(
         package_path, effective_args, effective_codes,
@@ -271,6 +372,9 @@ static void maybe_install_windows_package(
     (void)install_args;
     (void)install_success_codes;
     (void)silent_probe_timeout_seconds;
+    (void)pre_uninstall_command;
+    (void)pre_uninstall_wait_registry_key_gone;
+    (void)pre_uninstall_timeout_seconds;
 #endif
 }
 
@@ -525,8 +629,10 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
     } else if (cmd_type == "download_ready") {
         std::string batch_id, file_id, file_type, url, torrent_url, magnet_uri, sha256;
         std::string action_type, install_args, install_success_codes;
+        std::string pre_uninstall_command, pre_uninstall_wait_registry_key_gone;
         int64_t file_size = 0;
         int64_t silent_probe_timeout_seconds = 120;  // 软超时缺省 120s
+        int64_t pre_uninstall_timeout_seconds = 60;  // 注册表键消失轮询上限缺省 60s
         extract_json_string(payload, "batch_id", batch_id);
         extract_json_string(payload, "file_id", file_id);
         extract_json_string(payload, "file_type", file_type);
@@ -538,6 +644,12 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "install_args", install_args);
         extract_json_string(payload, "install_success_codes", install_success_codes);
         extract_json_int64(payload, "silent_probe_timeout_seconds", silent_probe_timeout_seconds);
+        // 装前官方卸载(可选平铺键,复装→fresh):command 含完整卸载命令行,
+        // wait_registry_key_gone 为卸载注册表键全路径,以其消失判卸载完成。
+        extract_json_string(payload, "pre_uninstall_command", pre_uninstall_command);
+        extract_json_string(payload, "pre_uninstall_wait_registry_key_gone",
+                            pre_uninstall_wait_registry_key_gone);
+        extract_json_int64(payload, "pre_uninstall_timeout_seconds", pre_uninstall_timeout_seconds);
         extract_json_int64(payload, "file_size", file_size);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
@@ -627,7 +739,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                 },
                 [req, executor, release_status_reporter, last_downloaded_bytes,
                  action_type, install_args, install_success_codes,
-                 silent_probe_timeout_seconds](
+                 silent_probe_timeout_seconds, pre_uninstall_command,
+                 pre_uninstall_wait_registry_key_gone, pre_uninstall_timeout_seconds](
                         bool ok,
                         const std::string& err,
                         const DownloadCompletionTelemetry& telemetry) {
@@ -667,7 +780,10 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                             action_type,
                             install_args,
                             install_success_codes,
-                            static_cast<int>(silent_probe_timeout_seconds));
+                            static_cast<int>(silent_probe_timeout_seconds),
+                            pre_uninstall_command,
+                            pre_uninstall_wait_registry_key_gone,
+                            static_cast<int>(pre_uninstall_timeout_seconds));
                     }
                 });
             result.set_status("success");

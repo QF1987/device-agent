@@ -261,6 +261,40 @@ int main() {
 
 #ifndef _WIN32
     {
+        // pre_uninstall 平铺键(Slice E4)存在时,download_ready 仍正常分发下载;非 Windows
+        // 平台 install/pre_uninstall 分支整体 no-op,新键 inert(回归:不破坏纯下载链路)。
+        std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
+        auto fake = std::make_shared<FakeDownloadManager>();
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        handler.set_download_manager(fake);
+        handler.set_release_status_reporter(
+            [&reports](const terminal_agent::v1::ReleaseStatusRequest& report) {
+                reports.push_back(report);
+                return true;
+            });
+
+        terminal_agent::v1::Command cmd;
+        cmd.set_command_id("cmd-preuninstall");
+        cmd.set_command_type("download_ready");
+        cmd.set_payload_json(
+            "{\"batch_id\":\"batch-1\",\"file_id\":\"file-1\",\"file_type\":\"windows_app\","
+            "\"download_url\":\"http://127.0.0.1:18080/file.bin\",\"sha256\":\"abc\","
+            "\"file_size\":1024,"
+            "\"install_args\":\"/VERYSILENT\",\"install_success_codes\":\"0,3010\","
+            "\"pre_uninstall_command\":\"C:\\\\App\\\\unins000.exe /VERYSILENT\","
+            "\"pre_uninstall_wait_registry_key_gone\":\"HKLM\\\\SOFTWARE\\\\X\\\\Uninstall\\\\Y_is1\","
+            "\"pre_uninstall_timeout_seconds\":30}");
+        const auto result = handler.execute_sync(cmd, 0);
+        ok &= expect(result.status() == "success",
+                     "download_ready with pre_uninstall keys should still dispatch");
+        ok &= expect(fake->requests.size() == 1,
+                     "pre_uninstall payload should still reach download manager");
+        ok &= expect(reports.size() == 3,
+                     "non-Windows pre_uninstall payload should report downloading/progress/downloaded only");
+    }
+
+    {
         // install_attended 是已识别命令(非 "unknown command type");非 Windows 平台明确不支持。
         device_agent::CommandHandler handler(
             [](const terminal_agent::v1::CommandResult&) { return true; });
