@@ -14,6 +14,8 @@
 
 #ifdef _WIN32
 #include "download/windows_download_manager.h"
+#include "remotedesktop/platform/windows/windows_session_launcher.h"
+#include <windows.h>
 #endif
 
 #ifdef __ANDROID__
@@ -271,6 +273,124 @@ static void maybe_install_windows_package(
     (void)silent_probe_timeout_seconds;
 #endif
 }
+
+#ifdef _WIN32
+// 退出码是否命中成功集(逗号分隔;空集按 0)。
+static bool attended_exit_code_succeeded(DWORD code, const std::string& successCodes) {
+    std::stringstream ss(successCodes.empty() ? "0" : successCodes);
+    std::string part;
+    bool any = false;
+    while (std::getline(ss, part, ',')) {
+        const size_t a = part.find_first_not_of(" \t");
+        if (a == std::string::npos) continue;
+        const size_t b = part.find_last_not_of(" \t");
+        part = part.substr(a, b - a + 1);
+        char* end = nullptr;
+        const long v = std::strtol(part.c_str(), &end, 10);
+        if (end != part.c_str() && *end == '\0' && v >= 0) {
+            any = true;
+            if (static_cast<DWORD>(v) == code) {
+                return true;
+            }
+        }
+    }
+    return !any && code == 0;
+}
+
+// install_attended:把安装器以**交互模式**(默认去 silent 开关)用提权链接令牌拉到
+// 活动会话桌面(免 UAC),供 operator 经 VNC 人工点完;等进程退出按成功码报
+// INSTALLED / INSTALL_FAILED。仅 operator 显式下发触发(非自动,防 kiosk 顾客误见)。
+static void run_windows_attended_install(
+        const DownloadRequest& req,
+        const CommandHandler::ReleaseStatusReporter& release_status_reporter,
+        const std::string& attended_args,
+        const std::string& install_success_codes,
+        int attended_timeout_seconds,
+        std::string& result_status,
+        std::string& result_message) {
+    namespace rdw = device_agent::remotedesktop::windows;
+
+    const std::string package_path = windows_resolve_dest_path(req);
+    const DWORD attrs = GetFileAttributesW(rdw::widen(package_path).c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        result_status = "failed";
+        result_message = "package file not found: " + package_path;
+        LOG_ERROR("install_attended: " + result_message);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
+    }
+
+    std::wstring cmdline = rdw::quoteArg(package_path);
+    if (!attended_args.empty()) {
+        cmdline += L" ";
+        cmdline += rdw::widen(attended_args);
+    }
+
+    if (release_status_reporter) {
+        release_status_reporter(make_release_status(
+            req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING, 0));
+    }
+
+    PROCESS_INFORMATION pi{};
+    bool used_elevated = false;
+    std::string launch_err;
+    if (!rdw::launchInActiveConsoleSessionElevated(cmdline, pi, used_elevated, launch_err)) {
+        result_status = "failed";
+        result_message = "attended launch failed: " + launch_err;
+        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
+    }
+    LOG_INFO(std::string("install_attended: launched in active session elevated_token=") +
+             (used_elevated ? "yes" : "no") + " cmd_id=" + req.command_id);
+
+    const DWORD timeout_ms = attended_timeout_seconds > 0
+                                 ? static_cast<DWORD>(attended_timeout_seconds) * 1000UL
+                                 : 3600UL * 1000UL;
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, timeout_ms);
+    if (wait_result == WAIT_TIMEOUT) {
+        // 人工迟迟未完成:不杀(避免毁掉进行中的人工安装),保持 INSTALLING,留待人工/后续探测。
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        result_status = "success";
+        result_message = "attended installer launched; still running at timeout, left to operator";
+        LOG_WARN("install_attended: still running at timeout cmd_id=" + req.command_id);
+        return;
+    }
+
+    DWORD exit_code = 0;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    if (attended_exit_code_succeeded(exit_code, install_success_codes)) {
+        result_status = "success";
+        result_message = "attended install completed exit_code=" + std::to_string(exit_code);
+        LOG_INFO("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED, 0));
+        }
+    } else {
+        result_status = "failed";
+        result_message = "attended install exit_code=" + std::to_string(exit_code);
+        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+    }
+}
+#endif  // _WIN32
 
 // ─── CommandHandler 实现 ───────────────────────────────────
 
@@ -553,6 +673,50 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
             result.set_status("success");
             result.set_message("download dispatched");
         }
+
+    } else if (cmd_type == "install_attended") {
+#ifdef _WIN32
+        std::string batch_id, file_id, file_type, attended_args, install_success_codes;
+        int64_t attended_timeout_seconds = 3600;  // 人工交互安装默认上限 1 小时
+        extract_json_string(payload, "batch_id", batch_id);
+        extract_json_string(payload, "file_id", file_id);
+        extract_json_string(payload, "file_type", file_type);
+        // 交互模式默认裸跑(去 silent 开关);operator 如显式给 install_args 则附加。
+        extract_json_string(payload, "install_args", attended_args);
+        extract_json_string(payload, "install_success_codes", install_success_codes);
+        extract_json_int64(payload, "attended_timeout_seconds", attended_timeout_seconds);
+
+        ReleaseStatusReporter release_status_reporter;
+        std::string download_directory;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            release_status_reporter = release_status_reporter_;
+            download_directory = download_directory_;
+        }
+        if (batch_id.empty() || file_id.empty()) {
+            err_msg = "invalid payload: missing batch_id/file_id for install_attended";
+            result.set_status("failed");
+            result.set_message(err_msg);
+        } else {
+            DownloadRequest req;
+            req.dest_path = download_directory;
+            req.batch_id = batch_id;
+            req.file_id = file_id;
+            req.command_id = cmd.command_id();
+            req.file_type = file_type;
+            std::string status_out, message_out;
+            run_windows_attended_install(req, release_status_reporter, attended_args,
+                                         install_success_codes,
+                                         static_cast<int>(attended_timeout_seconds),
+                                         status_out, message_out);
+            result.set_status(status_out);
+            result.set_message(message_out);
+        }
+#else
+        err_msg = "install_attended is only supported on Windows";
+        result.set_status("failed");
+        result.set_message(err_msg);
+#endif
 
     } else {
         err_msg = "unknown command type: " + cmd_type;

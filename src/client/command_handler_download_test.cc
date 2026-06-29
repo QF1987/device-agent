@@ -259,6 +259,25 @@ int main() {
     }
 #endif
 
+#ifndef _WIN32
+    {
+        // install_attended 是已识别命令(非 "unknown command type");非 Windows 平台明确不支持。
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        terminal_agent::v1::Command cmd;
+        cmd.set_command_id("cmd-attended");
+        cmd.set_command_type("install_attended");
+        cmd.set_payload_json("{\"batch_id\":\"batch-1\",\"file_id\":\"file-1\"}");
+        const auto result = handler.execute_sync(cmd, 0);
+        ok &= expect(result.status() == "failed",
+                     "install_attended should fail on non-Windows");
+        ok &= expect(result.message().find("only supported on Windows") != std::string::npos,
+                     "install_attended non-Windows message should say only supported on Windows");
+        ok &= expect(result.message().find("unknown command type") == std::string::npos,
+                     "install_attended must be a recognized command type");
+    }
+#endif
+
     {
         std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
         auto fake = std::make_shared<FakeDownloadManager>();
