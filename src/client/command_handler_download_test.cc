@@ -42,24 +42,29 @@ public:
     void updateConfig(const std::string&, const std::string&, std::string&) override {}
     void upgradeFirmware(const std::string&, const std::string&, std::string&) override {}
     void upgradeApp(const std::string&, const std::string&, const std::string&, std::string&) override {}
-    void installPackage(const std::string& packagePath,
-                        const std::string& args,
-                        const std::string& successCodes,
-                        const std::string& command_id,
-                        std::string& err) override {
+    device_agent::InstallOutcome installPackage(const std::string& packagePath,
+                                                const std::string& args,
+                                                const std::string& successCodes,
+                                                int softTimeoutSeconds,
+                                                const std::string& command_id,
+                                                std::string& err) override {
         install_calls++;
         last_package_path = packagePath;
         last_args = args;
         last_success_codes = successCodes;
+        last_soft_timeout_seconds = softTimeoutSeconds;
         last_command_id = command_id;
         err = install_error;
+        return install_outcome;
     }
 
     int install_calls = 0;
+    device_agent::InstallOutcome install_outcome = device_agent::InstallOutcome::SUCCESS;
     std::string install_error;
     std::string last_package_path;
     std::string last_args;
     std::string last_success_codes;
+    int last_soft_timeout_seconds = 0;
     std::string last_command_id;
 };
 
@@ -171,6 +176,8 @@ int main() {
                      "install args should be forwarded");
         ok &= expect(executor->last_success_codes == "0,3010",
                      "success codes should be forwarded");
+        ok &= expect(executor->last_soft_timeout_seconds == 120,
+                     "soft probe timeout should default to 120s when payload omits it");
         ok &= expect(reports.size() == 5,
                      "install success path should report downloading/progress/downloaded/installing/installed");
         if (reports.size() >= 5) {
@@ -187,6 +194,7 @@ int main() {
         std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
         auto fake = std::make_shared<FakeDownloadManager>();
         auto executor = std::make_shared<FakeExecutor>();
+        executor->install_outcome = device_agent::InstallOutcome::FAILED;
         executor->install_error = "installer exit code 5";
         device_agent::CommandHandler handler(
             [](const terminal_agent::v1::CommandResult&) { return true; });
@@ -211,6 +219,42 @@ int main() {
                          "install failure path should set INSTALL_ERROR");
             ok &= expect(reports[4].error_message() == "installer exit code 5",
                          "install failure path should forward install error");
+        }
+    }
+
+    {
+        // NEEDS_ATTENDED:试静默软超时 → 复用 INSTALL_FAILED + BUSINESS_ERROR + sentinel。
+        std::vector<terminal_agent::v1::ReleaseStatusRequest> reports;
+        auto fake = std::make_shared<FakeDownloadManager>();
+        auto executor = std::make_shared<FakeExecutor>();
+        executor->install_outcome = device_agent::InstallOutcome::NEEDS_ATTENDED;
+        executor->install_error = "silent install timed out after 120s, needs attended install";
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        handler.set_download_manager(fake);
+        handler.set_executor(executor);
+        handler.set_download_directory("C:\\DeviceAgent\\downloads");
+        handler.set_release_status_reporter(
+            [&reports](const terminal_agent::v1::ReleaseStatusRequest& report) {
+                reports.push_back(report);
+                return true;
+            });
+
+        const auto result = handler.execute_sync(make_download_ready_command("", true), 0);
+
+        ok &= expect(result.status() == "success", "needs-attended command should still dispatch");
+        ok &= expect(executor->install_calls == 1, "needs-attended should call installPackage once");
+        ok &= expect(reports.size() == 5,
+                     "needs-attended path should report downloading/progress/downloaded/installing/install_failed");
+        if (reports.size() >= 5) {
+            ok &= expect(reports[4].status() == terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
+                         "needs-attended path should report install_failed status");
+            ok &= expect(reports[4].error_code() == terminal_agent::v1::RELEASE_ERROR_CODE_BUSINESS_ERROR,
+                         "needs-attended path should set BUSINESS_ERROR");
+            ok &= expect(reports[4].error_message().rfind("NEEDS_ATTENDED:", 0) == 0,
+                         "needs-attended path should carry NEEDS_ATTENDED: sentinel prefix");
+            ok &= expect(reports[4].error_message().find("package=") != std::string::npos,
+                         "needs-attended sentinel should include package path");
         }
     }
 #endif

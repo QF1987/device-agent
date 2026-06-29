@@ -8,6 +8,7 @@
 #include "client/command_handler.h"
 #include "config/p2p_config_store.h"
 #include "executor/executor.h"
+#include "executor/installer_classifier.h"
 #include "download/idownload_manager.h"
 #include "logger/logger.h"
 
@@ -146,29 +147,68 @@ static void maybe_install_windows_package(
         const CommandHandler::ReleaseStatusReporter& release_status_reporter,
         int64_t final_bytes,
         const DownloadCompletionTelemetry& telemetry,
+        const std::string& action_type,
         const std::string& install_args,
-        const std::string& install_success_codes) {
+        const std::string& install_success_codes,
+        int silent_probe_timeout_seconds) {
 #ifdef _WIN32
-    if (install_args.empty()) {
+    // 安装意图触发判据 = 显式 action_type 或 install_args 非空。
+    // 两者皆空 = 纯下载,行为不变(D5:APK/system 不受影响)。
+    const bool install_requested = !action_type.empty() || !install_args.empty();
+    if (!install_requested) {
         return;
     }
-    if (!executor) {
-        LOG_ERROR("download_ready: install requested but executor is not configured");
+
+    // 缺省/兼容 = run_installer;其它部署动作本期未支持,留口报失败。
+    const std::string effective_action =
+        action_type.empty() ? std::string("run_installer") : action_type;
+
+    auto report_install_failed = [&](terminal_agent::v1::ReleaseErrorCode error_code,
+                                     const std::string& message) {
         if (release_status_reporter) {
             release_status_reporter(make_release_status(
                 req,
                 terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
                 final_bytes,
-                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
-                "executor is not configured",
+                error_code,
+                message,
                 telemetry.completion_path,
                 telemetry.peer_bytes,
                 telemetry.web_seed_bytes));
         }
+    };
+
+    if (effective_action != "run_installer") {
+        LOG_ERROR("download_ready: unsupported action_type=" + effective_action +
+                  " cmd_id=" + req.command_id);
+        report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                              "unsupported action_type: " + effective_action);
+        return;
+    }
+
+    if (!executor) {
+        LOG_ERROR("download_ready: install requested but executor is not configured");
+        report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                              "executor is not configured");
         return;
     }
 
     const std::string package_path = windows_resolve_dest_path(req);
+
+    // operator 未给 install_args 时,按安装包家族补默认静默开关 + 成功退出码。
+    std::string effective_args = install_args;
+    std::string effective_codes = install_success_codes;
+    if (effective_args.empty()) {
+        const InstallerFamily family = classify_installer(package_path);
+        effective_args = default_silent_args(family);
+        if (effective_codes.empty()) {
+            effective_codes = default_success_codes(family);
+        }
+        LOG_INFO(std::string("download_ready: install_args empty, classified family=") +
+                 installer_family_name(family) + " default_args=" + effective_args +
+                 " cmd_id=" + req.command_id);
+    }
+
     LOG_INFO("download_ready: starting silent install package=" + package_path +
              " cmd_id=" + req.command_id);
     if (release_status_reporter) {
@@ -184,34 +224,40 @@ static void maybe_install_windows_package(
     }
 
     std::string install_err;
-    executor->installPackage(package_path, install_args, install_success_codes,
-                             req.command_id, install_err);
-    if (install_err.empty()) {
-        LOG_INFO("download_ready: silent install succeeded cmd_id=" + req.command_id);
-        if (release_status_reporter) {
-            release_status_reporter(make_release_status(
-                req,
-                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED,
-                final_bytes,
-                terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
-                "",
-                telemetry.completion_path,
-                telemetry.peer_bytes,
-                telemetry.web_seed_bytes));
+    const InstallOutcome outcome = executor->installPackage(
+        package_path, effective_args, effective_codes,
+        silent_probe_timeout_seconds, req.command_id, install_err);
+
+    switch (outcome) {
+        case InstallOutcome::SUCCESS:
+            LOG_INFO("download_ready: silent install succeeded cmd_id=" + req.command_id);
+            if (release_status_reporter) {
+                release_status_reporter(make_release_status(
+                    req,
+                    terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED,
+                    final_bytes,
+                    terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+                    "",
+                    telemetry.completion_path,
+                    telemetry.peer_bytes,
+                    telemetry.web_seed_bytes));
+            }
+            break;
+        case InstallOutcome::NEEDS_ATTENDED: {
+            // 零 proto:复用 INSTALL_FAILED + BUSINESS_ERROR + "NEEDS_ATTENDED:" sentinel,
+            // 由 backend(E2)识别前缀物化为 needs_attended 子态。
+            const std::string sentinel =
+                "NEEDS_ATTENDED: " + (install_err.empty() ? "silent probe timed out" : install_err) +
+                " package=" + package_path;
+            LOG_WARN("download_ready: silent install needs attended: " + sentinel);
+            report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_BUSINESS_ERROR, sentinel);
+            break;
         }
-    } else {
-        LOG_ERROR("download_ready: silent install failed: " + install_err);
-        if (release_status_reporter) {
-            release_status_reporter(make_release_status(
-                req,
-                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
-                final_bytes,
-                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
-                install_err,
-                telemetry.completion_path,
-                telemetry.peer_bytes,
-                telemetry.web_seed_bytes));
-        }
+        case InstallOutcome::FAILED:
+        default:
+            LOG_ERROR("download_ready: silent install failed: " + install_err);
+            report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, install_err);
+            break;
     }
 #else
     (void)req;
@@ -219,8 +265,10 @@ static void maybe_install_windows_package(
     (void)release_status_reporter;
     (void)final_bytes;
     (void)telemetry;
+    (void)action_type;
     (void)install_args;
     (void)install_success_codes;
+    (void)silent_probe_timeout_seconds;
 #endif
 }
 
@@ -356,8 +404,9 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
 
     } else if (cmd_type == "download_ready") {
         std::string batch_id, file_id, file_type, url, torrent_url, magnet_uri, sha256;
-        std::string install_args, install_success_codes;
+        std::string action_type, install_args, install_success_codes;
         int64_t file_size = 0;
+        int64_t silent_probe_timeout_seconds = 120;  // 软超时缺省 120s
         extract_json_string(payload, "batch_id", batch_id);
         extract_json_string(payload, "file_id", file_id);
         extract_json_string(payload, "file_type", file_type);
@@ -365,8 +414,10 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "torrent_url", torrent_url);
         extract_json_string(payload, "magnet_uri", magnet_uri);
         extract_json_string(payload, "sha256", sha256);
+        extract_json_string(payload, "action_type", action_type);
         extract_json_string(payload, "install_args", install_args);
         extract_json_string(payload, "install_success_codes", install_success_codes);
+        extract_json_int64(payload, "silent_probe_timeout_seconds", silent_probe_timeout_seconds);
         extract_json_int64(payload, "file_size", file_size);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
@@ -455,7 +506,8 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                     }
                 },
                 [req, executor, release_status_reporter, last_downloaded_bytes,
-                 install_args, install_success_codes](
+                 action_type, install_args, install_success_codes,
+                 silent_probe_timeout_seconds](
                         bool ok,
                         const std::string& err,
                         const DownloadCompletionTelemetry& telemetry) {
@@ -492,8 +544,10 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                             release_status_reporter,
                             final_bytes,
                             telemetry,
+                            action_type,
                             install_args,
-                            install_success_codes);
+                            install_success_codes,
+                            static_cast<int>(silent_probe_timeout_seconds));
                     }
                 });
             result.set_status("success");

@@ -20,6 +20,16 @@
 
 namespace device_agent {
 
+// ─── InstallOutcome：桌面端静默安装三态结果（Slice E1） ───
+//   SUCCESS        ：命中成功退出码，安装成功 → INSTALLED
+//   NEEDS_ATTENDED ：软超时（卡交互框）→ 需人工接管，上报 NEEDS_ATTENDED sentinel
+//   FAILED         ：非成功退出码 / 启动失败 → INSTALL_FAILED
+enum class InstallOutcome {
+    SUCCESS = 0,
+    NEEDS_ATTENDED,
+    FAILED,
+};
+
 // ─── Executor：平台执行器抽象接口 ─────────────────────────
 // 所有平台执行器必须实现此接口。
 // device-agent 核心通过此接口执行系统操作，不直接调用系统 API。
@@ -54,23 +64,29 @@ public:
     // 注意：LinuxExecutor 此方法永远返回 "not supported"
     virtual void upgradeApp(const std::string& apkUrl, const std::string& md5, const std::string& command_id, std::string& err) = 0;
 
-    // installPackage：桌面端静默安装本地安装包。
+    // installPackage：桌面端试静默安装本地安装包（三态判定，Slice E1）。
     //   packagePath：本地安装包路径
     //   args：静默安装参数
     //   successCodes：逗号分隔的成功退出码，空时按 0
+    //   softTimeoutSeconds：试静默软超时（秒，<=0 按缺省 120）；命中即判 NEEDS_ATTENDED。
+    //                       外层另有硬 30 分钟兜底封顶。
     //   command_id：指令 UUID，用于日志串联
-    //   err：失败时填充错误描述
+    //   err：填充错误/原因描述（NEEDS_ATTENDED 时为超时原因）
+    // 返回：InstallOutcome 三态。
     // 默认实现保持非 Windows 平台现状：不支持安装型 release。
-    virtual void installPackage(const std::string& packagePath,
-                                const std::string& args,
-                                const std::string& successCodes,
-                                const std::string& command_id,
-                                std::string& err) {
+    virtual InstallOutcome installPackage(const std::string& packagePath,
+                                          const std::string& args,
+                                          const std::string& successCodes,
+                                          int softTimeoutSeconds,
+                                          const std::string& command_id,
+                                          std::string& err) {
         (void)packagePath;
         (void)args;
         (void)successCodes;
+        (void)softTimeoutSeconds;
         (void)command_id;
         err = "installPackage is only supported on Windows";
+        return InstallOutcome::FAILED;
     }
 };
 
@@ -103,11 +119,12 @@ public:
     void updateConfig(const std::string& key, const std::string& value, std::string& err) override;
     void upgradeFirmware(const std::string& url, const std::string& md5, std::string& err) override;
     void upgradeApp(const std::string& appPath, const std::string& md5, const std::string& command_id, std::string& err) override;
-    void installPackage(const std::string& packagePath,
-                        const std::string& args,
-                        const std::string& successCodes,
-                        const std::string& command_id,
-                        std::string& err) override;
+    InstallOutcome installPackage(const std::string& packagePath,
+                                  const std::string& args,
+                                  const std::string& successCodes,
+                                  int softTimeoutSeconds,
+                                  const std::string& command_id,
+                                  std::string& err) override;
 };
 #endif
 

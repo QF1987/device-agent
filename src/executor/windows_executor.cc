@@ -19,7 +19,10 @@ namespace device_agent {
 
 namespace {
 
-constexpr DWORD kInstallPackageTimeoutMs = 30UL * 60UL * 1000UL;
+// 硬兜底封顶：软超时再大也不超过 30 分钟（防 silent_probe_timeout_seconds 被配成超长值）。
+constexpr DWORD kInstallHardCapMs = 30UL * 60UL * 1000UL;
+// 软超时缺省（秒）：试静默卡交互框时据此判 NEEDS_ATTENDED。
+constexpr int kInstallSoftTimeoutDefaultSec = 120;
 
 std::wstring utf8_to_wide(const std::string& s) {
     if (s.empty()) {
@@ -159,22 +162,23 @@ void WindowsExecutor::upgradeApp(const std::string& appPath,
     err = "upgradeApp is only supported on Android";
 }
 
-void WindowsExecutor::installPackage(const std::string& packagePath,
-                                     const std::string& args,
-                                     const std::string& successCodes,
-                                     const std::string& command_id,
-                                     std::string& err) {
+InstallOutcome WindowsExecutor::installPackage(const std::string& packagePath,
+                                               const std::string& args,
+                                               const std::string& successCodes,
+                                               int softTimeoutSeconds,
+                                               const std::string& command_id,
+                                               std::string& err) {
     LOG_INFO("WindowsExecutor: installPackage cmd_id=" + command_id + " path=" + packagePath);
     if (packagePath.empty()) {
         err = "package path is empty";
-        return;
+        return InstallOutcome::FAILED;
     }
 
     const DWORD attrs = GetFileAttributesW(utf8_to_wide(packagePath).c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
         err = "package file not found: " + packagePath;
         LOG_ERROR("WindowsExecutor: " + err);
-        return;
+        return InstallOutcome::FAILED;
     }
 
     const std::wstring app = utf8_to_wide(packagePath);
@@ -206,18 +210,29 @@ void WindowsExecutor::installPackage(const std::string& packagePath,
         const DWORD code = GetLastError();
         err = "CreateProcess failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
         LOG_ERROR("WindowsExecutor: " + err);
-        return;
+        return InstallOutcome::FAILED;
     }
 
-    LOG_INFO("WindowsExecutor: installer started cmd_id=" + command_id);
-    const DWORD wait_result = WaitForSingleObject(pi.hProcess, kInstallPackageTimeoutMs);
+    // 软超时：试静默卡交互框时据此判 NEEDS_ATTENDED；硬 30min 仅作封顶兜底。
+    const int soft_sec = softTimeoutSeconds > 0 ? softTimeoutSeconds
+                                                : kInstallSoftTimeoutDefaultSec;
+    DWORD soft_ms = (static_cast<DWORD>(soft_sec) > kInstallHardCapMs / 1000UL)
+                        ? kInstallHardCapMs
+                        : static_cast<DWORD>(soft_sec) * 1000UL;
+
+    LOG_INFO("WindowsExecutor: installer started cmd_id=" + command_id +
+             " soft_timeout_s=" + std::to_string(soft_ms / 1000UL));
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, soft_ms);
     if (wait_result == WAIT_TIMEOUT) {
+        // 软超时未拿到退出码 → 判定卡交互框 → 杀进程并转人工接管。
+        // 卡点在文件释放前（诊断 §2），TerminateProcess 不会留半装残态。
         TerminateProcess(pi.hProcess, 1);
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
-        err = "installer timed out after 30 minutes";
-        LOG_ERROR("WindowsExecutor: " + err + " cmd_id=" + command_id);
-        return;
+        err = "silent install timed out after " + std::to_string(soft_ms / 1000UL) +
+              "s, needs attended install";
+        LOG_WARN("WindowsExecutor: " + err + " cmd_id=" + command_id);
+        return InstallOutcome::NEEDS_ATTENDED;
     }
     if (wait_result == WAIT_FAILED) {
         const DWORD code = GetLastError();
@@ -225,7 +240,7 @@ void WindowsExecutor::installPackage(const std::string& packagePath,
         CloseHandle(pi.hProcess);
         err = "WaitForSingleObject failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
         LOG_ERROR("WindowsExecutor: " + err);
-        return;
+        return InstallOutcome::FAILED;
     }
 
     DWORD exit_code = 0;
@@ -235,7 +250,7 @@ void WindowsExecutor::installPackage(const std::string& packagePath,
         CloseHandle(pi.hProcess);
         err = "GetExitCodeProcess failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
         LOG_ERROR("WindowsExecutor: " + err);
-        return;
+        return InstallOutcome::FAILED;
     }
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
@@ -245,10 +260,11 @@ void WindowsExecutor::installPackage(const std::string& packagePath,
         err = "installer exit code " + std::to_string(exit_code) +
               " not in success codes: " + (successCodes.empty() ? "0" : successCodes);
         LOG_ERROR("WindowsExecutor: " + err);
-        return;
+        return InstallOutcome::FAILED;
     }
     LOG_INFO("WindowsExecutor: installer completed successfully exit_code=" +
              std::to_string(exit_code) + " cmd_id=" + command_id);
+    return InstallOutcome::SUCCESS;
 }
 
 }  // namespace device_agent
