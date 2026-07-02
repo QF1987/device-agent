@@ -24,6 +24,13 @@ bool launchInActiveConsoleSessionElevated(const std::wstring& command_line,
                                           PROCESS_INFORMATION& process_info,
                                           bool& used_elevated_token,
                                           std::string& err);
+bool launchApplicationInActiveConsoleSessionElevated(const std::wstring& application_path,
+                                                     const std::wstring& arguments,
+                                                     const std::wstring& working_directory,
+                                                     PROCESS_INFORMATION& process_info,
+                                                     bool& used_elevated_token,
+                                                     std::string& diagnostics,
+                                                     std::string& err);
 std::wstring quoteArg(const std::string& arg);
 std::wstring widen(const std::string& value);
 

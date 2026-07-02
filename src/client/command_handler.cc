@@ -15,6 +15,7 @@
 #ifdef _WIN32
 #include "download/windows_download_manager.h"
 #include "remotedesktop/platform/windows/windows_session_launcher.h"
+#include <tlhelp32.h>
 #include <windows.h>
 #endif
 
@@ -34,12 +35,41 @@
 #include <chrono>
 #include <memory>
 #include <algorithm>
+#include <cwctype>
+#include <filesystem>
 
 namespace device_agent {
 
 // ─── 工具函数 ─────────────────────────────────────────────
 
-// 简单的 JSON 解析（提取字符串值）
+static bool append_json_escape(char esc, std::string& out) {
+    switch (esc) {
+        case '"':
+        case '\\':
+        case '/':
+            out.push_back(esc);
+            return true;
+        case 'b':
+            out.push_back('\b');
+            return true;
+        case 'f':
+            out.push_back('\f');
+            return true;
+        case 'n':
+            out.push_back('\n');
+            return true;
+        case 'r':
+            out.push_back('\r');
+            return true;
+        case 't':
+            out.push_back('\t');
+            return true;
+        default:
+            return false;
+    }
+}
+
+// 简单的 JSON 解析（提取字符串值）。处理常见转义,避免 Windows 路径和带引号命令被截断。
 static bool extract_json_string(const std::string& json, const std::string& key, std::string& out) {
     std::string q = "\"" + key + "\"";
     size_t pos = json.find(q);
@@ -51,11 +81,35 @@ static bool extract_json_string(const std::string& json, const std::string& key,
     size_t quote = json.find('"', colon);
     if (quote == std::string::npos) return false;
 
-    size_t end_quote = json.find('"', quote + 1);
-    if (end_quote == std::string::npos) return false;
-
-    out = json.substr(quote + 1, end_quote - quote - 1);
-    return true;
+    std::string value;
+    bool escaping = false;
+    for (size_t i = quote + 1; i < json.size(); ++i) {
+        const char c = json[i];
+        if (escaping) {
+            if (c == 'u') {
+                // 当前 payload 只用 ASCII/UTF-8 路径和参数；保留 unicode escape 原文,
+                // 避免静默产出错误字符。
+                if (i + 4 >= json.size()) return false;
+                value.append("\\u");
+                value.append(json.substr(i + 1, 4));
+                i += 4;
+            } else if (!append_json_escape(c, value)) {
+                return false;
+            }
+            escaping = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaping = true;
+            continue;
+        }
+        if (c == '"') {
+            out = value;
+            return true;
+        }
+        value.push_back(c);
+    }
+    return false;
 }
 
 // 简单的 JSON 解析（提取 bool 值）
@@ -144,6 +198,157 @@ static int64_t progress_report_step_bytes(int64_t total_bytes) {
 }
 
 #ifdef _WIN32
+static std::wstring lower_wide(std::wstring value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) {
+        return static_cast<wchar_t>(std::towlower(ch));
+    });
+    return value;
+}
+
+static std::wstring leaf_name(const std::wstring& path) {
+    const size_t pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos) {
+        return path;
+    }
+    return path.substr(pos + 1);
+}
+
+static std::wstring stem_name(const std::wstring& name) {
+    const size_t pos = name.find_last_of(L'.');
+    if (pos == std::wstring::npos || pos == 0) {
+        return name;
+    }
+    return name.substr(0, pos);
+}
+
+static std::string parent_dir(const std::string& path) {
+    const size_t pos = path.find_last_of("\\/");
+    if (pos == std::string::npos) {
+        return {};
+    }
+    return path.substr(0, pos);
+}
+
+static bool parse_command_executable(const std::string& command, std::string& executable) {
+    executable.clear();
+    size_t pos = 0;
+    while (pos < command.size() && std::isspace(static_cast<unsigned char>(command[pos]))) {
+        ++pos;
+    }
+    if (pos >= command.size()) {
+        return false;
+    }
+    if (command[pos] == '"') {
+        ++pos;
+        while (pos < command.size()) {
+            const char c = command[pos];
+            if (c == '"') {
+                return !executable.empty();
+            }
+            executable.push_back(c);
+            ++pos;
+        }
+        return false;
+    }
+    while (pos < command.size() && !std::isspace(static_cast<unsigned char>(command[pos]))) {
+        executable.push_back(command[pos]);
+        ++pos;
+    }
+    return !executable.empty();
+}
+
+static bool path_exists_w(const std::wstring& path) {
+    if (path.empty()) {
+        return false;
+    }
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static bool package_process_name_matches(const std::wstring& process_name,
+                                         const std::wstring& package_leaf) {
+    const std::wstring proc = lower_wide(process_name);
+    const std::wstring leaf = lower_wide(package_leaf);
+    const std::wstring stem = stem_name(leaf);
+    return proc == leaf || proc == stem || proc == stem + L".exe" || proc == stem + L".tmp" ||
+           proc == stem + L".attended.exe" || proc == stem + L".attended.tmp";
+}
+
+static std::vector<DWORD> collect_package_processes(const std::string& package_path,
+                                                    DWORD exclude_pid) {
+    std::vector<DWORD> pids;
+    const std::wstring package_leaf = leaf_name(device_agent::remotedesktop::windows::widen(package_path));
+    if (package_leaf.empty()) {
+        return pids;
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return pids;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == exclude_pid || pe.th32ProcessID == GetCurrentProcessId()) {
+                continue;
+            }
+            if (package_process_name_matches(pe.szExeFile, package_leaf)) {
+                pids.push_back(pe.th32ProcessID);
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return pids;
+}
+
+static void terminate_process_ids(const std::vector<DWORD>& pids, const std::string& reason) {
+    for (DWORD pid : pids) {
+        HANDLE h = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+        if (!h) {
+            continue;
+        }
+        TerminateProcess(h, 1);
+        WaitForSingleObject(h, 3000);
+        CloseHandle(h);
+        LOG_WARN("install_attended: terminated pid=" + std::to_string(pid) +
+                 " reason=" + reason);
+    }
+}
+
+static void terminate_stale_installers_for_package(const std::string& package_path,
+                                                   const std::string& command_id) {
+    const auto pids = collect_package_processes(package_path, 0);
+    if (pids.empty()) {
+        return;
+    }
+    LOG_WARN("install_attended: cleaning stale installer processes count=" +
+             std::to_string(pids.size()) + " cmd_id=" + command_id);
+    terminate_process_ids(pids, "stale package installer before attended launch");
+}
+
+static bool ensure_attended_exe_copy(const std::string& package_path,
+                                     std::string& attended_path,
+                                     std::string& err) {
+    attended_path = package_path + ".attended.exe";
+    const std::wstring src = device_agent::remotedesktop::windows::widen(package_path);
+    const std::wstring dst = device_agent::remotedesktop::windows::widen(attended_path);
+    if (CreateHardLinkW(dst.c_str(), src.c_str(), nullptr)) {
+        return true;
+    }
+    const DWORD link_error = GetLastError();
+    if (link_error == ERROR_ALREADY_EXISTS) {
+        DeleteFileW(dst.c_str());
+        if (CreateHardLinkW(dst.c_str(), src.c_str(), nullptr)) {
+            return true;
+        }
+    }
+    if (CopyFileW(src.c_str(), dst.c_str(), FALSE)) {
+        return true;
+    }
+    err = "CreateHardLinkW error=" + std::to_string(link_error) +
+          ", CopyFileW error=" + std::to_string(GetLastError());
+    return false;
+}
+
 // pre_uninstall:把注册表全路径(如 HKLM\SOFTWARE\WOW6432Node\...\Uninstall\{AppId}_is1)
 // 拆成 hive + 子键路径。支持 HKLM/HKCU/HKCR/HKU 及其全称。
 static bool parse_registry_hive(const std::string& full, HKEY& hive, std::wstring& subkey) {
@@ -199,12 +404,28 @@ static void run_pre_uninstall(const std::string& command,
     }
     LOG_INFO("pre_uninstall: running uninstall command cmd_id=" + command_id);
 
+    std::string executable;
+    const bool has_executable = parse_command_executable(command, executable);
+    const std::string install_dir = has_executable ? parent_dir(executable) : std::string();
+    const std::wstring executable_w =
+        has_executable ? device_agent::remotedesktop::windows::widen(executable) : std::wstring();
+    const std::wstring install_dir_w =
+        install_dir.empty() ? std::wstring()
+                            : device_agent::remotedesktop::windows::widen(install_dir);
     std::wstring cmdline = device_agent::remotedesktop::windows::widen(command);
     STARTUPINFOW si{};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
-    const BOOL ok = CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE,
-                                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    const BOOL ok = CreateProcessW(has_executable ? executable_w.c_str() : nullptr,
+                                   cmdline.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   CREATE_NO_WINDOW,
+                                   nullptr,
+                                   install_dir_w.empty() ? nullptr : install_dir_w.c_str(),
+                                   &si,
+                                   &pi);
     if (!ok) {
         LOG_WARN("pre_uninstall: CreateProcess failed err=" + std::to_string(GetLastError()) +
                  ", proceeding with install anyway cmd_id=" + command_id);
@@ -232,6 +453,30 @@ static void run_pre_uninstall(const std::string& command,
     }
     LOG_INFO("pre_uninstall: uninstall registry key gone after " + std::to_string(waited) +
              "s, proceeding fresh cmd_id=" + command_id);
+
+    int cleanup_waited = 0;
+    while (!executable_w.empty() && path_exists_w(executable_w) && cleanup_waited < 15) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        ++cleanup_waited;
+    }
+    if (cleanup_waited > 0) {
+        LOG_INFO("pre_uninstall: uninstaller file wait after registry gone seconds=" +
+                 std::to_string(cleanup_waited) + " cmd_id=" + command_id);
+    }
+
+    if (!install_dir_w.empty() && path_exists_w(install_dir_w) && !path_exists_w(executable_w)) {
+        std::error_code ec;
+        const uintmax_t removed = std::filesystem::remove_all(
+            std::filesystem::path(install_dir_w), ec);
+        if (ec) {
+            LOG_WARN("pre_uninstall: residual install dir remove failed path=" + install_dir +
+                     " err=" + ec.message() + " cmd_id=" + command_id);
+        } else {
+            LOG_INFO("pre_uninstall: residual install dir removed path=" + install_dir +
+                     " entries=" + std::to_string(static_cast<unsigned long long>(removed)) +
+                     " cmd_id=" + command_id);
+        }
+    }
 }
 #endif  // _WIN32
 
@@ -428,11 +673,23 @@ static void run_windows_attended_install(
         return;
     }
 
-    std::wstring cmdline = rdw::quoteArg(package_path);
-    if (!attended_args.empty()) {
-        cmdline += L" ";
-        cmdline += rdw::widen(attended_args);
+    terminate_stale_installers_for_package(package_path, req.command_id);
+
+    std::string launch_path;
+    std::string copy_err;
+    if (!ensure_attended_exe_copy(package_path, launch_path, copy_err)) {
+        result_status = "failed";
+        result_message = "attended exe copy failed: " + copy_err;
+        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
     }
+    LOG_INFO("install_attended: using interactive exe path=" + launch_path +
+             " cmd_id=" + req.command_id);
 
     if (release_status_reporter) {
         release_status_reporter(make_release_status(
@@ -442,10 +699,15 @@ static void run_windows_attended_install(
     PROCESS_INFORMATION pi{};
     bool used_elevated = false;
     std::string launch_err;
-    if (!rdw::launchInActiveConsoleSessionElevated(cmdline, pi, used_elevated, launch_err)) {
+    std::string launch_diag;
+    const std::string working_dir = parent_dir(launch_path);
+    if (!rdw::launchApplicationInActiveConsoleSessionElevated(
+            rdw::widen(launch_path), rdw::widen(attended_args), rdw::widen(working_dir),
+            pi, used_elevated, launch_diag, launch_err)) {
         result_status = "failed";
         result_message = "attended launch failed: " + launch_err;
-        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        LOG_ERROR("install_attended: " + result_message + " diag=" + launch_diag +
+                  " cmd_id=" + req.command_id);
         if (release_status_reporter) {
             release_status_reporter(make_release_status(
                 req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
@@ -454,7 +716,8 @@ static void run_windows_attended_install(
         return;
     }
     LOG_INFO(std::string("install_attended: launched in active session elevated_token=") +
-             (used_elevated ? "yes" : "no") + " cmd_id=" + req.command_id);
+             (used_elevated ? "yes" : "no") + " cwd=" + working_dir +
+             " diag=" + launch_diag + " cmd_id=" + req.command_id);
 
     const DWORD timeout_ms = attended_timeout_seconds > 0
                                  ? static_cast<DWORD>(attended_timeout_seconds) * 1000UL

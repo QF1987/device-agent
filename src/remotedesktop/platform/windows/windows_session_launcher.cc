@@ -19,6 +19,19 @@ std::string lastError(const char* prefix) {
     return oss.str();
 }
 
+std::string tokenSessionDiagnostic(HANDLE token, const char* label) {
+    DWORD session_id = 0;
+    DWORD ret_len = 0;
+    std::ostringstream oss;
+    oss << label << "=";
+    if (GetTokenInformation(token, TokenSessionId, &session_id, sizeof(session_id), &ret_len)) {
+        oss << session_id;
+    } else {
+        oss << "error:" << GetLastError();
+    }
+    return oss.str();
+}
+
 struct HandleGuard {
     HANDLE handle = nullptr;
     ~HandleGuard() {
@@ -214,6 +227,109 @@ bool launchInActiveConsoleSessionElevated(const std::wstring& command_line,
     if (environment) {
         DestroyEnvironmentBlock(environment);
     }
+    if (!ok) {
+        err = lastError("CreateProcessAsUserW");
+        return false;
+    }
+    return true;
+}
+
+bool launchApplicationInActiveConsoleSessionElevated(const std::wstring& application_path,
+                                                     const std::wstring& arguments,
+                                                     const std::wstring& working_directory,
+                                                     PROCESS_INFORMATION& process_info,
+                                                     bool& used_elevated_token,
+                                                     std::string& diagnostics,
+                                                     std::string& err) {
+    ZeroMemory(&process_info, sizeof(process_info));
+    used_elevated_token = false;
+    diagnostics.clear();
+
+    DWORD session_id = WTSGetActiveConsoleSessionId();
+    if (session_id == 0xffffffff) {
+        err = "no active console session";
+        return false;
+    }
+    std::ostringstream diag;
+    diag << "active_session=" << session_id;
+
+    HandleGuard user_token;
+    if (!WTSQueryUserToken(session_id, &user_token.handle)) {
+        err = lastError("WTSQueryUserToken");
+        diagnostics = diag.str();
+        return false;
+    }
+    diag << " " << tokenSessionDiagnostic(user_token.handle, "user_token_session");
+
+    HandleGuard linked_token;
+    HANDLE source_token = user_token.handle;
+    TOKEN_LINKED_TOKEN linked{};
+    DWORD ret_len = 0;
+    if (GetTokenInformation(user_token.handle, TokenLinkedToken, &linked, sizeof(linked), &ret_len) &&
+        linked.LinkedToken) {
+        linked_token.handle = linked.LinkedToken;
+        source_token = linked_token.handle;
+        used_elevated_token = true;
+        diag << " linked_token=yes " << tokenSessionDiagnostic(linked_token.handle, "linked_token_session");
+    } else {
+        diag << " linked_token=no error=" << GetLastError();
+    }
+
+    HandleGuard primary_token;
+    if (!DuplicateTokenEx(source_token,
+                          TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT |
+                              TOKEN_ADJUST_SESSIONID,
+                          nullptr,
+                          SecurityImpersonation,
+                          TokenPrimary,
+                          &primary_token.handle)) {
+        err = lastError("DuplicateTokenEx");
+        diagnostics = diag.str();
+        return false;
+    }
+
+    diag << " " << tokenSessionDiagnostic(primary_token.handle, "primary_before_session");
+    if (!SetTokenInformation(primary_token.handle, TokenSessionId, &session_id, sizeof(session_id))) {
+        diag << " set_session=error:" << GetLastError();
+    } else {
+        diag << " set_session=ok";
+    }
+    diag << " " << tokenSessionDiagnostic(primary_token.handle, "primary_after_session");
+
+    LPVOID environment = nullptr;
+    if (!CreateEnvironmentBlock(&environment, primary_token.handle, FALSE)) {
+        diag << " env=error:" << GetLastError();
+        environment = nullptr;
+    } else {
+        diag << " env=ok";
+    }
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.lpDesktop = const_cast<LPWSTR>(L"winsta0\\default");
+
+    std::wstring mutable_cmd = L"\"" + application_path + L"\"";
+    if (!arguments.empty()) {
+        mutable_cmd += L" ";
+        mutable_cmd += arguments;
+    }
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT;
+    const wchar_t* cwd = working_directory.empty() ? nullptr : working_directory.c_str();
+    BOOL ok = CreateProcessAsUserW(primary_token.handle,
+                                   application_path.c_str(),
+                                   mutable_cmd.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   flags,
+                                   environment,
+                                   cwd,
+                                   &si,
+                                   &process_info);
+    if (environment) {
+        DestroyEnvironmentBlock(environment);
+    }
+    diagnostics = diag.str();
     if (!ok) {
         err = lastError("CreateProcessAsUserW");
         return false;

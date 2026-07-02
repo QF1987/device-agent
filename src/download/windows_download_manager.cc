@@ -106,6 +106,13 @@ std::string join_path(const std::string& dir, const std::string& name) {
     return dir + "\\" + name;
 }
 
+bool has_file_extension(const std::string& name) {
+    const auto slash = name.find_last_of("/\\");
+    const auto dot = name.find_last_of('.');
+    return dot != std::string::npos && (slash == std::string::npos || dot > slash + 1) &&
+           dot + 1 < name.size();
+}
+
 // RAII：WinHTTP 句柄。
 struct WinHttpHandle {
     HINTERNET h = nullptr;
@@ -189,8 +196,10 @@ int64_t parse_content_range_total(const std::string& content_range) {
 }  // namespace
 
 std::string windows_resolve_dest_path(const DownloadRequest& req) {
-    const std::string filename =
-        req.file_id.empty() ? basename_from_url(req.url) : req.file_id;
+    std::string filename = req.file_id.empty() ? basename_from_url(req.url) : req.file_id;
+    if (req.file_type == "windows_app" && !has_file_extension(filename)) {
+        filename += ".exe";
+    }
     const std::string dir = req.dest_path.empty() ? "." : req.dest_path;
     return join_path(dir, filename);
 }

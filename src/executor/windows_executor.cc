@@ -5,6 +5,7 @@
 #include "logger/logger.h"
 
 #include <windows.h>
+#include <shellapi.h>
 
 #include <chrono>
 #include <algorithm>
@@ -97,18 +98,6 @@ std::vector<DWORD> parse_success_codes(const std::string& successCodes) {
     return codes;
 }
 
-std::wstring quote_arg(const std::wstring& arg) {
-    std::wstring quoted = L"\"";
-    for (wchar_t ch : arg) {
-        if (ch == L'"') {
-            quoted += L'\\';
-        }
-        quoted += ch;
-    }
-    quoted += L"\"";
-    return quoted;
-}
-
 std::wstring parent_directory(const std::wstring& path) {
     const size_t pos = path.find_last_of(L"\\/");
     if (pos == std::wstring::npos) {
@@ -182,33 +171,27 @@ InstallOutcome WindowsExecutor::installPackage(const std::string& packagePath,
     }
 
     const std::wstring app = utf8_to_wide(packagePath);
-    std::wstring cmdline = quote_arg(app);
-    if (!trim_copy(args).empty()) {
-        cmdline += L" ";
-        cmdline += utf8_to_wide(args);
-    }
-    std::vector<wchar_t> mutable_cmdline(cmdline.begin(), cmdline.end());
-    mutable_cmdline.push_back(L'\0');
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
     std::wstring cwd = parent_directory(app);
+    const std::wstring params = utf8_to_wide(trim_copy(args));
 
-    const BOOL ok = CreateProcessW(
-        app.c_str(),
-        mutable_cmdline.data(),
-        nullptr,
-        nullptr,
-        FALSE,
-        CREATE_NO_WINDOW,
-        nullptr,
-        cwd.empty() ? nullptr : cwd.c_str(),
-        &si,
-        &pi);
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.hwnd = nullptr;
+    sei.lpVerb = L"open";
+    sei.lpFile = app.c_str();
+    sei.lpParameters = params.empty() ? nullptr : params.c_str();
+    sei.lpDirectory = cwd.empty() ? nullptr : cwd.c_str();
+    sei.nShow = SW_HIDE;
+    const BOOL ok = ShellExecuteExW(&sei);
     if (!ok) {
         const DWORD code = GetLastError();
-        err = "CreateProcess failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
+        err = "ShellExecuteEx failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
+        LOG_ERROR("WindowsExecutor: " + err);
+        return InstallOutcome::FAILED;
+    }
+    if (sei.hProcess == nullptr) {
+        err = "ShellExecuteEx did not return process handle";
         LOG_ERROR("WindowsExecutor: " + err);
         return InstallOutcome::FAILED;
     }
@@ -220,15 +203,14 @@ InstallOutcome WindowsExecutor::installPackage(const std::string& packagePath,
                         ? kInstallHardCapMs
                         : static_cast<DWORD>(soft_sec) * 1000UL;
 
-    LOG_INFO("WindowsExecutor: installer started cmd_id=" + command_id +
+    LOG_INFO("WindowsExecutor: installer started via ShellExecuteEx cmd_id=" + command_id +
              " soft_timeout_s=" + std::to_string(soft_ms / 1000UL));
-    const DWORD wait_result = WaitForSingleObject(pi.hProcess, soft_ms);
+    const DWORD wait_result = WaitForSingleObject(sei.hProcess, soft_ms);
     if (wait_result == WAIT_TIMEOUT) {
         // 软超时未拿到退出码 → 判定卡交互框 → 杀进程并转人工接管。
         // 卡点在文件释放前（诊断 §2），TerminateProcess 不会留半装残态。
-        TerminateProcess(pi.hProcess, 1);
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        TerminateProcess(sei.hProcess, 1);
+        CloseHandle(sei.hProcess);
         err = "silent install timed out after " + std::to_string(soft_ms / 1000UL) +
               "s, needs attended install";
         LOG_WARN("WindowsExecutor: " + err + " cmd_id=" + command_id);
@@ -236,24 +218,21 @@ InstallOutcome WindowsExecutor::installPackage(const std::string& packagePath,
     }
     if (wait_result == WAIT_FAILED) {
         const DWORD code = GetLastError();
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        CloseHandle(sei.hProcess);
         err = "WaitForSingleObject failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
         LOG_ERROR("WindowsExecutor: " + err);
         return InstallOutcome::FAILED;
     }
 
     DWORD exit_code = 0;
-    if (!GetExitCodeProcess(pi.hProcess, &exit_code)) {
+    if (!GetExitCodeProcess(sei.hProcess, &exit_code)) {
         const DWORD code = GetLastError();
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        CloseHandle(sei.hProcess);
         err = "GetExitCodeProcess failed: " + last_error_message(code) + " (" + std::to_string(code) + ")";
         LOG_ERROR("WindowsExecutor: " + err);
         return InstallOutcome::FAILED;
     }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    CloseHandle(sei.hProcess);
 
     const auto codes = parse_success_codes(successCodes);
     if (std::find(codes.begin(), codes.end(), exit_code) == codes.end()) {
