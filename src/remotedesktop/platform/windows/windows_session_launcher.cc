@@ -153,6 +153,83 @@ bool launchInActiveConsoleSession(const std::wstring& command_line,
     return true;
 }
 
+bool launchInActiveConsoleSessionElevatedHidden(const std::wstring& command_line,
+                                                PROCESS_INFORMATION& process_info,
+                                                bool& used_elevated_token,
+                                                std::string& err) {
+    ZeroMemory(&process_info, sizeof(process_info));
+    used_elevated_token = false;
+    DWORD session_id = WTSGetActiveConsoleSessionId();
+    if (session_id == 0xffffffff) {
+        err = "no active console session";
+        return false;
+    }
+
+    HandleGuard user_token;
+    if (!WTSQueryUserToken(session_id, &user_token.handle)) {
+        err = lastError("WTSQueryUserToken");
+        return false;
+    }
+
+    HandleGuard linked_token;
+    HANDLE source_token = user_token.handle;
+    TOKEN_LINKED_TOKEN linked{};
+    DWORD ret_len = 0;
+    if (GetTokenInformation(user_token.handle, TokenLinkedToken, &linked, sizeof(linked), &ret_len) &&
+        linked.LinkedToken) {
+        linked_token.handle = linked.LinkedToken;
+        source_token = linked_token.handle;
+        used_elevated_token = true;
+    }
+
+    HandleGuard primary_token;
+    if (!DuplicateTokenEx(source_token,
+                          TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT |
+                              TOKEN_ADJUST_SESSIONID,
+                          nullptr,
+                          SecurityImpersonation,
+                          TokenPrimary,
+                          &primary_token.handle)) {
+        err = lastError("DuplicateTokenEx");
+        return false;
+    }
+
+    if (!SetTokenInformation(primary_token.handle, TokenSessionId, &session_id, sizeof(session_id))) {
+        // Non-fatal: the token often already belongs to the active session.
+    }
+
+    LPVOID environment = nullptr;
+    if (!CreateEnvironmentBlock(&environment, primary_token.handle, FALSE)) {
+        environment = nullptr;
+    }
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.lpDesktop = const_cast<LPWSTR>(L"winsta0\\default");
+
+    std::wstring mutable_cmd = command_line;
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW;
+    BOOL ok = CreateProcessAsUserW(primary_token.handle,
+                                   nullptr,
+                                   mutable_cmd.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   flags,
+                                   environment,
+                                   nullptr,
+                                   &si,
+                                   &process_info);
+    if (environment) {
+        DestroyEnvironmentBlock(environment);
+    }
+    if (!ok) {
+        err = lastError("CreateProcessAsUserW");
+        return false;
+    }
+    return true;
+}
+
 bool launchInActiveConsoleSessionElevated(const std::wstring& command_line,
                                           PROCESS_INFORMATION& process_info,
                                           bool& used_elevated_token,

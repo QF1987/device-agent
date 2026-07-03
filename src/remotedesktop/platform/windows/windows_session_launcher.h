@@ -13,6 +13,10 @@ std::string currentExecutablePath();
 bool launchInActiveConsoleSession(const std::wstring& command_line,
                                   PROCESS_INFORMATION& process_info,
                                   std::string& err);
+bool launchInActiveConsoleSessionElevatedHidden(const std::wstring& command_line,
+                                                PROCESS_INFORMATION& process_info,
+                                                bool& used_elevated_token,
+                                                std::string& err);
 
 // launchInActiveConsoleSessionElevated:把进程拉到活动控制台会话的**交互桌面**,
 // 并尽量免 UAC —— 用 GetTokenInformation(TokenLinkedToken) 取活动会话用户的
