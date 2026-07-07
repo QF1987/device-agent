@@ -8,8 +8,16 @@
 #include "client/command_handler.h"
 #include "config/p2p_config_store.h"
 #include "executor/executor.h"
+#include "executor/installer_classifier.h"
 #include "download/idownload_manager.h"
 #include "logger/logger.h"
+
+#ifdef _WIN32
+#include "download/windows_download_manager.h"
+#include "remotedesktop/platform/windows/windows_session_launcher.h"
+#include <tlhelp32.h>
+#include <windows.h>
+#endif
 
 #ifdef __ANDROID__
 #include "download/android_download_manager.h"
@@ -27,12 +35,41 @@
 #include <chrono>
 #include <memory>
 #include <algorithm>
+#include <cwctype>
+#include <filesystem>
 
 namespace device_agent {
 
 // ─── 工具函数 ─────────────────────────────────────────────
 
-// 简单的 JSON 解析（提取字符串值）
+static bool append_json_escape(char esc, std::string& out) {
+    switch (esc) {
+        case '"':
+        case '\\':
+        case '/':
+            out.push_back(esc);
+            return true;
+        case 'b':
+            out.push_back('\b');
+            return true;
+        case 'f':
+            out.push_back('\f');
+            return true;
+        case 'n':
+            out.push_back('\n');
+            return true;
+        case 'r':
+            out.push_back('\r');
+            return true;
+        case 't':
+            out.push_back('\t');
+            return true;
+        default:
+            return false;
+    }
+}
+
+// 简单的 JSON 解析（提取字符串值）。处理常见转义,避免 Windows 路径和带引号命令被截断。
 static bool extract_json_string(const std::string& json, const std::string& key, std::string& out) {
     std::string q = "\"" + key + "\"";
     size_t pos = json.find(q);
@@ -44,11 +81,35 @@ static bool extract_json_string(const std::string& json, const std::string& key,
     size_t quote = json.find('"', colon);
     if (quote == std::string::npos) return false;
 
-    size_t end_quote = json.find('"', quote + 1);
-    if (end_quote == std::string::npos) return false;
-
-    out = json.substr(quote + 1, end_quote - quote - 1);
-    return true;
+    std::string value;
+    bool escaping = false;
+    for (size_t i = quote + 1; i < json.size(); ++i) {
+        const char c = json[i];
+        if (escaping) {
+            if (c == 'u') {
+                // 当前 payload 只用 ASCII/UTF-8 路径和参数；保留 unicode escape 原文,
+                // 避免静默产出错误字符。
+                if (i + 4 >= json.size()) return false;
+                value.append("\\u");
+                value.append(json.substr(i + 1, 4));
+                i += 4;
+            } else if (!append_json_escape(c, value)) {
+                return false;
+            }
+            escaping = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaping = true;
+            continue;
+        }
+        if (c == '"') {
+            out = value;
+            return true;
+        }
+        value.push_back(c);
+    }
+    return false;
 }
 
 // 简单的 JSON 解析（提取 bool 值）
@@ -135,6 +196,568 @@ static int64_t progress_report_step_bytes(int64_t total_bytes) {
     const int64_t five_percent = total_bytes / 20;
     return std::max<int64_t>(five_percent, 1);
 }
+
+#ifdef _WIN32
+static std::wstring lower_wide(std::wstring value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) {
+        return static_cast<wchar_t>(std::towlower(ch));
+    });
+    return value;
+}
+
+static std::wstring leaf_name(const std::wstring& path) {
+    const size_t pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos) {
+        return path;
+    }
+    return path.substr(pos + 1);
+}
+
+static std::wstring stem_name(const std::wstring& name) {
+    const size_t pos = name.find_last_of(L'.');
+    if (pos == std::wstring::npos || pos == 0) {
+        return name;
+    }
+    return name.substr(0, pos);
+}
+
+static std::string parent_dir(const std::string& path) {
+    const size_t pos = path.find_last_of("\\/");
+    if (pos == std::string::npos) {
+        return {};
+    }
+    return path.substr(0, pos);
+}
+
+static bool parse_command_executable(const std::string& command, std::string& executable) {
+    executable.clear();
+    size_t pos = 0;
+    while (pos < command.size() && std::isspace(static_cast<unsigned char>(command[pos]))) {
+        ++pos;
+    }
+    if (pos >= command.size()) {
+        return false;
+    }
+    if (command[pos] == '"') {
+        ++pos;
+        while (pos < command.size()) {
+            const char c = command[pos];
+            if (c == '"') {
+                return !executable.empty();
+            }
+            executable.push_back(c);
+            ++pos;
+        }
+        return false;
+    }
+    while (pos < command.size() && !std::isspace(static_cast<unsigned char>(command[pos]))) {
+        executable.push_back(command[pos]);
+        ++pos;
+    }
+    return !executable.empty();
+}
+
+static bool path_exists_w(const std::wstring& path) {
+    if (path.empty()) {
+        return false;
+    }
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static bool package_process_name_matches(const std::wstring& process_name,
+                                         const std::wstring& package_leaf) {
+    const std::wstring proc = lower_wide(process_name);
+    const std::wstring leaf = lower_wide(package_leaf);
+    const std::wstring stem = stem_name(leaf);
+    return proc == leaf || proc == stem || proc == stem + L".exe" || proc == stem + L".tmp" ||
+           proc == stem + L".attended.exe" || proc == stem + L".attended.tmp";
+}
+
+static std::vector<DWORD> collect_package_processes(const std::string& package_path,
+                                                    DWORD exclude_pid) {
+    std::vector<DWORD> pids;
+    const std::wstring package_leaf = leaf_name(device_agent::remotedesktop::windows::widen(package_path));
+    if (package_leaf.empty()) {
+        return pids;
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return pids;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == exclude_pid || pe.th32ProcessID == GetCurrentProcessId()) {
+                continue;
+            }
+            if (package_process_name_matches(pe.szExeFile, package_leaf)) {
+                pids.push_back(pe.th32ProcessID);
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return pids;
+}
+
+static void terminate_process_ids(const std::vector<DWORD>& pids, const std::string& reason) {
+    for (DWORD pid : pids) {
+        HANDLE h = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+        if (!h) {
+            continue;
+        }
+        TerminateProcess(h, 1);
+        WaitForSingleObject(h, 3000);
+        CloseHandle(h);
+        LOG_WARN("install_attended: terminated pid=" + std::to_string(pid) +
+                 " reason=" + reason);
+    }
+}
+
+static void terminate_stale_installers_for_package(const std::string& package_path,
+                                                   const std::string& command_id) {
+    const auto pids = collect_package_processes(package_path, 0);
+    if (pids.empty()) {
+        return;
+    }
+    LOG_WARN("install_attended: cleaning stale installer processes count=" +
+             std::to_string(pids.size()) + " cmd_id=" + command_id);
+    terminate_process_ids(pids, "stale package installer before attended launch");
+}
+
+static bool ensure_attended_exe_copy(const std::string& package_path,
+                                     std::string& attended_path,
+                                     std::string& err) {
+    attended_path = package_path + ".attended.exe";
+    const std::wstring src = device_agent::remotedesktop::windows::widen(package_path);
+    const std::wstring dst = device_agent::remotedesktop::windows::widen(attended_path);
+    if (CreateHardLinkW(dst.c_str(), src.c_str(), nullptr)) {
+        return true;
+    }
+    const DWORD link_error = GetLastError();
+    if (link_error == ERROR_ALREADY_EXISTS) {
+        DeleteFileW(dst.c_str());
+        if (CreateHardLinkW(dst.c_str(), src.c_str(), nullptr)) {
+            return true;
+        }
+    }
+    if (CopyFileW(src.c_str(), dst.c_str(), FALSE)) {
+        return true;
+    }
+    err = "CreateHardLinkW error=" + std::to_string(link_error) +
+          ", CopyFileW error=" + std::to_string(GetLastError());
+    return false;
+}
+
+// pre_uninstall:把注册表全路径(如 HKLM\SOFTWARE\WOW6432Node\...\Uninstall\{AppId}_is1)
+// 拆成 hive + 子键路径。支持 HKLM/HKCU/HKCR/HKU 及其全称。
+static bool parse_registry_hive(const std::string& full, HKEY& hive, std::wstring& subkey) {
+    const size_t bs = full.find('\\');
+    if (bs == std::string::npos) {
+        return false;
+    }
+    std::string prefix = full.substr(0, bs);
+    const std::string rest = full.substr(bs + 1);
+    for (auto& c : prefix) {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    if (prefix == "HKLM" || prefix == "HKEY_LOCAL_MACHINE") {
+        hive = HKEY_LOCAL_MACHINE;
+    } else if (prefix == "HKCU" || prefix == "HKEY_CURRENT_USER") {
+        hive = HKEY_CURRENT_USER;
+    } else if (prefix == "HKCR" || prefix == "HKEY_CLASSES_ROOT") {
+        hive = HKEY_CLASSES_ROOT;
+    } else if (prefix == "HKU" || prefix == "HKEY_USERS") {
+        hive = HKEY_USERS;
+    } else {
+        return false;
+    }
+    subkey = device_agent::remotedesktop::windows::widen(rest);
+    return true;
+}
+
+// 注册表键是否存在。无法解析路径时返回 false(视作已消失,不阻断后续 fresh 安装)。
+static bool registry_key_exists(const std::string& full) {
+    HKEY hive;
+    std::wstring subkey;
+    if (!parse_registry_hive(full, hive, subkey)) {
+        return false;
+    }
+    HKEY h = nullptr;
+    const LONG r = RegOpenKeyExW(hive, subkey.c_str(), 0, KEY_READ, &h);
+    if (r == ERROR_SUCCESS) {
+        RegCloseKey(h);
+        return true;
+    }
+    return false;
+}
+
+// 装前官方卸载(可选,best-effort,不阻断):跑卸载命令 → 轮询卸载注册表键消失 → 返回。
+// 卸载器异步,不能凭父进程退出码判完成(诊断§3),故以注册表键消失为完成信号。
+// 任何失败(命令起不来 / 键超时未消失)只记 warn 并继续按原样试静默。
+static void run_pre_uninstall(const std::string& command,
+                              const std::string& wait_registry_key_gone,
+                              int timeout_seconds,
+                              const std::string& command_id) {
+    if (command.empty()) {
+        return;
+    }
+    LOG_INFO("pre_uninstall: running uninstall command cmd_id=" + command_id);
+
+    std::string executable;
+    const bool has_executable = parse_command_executable(command, executable);
+    const std::string install_dir = has_executable ? parent_dir(executable) : std::string();
+    const std::wstring executable_w =
+        has_executable ? device_agent::remotedesktop::windows::widen(executable) : std::wstring();
+    const std::wstring install_dir_w =
+        install_dir.empty() ? std::wstring()
+                            : device_agent::remotedesktop::windows::widen(install_dir);
+    std::wstring cmdline = device_agent::remotedesktop::windows::widen(command);
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    const BOOL ok = CreateProcessW(has_executable ? executable_w.c_str() : nullptr,
+                                   cmdline.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   CREATE_NO_WINDOW,
+                                   nullptr,
+                                   install_dir_w.empty() ? nullptr : install_dir_w.c_str(),
+                                   &si,
+                                   &pi);
+    if (!ok) {
+        LOG_WARN("pre_uninstall: CreateProcess failed err=" + std::to_string(GetLastError()) +
+                 ", proceeding with install anyway cmd_id=" + command_id);
+    } else {
+        // 卸载器父进程通常很快返回(自拷临时副本后异步卸载);等其退出但不据此判完成。
+        WaitForSingleObject(pi.hProcess, 60UL * 1000UL);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+
+    if (wait_registry_key_gone.empty()) {
+        return;  // 没给检测键 → 不轮询,直接进 fresh 试静默。
+    }
+
+    const int limit = timeout_seconds > 0 ? timeout_seconds : 60;
+    int waited = 0;
+    while (registry_key_exists(wait_registry_key_gone)) {
+        if (waited >= limit) {
+            LOG_WARN("pre_uninstall: registry key still present after " + std::to_string(limit) +
+                     "s, proceeding with install anyway cmd_id=" + command_id);
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        waited += 2;
+    }
+    LOG_INFO("pre_uninstall: uninstall registry key gone after " + std::to_string(waited) +
+             "s, proceeding fresh cmd_id=" + command_id);
+
+    int cleanup_waited = 0;
+    while (!executable_w.empty() && path_exists_w(executable_w) && cleanup_waited < 15) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        ++cleanup_waited;
+    }
+    if (cleanup_waited > 0) {
+        LOG_INFO("pre_uninstall: uninstaller file wait after registry gone seconds=" +
+                 std::to_string(cleanup_waited) + " cmd_id=" + command_id);
+    }
+
+    if (!install_dir_w.empty() && path_exists_w(install_dir_w) && !path_exists_w(executable_w)) {
+        std::error_code ec;
+        const uintmax_t removed = std::filesystem::remove_all(
+            std::filesystem::path(install_dir_w), ec);
+        if (ec) {
+            LOG_WARN("pre_uninstall: residual install dir remove failed path=" + install_dir +
+                     " err=" + ec.message() + " cmd_id=" + command_id);
+        } else {
+            LOG_INFO("pre_uninstall: residual install dir removed path=" + install_dir +
+                     " entries=" + std::to_string(static_cast<unsigned long long>(removed)) +
+                     " cmd_id=" + command_id);
+        }
+    }
+}
+#endif  // _WIN32
+
+static void maybe_install_windows_package(
+        const DownloadRequest& req,
+        const std::shared_ptr<Executor>& executor,
+        const CommandHandler::ReleaseStatusReporter& release_status_reporter,
+        int64_t final_bytes,
+        const DownloadCompletionTelemetry& telemetry,
+        const std::string& action_type,
+        const std::string& install_args,
+        const std::string& install_success_codes,
+        int silent_probe_timeout_seconds,
+        const std::string& pre_uninstall_command,
+        const std::string& pre_uninstall_wait_registry_key_gone,
+        int pre_uninstall_timeout_seconds) {
+#ifdef _WIN32
+    // 安装意图触发判据 = 显式 action_type 或 install_args 非空。
+    // 两者皆空 = 纯下载,行为不变(D5:APK/system 不受影响)。
+    const bool install_requested = !action_type.empty() || !install_args.empty();
+    if (!install_requested) {
+        return;
+    }
+
+    // 缺省/兼容 = run_installer;其它部署动作本期未支持,留口报失败。
+    const std::string effective_action =
+        action_type.empty() ? std::string("run_installer") : action_type;
+
+    auto report_install_failed = [&](terminal_agent::v1::ReleaseErrorCode error_code,
+                                     const std::string& message) {
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req,
+                terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED,
+                final_bytes,
+                error_code,
+                message,
+                telemetry.completion_path,
+                telemetry.peer_bytes,
+                telemetry.web_seed_bytes));
+        }
+    };
+
+    if (effective_action != "run_installer") {
+        LOG_ERROR("download_ready: unsupported action_type=" + effective_action +
+                  " cmd_id=" + req.command_id);
+        report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                              "unsupported action_type: " + effective_action);
+        return;
+    }
+
+    if (!executor) {
+        LOG_ERROR("download_ready: install requested but executor is not configured");
+        report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR,
+                              "executor is not configured");
+        return;
+    }
+
+    const std::string package_path = windows_resolve_dest_path(req);
+
+    // operator 未给 install_args 时,按安装包家族补默认静默开关 + 成功退出码。
+    std::string effective_args = install_args;
+    std::string effective_codes = install_success_codes;
+    if (effective_args.empty()) {
+        const InstallerFamily family = classify_installer(package_path);
+        effective_args = default_silent_args(family);
+        if (effective_codes.empty()) {
+            effective_codes = default_success_codes(family);
+        }
+        LOG_INFO(std::string("download_ready: install_args empty, classified family=") +
+                 installer_family_name(family) + " default_args=" + effective_args +
+                 " cmd_id=" + req.command_id);
+    }
+
+    LOG_INFO("download_ready: starting silent install package=" + package_path +
+             " cmd_id=" + req.command_id);
+    if (release_status_reporter) {
+        release_status_reporter(make_release_status(
+            req,
+            terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING,
+            final_bytes,
+            terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+            "",
+            telemetry.completion_path,
+            telemetry.peer_bytes,
+            telemetry.web_seed_bytes));
+    }
+
+    // 可选装前官方卸载(复装→fresh):best-effort,失败不阻断,继续按原样试静默。
+    if (!pre_uninstall_command.empty()) {
+        run_pre_uninstall(pre_uninstall_command, pre_uninstall_wait_registry_key_gone,
+                          pre_uninstall_timeout_seconds, req.command_id);
+    }
+
+    std::string install_err;
+    const InstallOutcome outcome = executor->installPackage(
+        package_path, effective_args, effective_codes,
+        silent_probe_timeout_seconds, req.command_id, install_err);
+
+    switch (outcome) {
+        case InstallOutcome::SUCCESS:
+            LOG_INFO("download_ready: silent install succeeded cmd_id=" + req.command_id);
+            if (release_status_reporter) {
+                release_status_reporter(make_release_status(
+                    req,
+                    terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED,
+                    final_bytes,
+                    terminal_agent::v1::RELEASE_ERROR_CODE_UNSPECIFIED,
+                    "",
+                    telemetry.completion_path,
+                    telemetry.peer_bytes,
+                    telemetry.web_seed_bytes));
+            }
+            break;
+        case InstallOutcome::NEEDS_ATTENDED: {
+            // 零 proto:复用 INSTALL_FAILED + BUSINESS_ERROR + "NEEDS_ATTENDED:" sentinel,
+            // 由 backend(E2)识别前缀物化为 needs_attended 子态。
+            const std::string sentinel =
+                "NEEDS_ATTENDED: " + (install_err.empty() ? "silent probe timed out" : install_err) +
+                " package=" + package_path;
+            LOG_WARN("download_ready: silent install needs attended: " + sentinel);
+            report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_BUSINESS_ERROR, sentinel);
+            break;
+        }
+        case InstallOutcome::FAILED:
+        default:
+            LOG_ERROR("download_ready: silent install failed: " + install_err);
+            report_install_failed(terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, install_err);
+            break;
+    }
+#else
+    (void)req;
+    (void)executor;
+    (void)release_status_reporter;
+    (void)final_bytes;
+    (void)telemetry;
+    (void)action_type;
+    (void)install_args;
+    (void)install_success_codes;
+    (void)silent_probe_timeout_seconds;
+    (void)pre_uninstall_command;
+    (void)pre_uninstall_wait_registry_key_gone;
+    (void)pre_uninstall_timeout_seconds;
+#endif
+}
+
+#ifdef _WIN32
+// 退出码是否命中成功集(逗号分隔;空集按 0)。
+static bool attended_exit_code_succeeded(DWORD code, const std::string& successCodes) {
+    std::stringstream ss(successCodes.empty() ? "0" : successCodes);
+    std::string part;
+    bool any = false;
+    while (std::getline(ss, part, ',')) {
+        const size_t a = part.find_first_not_of(" \t");
+        if (a == std::string::npos) continue;
+        const size_t b = part.find_last_not_of(" \t");
+        part = part.substr(a, b - a + 1);
+        char* end = nullptr;
+        const long v = std::strtol(part.c_str(), &end, 10);
+        if (end != part.c_str() && *end == '\0' && v >= 0) {
+            any = true;
+            if (static_cast<DWORD>(v) == code) {
+                return true;
+            }
+        }
+    }
+    return !any && code == 0;
+}
+
+// install_attended:把安装器以**交互模式**(默认去 silent 开关)用提权链接令牌拉到
+// 活动会话桌面(免 UAC),供 operator 经 VNC 人工点完;等进程退出按成功码报
+// INSTALLED / INSTALL_FAILED。仅 operator 显式下发触发(非自动,防 kiosk 顾客误见)。
+static void run_windows_attended_install(
+        const DownloadRequest& req,
+        const CommandHandler::ReleaseStatusReporter& release_status_reporter,
+        const std::string& attended_args,
+        const std::string& install_success_codes,
+        int attended_timeout_seconds,
+        std::string& result_status,
+        std::string& result_message) {
+    namespace rdw = device_agent::remotedesktop::windows;
+
+    const std::string package_path = windows_resolve_dest_path(req);
+    const DWORD attrs = GetFileAttributesW(rdw::widen(package_path).c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        result_status = "failed";
+        result_message = "package file not found: " + package_path;
+        LOG_ERROR("install_attended: " + result_message);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
+    }
+
+    terminate_stale_installers_for_package(package_path, req.command_id);
+
+    std::string launch_path;
+    std::string copy_err;
+    if (!ensure_attended_exe_copy(package_path, launch_path, copy_err)) {
+        result_status = "failed";
+        result_message = "attended exe copy failed: " + copy_err;
+        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
+    }
+    LOG_INFO("install_attended: using interactive exe path=" + launch_path +
+             " cmd_id=" + req.command_id);
+
+    if (release_status_reporter) {
+        release_status_reporter(make_release_status(
+            req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLING, 0));
+    }
+
+    PROCESS_INFORMATION pi{};
+    bool used_elevated = false;
+    std::string launch_err;
+    std::string launch_diag;
+    const std::string working_dir = parent_dir(launch_path);
+    if (!rdw::launchApplicationInActiveConsoleSessionElevated(
+            rdw::widen(launch_path), rdw::widen(attended_args), rdw::widen(working_dir),
+            pi, used_elevated, launch_diag, launch_err)) {
+        result_status = "failed";
+        result_message = "attended launch failed: " + launch_err;
+        LOG_ERROR("install_attended: " + result_message + " diag=" + launch_diag +
+                  " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+        return;
+    }
+    LOG_INFO(std::string("install_attended: launched in active session elevated_token=") +
+             (used_elevated ? "yes" : "no") + " cwd=" + working_dir +
+             " diag=" + launch_diag + " cmd_id=" + req.command_id);
+
+    const DWORD timeout_ms = attended_timeout_seconds > 0
+                                 ? static_cast<DWORD>(attended_timeout_seconds) * 1000UL
+                                 : 3600UL * 1000UL;
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, timeout_ms);
+    if (wait_result == WAIT_TIMEOUT) {
+        // 人工迟迟未完成:不杀(避免毁掉进行中的人工安装),保持 INSTALLING,留待人工/后续探测。
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        result_status = "success";
+        result_message = "attended installer launched; still running at timeout, left to operator";
+        LOG_WARN("install_attended: still running at timeout cmd_id=" + req.command_id);
+        return;
+    }
+
+    DWORD exit_code = 0;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    if (attended_exit_code_succeeded(exit_code, install_success_codes)) {
+        result_status = "success";
+        result_message = "attended install completed exit_code=" + std::to_string(exit_code);
+        LOG_INFO("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALLED, 0));
+        }
+    } else {
+        result_status = "failed";
+        result_message = "attended install exit_code=" + std::to_string(exit_code);
+        LOG_ERROR("install_attended: " + result_message + " cmd_id=" + req.command_id);
+        if (release_status_reporter) {
+            release_status_reporter(make_release_status(
+                req, terminal_agent::v1::RELEASE_DEVICE_STATUS_INSTALL_FAILED, 0,
+                terminal_agent::v1::RELEASE_ERROR_CODE_INSTALL_ERROR, result_message));
+        }
+    }
+}
+#endif  // _WIN32
 
 // ─── CommandHandler 实现 ───────────────────────────────────
 
@@ -268,7 +891,11 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
 
     } else if (cmd_type == "download_ready") {
         std::string batch_id, file_id, file_type, url, torrent_url, magnet_uri, sha256;
+        std::string action_type, install_args, install_success_codes;
+        std::string pre_uninstall_command, pre_uninstall_wait_registry_key_gone;
         int64_t file_size = 0;
+        int64_t silent_probe_timeout_seconds = 120;  // 软超时缺省 120s
+        int64_t pre_uninstall_timeout_seconds = 60;  // 注册表键消失轮询上限缺省 60s
         extract_json_string(payload, "batch_id", batch_id);
         extract_json_string(payload, "file_id", file_id);
         extract_json_string(payload, "file_type", file_type);
@@ -276,6 +903,16 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
         extract_json_string(payload, "torrent_url", torrent_url);
         extract_json_string(payload, "magnet_uri", magnet_uri);
         extract_json_string(payload, "sha256", sha256);
+        extract_json_string(payload, "action_type", action_type);
+        extract_json_string(payload, "install_args", install_args);
+        extract_json_string(payload, "install_success_codes", install_success_codes);
+        extract_json_int64(payload, "silent_probe_timeout_seconds", silent_probe_timeout_seconds);
+        // 装前官方卸载(可选平铺键,复装→fresh):command 含完整卸载命令行,
+        // wait_registry_key_gone 为卸载注册表键全路径,以其消失判卸载完成。
+        extract_json_string(payload, "pre_uninstall_command", pre_uninstall_command);
+        extract_json_string(payload, "pre_uninstall_wait_registry_key_gone",
+                            pre_uninstall_wait_registry_key_gone);
+        extract_json_int64(payload, "pre_uninstall_timeout_seconds", pre_uninstall_timeout_seconds);
         extract_json_int64(payload, "file_size", file_size);
 
         // 获取或创建 DownloadManager（与 Executor 一致的 fallback 设计）
@@ -363,7 +1000,10 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                             progress.downloaded_bytes));
                     }
                 },
-                [req, release_status_reporter, last_downloaded_bytes](
+                [req, executor, release_status_reporter, last_downloaded_bytes,
+                 action_type, install_args, install_success_codes,
+                 silent_probe_timeout_seconds, pre_uninstall_command,
+                 pre_uninstall_wait_registry_key_gone, pre_uninstall_timeout_seconds](
                         bool ok,
                         const std::string& err,
                         const DownloadCompletionTelemetry& telemetry) {
@@ -379,11 +1019,11 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                         }
                     } else {
                         LOG_INFO("download_ready: download dispatched");
+                        int64_t final_bytes = *last_downloaded_bytes;
+                        if (final_bytes <= 0 && req.file_size > 0) {
+                            final_bytes = req.file_size;
+                        }
                         if (release_status_reporter) {
-                            int64_t final_bytes = *last_downloaded_bytes;
-                            if (final_bytes <= 0 && req.file_size > 0) {
-                                final_bytes = req.file_size;
-                            }
                             release_status_reporter(make_release_status(
                                 req,
                                 terminal_agent::v1::RELEASE_DEVICE_STATUS_DOWNLOADED,
@@ -394,11 +1034,68 @@ terminal_agent::v1::CommandResult CommandHandler::execute_sync(
                                 telemetry.peer_bytes,
                                 telemetry.web_seed_bytes));
                         }
+                        maybe_install_windows_package(
+                            req,
+                            executor,
+                            release_status_reporter,
+                            final_bytes,
+                            telemetry,
+                            action_type,
+                            install_args,
+                            install_success_codes,
+                            static_cast<int>(silent_probe_timeout_seconds),
+                            pre_uninstall_command,
+                            pre_uninstall_wait_registry_key_gone,
+                            static_cast<int>(pre_uninstall_timeout_seconds));
                     }
                 });
             result.set_status("success");
             result.set_message("download dispatched");
         }
+
+    } else if (cmd_type == "install_attended") {
+#ifdef _WIN32
+        std::string batch_id, file_id, file_type, attended_args, install_success_codes;
+        int64_t attended_timeout_seconds = 3600;  // 人工交互安装默认上限 1 小时
+        extract_json_string(payload, "batch_id", batch_id);
+        extract_json_string(payload, "file_id", file_id);
+        extract_json_string(payload, "file_type", file_type);
+        // 交互模式默认裸跑(去 silent 开关);operator 如显式给 install_args 则附加。
+        extract_json_string(payload, "install_args", attended_args);
+        extract_json_string(payload, "install_success_codes", install_success_codes);
+        extract_json_int64(payload, "attended_timeout_seconds", attended_timeout_seconds);
+
+        ReleaseStatusReporter release_status_reporter;
+        std::string download_directory;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            release_status_reporter = release_status_reporter_;
+            download_directory = download_directory_;
+        }
+        if (batch_id.empty() || file_id.empty()) {
+            err_msg = "invalid payload: missing batch_id/file_id for install_attended";
+            result.set_status("failed");
+            result.set_message(err_msg);
+        } else {
+            DownloadRequest req;
+            req.dest_path = download_directory;
+            req.batch_id = batch_id;
+            req.file_id = file_id;
+            req.command_id = cmd.command_id();
+            req.file_type = file_type;
+            std::string status_out, message_out;
+            run_windows_attended_install(req, release_status_reporter, attended_args,
+                                         install_success_codes,
+                                         static_cast<int>(attended_timeout_seconds),
+                                         status_out, message_out);
+            result.set_status(status_out);
+            result.set_message(message_out);
+        }
+#else
+        err_msg = "install_attended is only supported on Windows";
+        result.set_status("failed");
+        result.set_message(err_msg);
+#endif
 
     } else {
         err_msg = "unknown command type: " + cmd_type;

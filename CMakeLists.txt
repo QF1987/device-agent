@@ -28,6 +28,7 @@ set(COMMON_SOURCES
     src/bridge/bridge.cc
     src/executor/linux_executor.cc
     src/executor/macos_executor.cc
+    src/executor/installer_classifier.cc
     src/reboot_state/reboot_state.cc
     src/download/android_download_manager.cc
     src/download/noop_download_manager.cc
@@ -50,6 +51,7 @@ set(COMMON_HEADERS
     src/config/p2p_config_store.h
     src/logger/logger.h
     src/executor/executor.h
+    src/executor/installer_classifier.h
     src/download/idownload_manager.h
     src/download/android_download_manager.h
     src/download/noop_download_manager.h
@@ -486,6 +488,7 @@ else()
         src/client/command_handler.cc
         src/config/p2p_config_store.cc
         src/executor/linux_executor.cc
+        src/executor/installer_classifier.cc
         src/logger/logger.cc
         src/reboot_state/reboot_state.cc
         "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
@@ -496,6 +499,14 @@ else()
         ${GEN_DESKTOP_DIR}
     )
     target_link_libraries(command_handler_download_test PRIVATE protobuf::libprotobuf)
+
+    add_executable(installer_classifier_test
+        src/executor/installer_classifier_test.cc
+        src/executor/installer_classifier.cc
+    )
+    target_include_directories(installer_classifier_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
 
     add_executable(enrollment_manager_test
         src/enrollment/enrollment_manager_test.cc

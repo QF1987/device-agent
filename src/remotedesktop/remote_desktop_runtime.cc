@@ -154,10 +154,12 @@ bool RemoteDesktopRuntime::start(std::string& err) {
         if (!impl_->config.child_log_path.empty()) {
             cmd += L" --rd-log " + windows::quoteArg(impl_->config.child_log_path);
         }
-        if (!windows::launchInActiveConsoleSession(cmd, impl_->child, err)) {
+        bool used_elevated_token = false;
+        if (!windows::launchInActiveConsoleSessionElevatedHidden(cmd, impl_->child, used_elevated_token, err)) {
             return false;
         }
-        LOG_INFO("RemoteDesktopRuntime: launched child in active session");
+        LOG_INFO(std::string("RemoteDesktopRuntime: launched child in active session elevated_token=") +
+                 (used_elevated_token ? "yes" : "no"));
         const HANDLE child_process = impl_->child.hProcess;
         std::thread([child_process]() {
             DWORD wait = WaitForSingleObject(child_process, 5000);
