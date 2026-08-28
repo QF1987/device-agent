@@ -12,14 +12,17 @@
   含 install-device-agent.ps1/.cmd 的目录,默认本脚本所在的 windows-bootstrap 目录。
 .PARAMETER OutZip
   输出 zip 路径,默认当前目录 .\device-agent-kit.zip。
+.PARAMETER VcRedistPath
+  可选。Microsoft vc_redist.x64.exe 路径；提供后放入 prerequisites/，并写入 SHA256SUMS.txt。
 .EXAMPLE
-  .\make-kit.ps1 -AgentDir C:\build\device-agent\Release -OutZip C:\Users\qf\Desktop\device-agent-kit.zip
+  .\make-kit.ps1 -AgentDir C:\build\device-agent\Release -VcRedistPath C:\deps\vc_redist.x64.exe -OutZip C:\Users\qf\Desktop\device-agent-kit.zip
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$AgentDir,
   [string]$ScriptDir = $PSScriptRoot,
-  [string]$OutZip = ".\device-agent-kit.zip"
+  [string]$OutZip = ".\device-agent-kit.zip",
+  [string]$VcRedistPath
 )
 $ErrorActionPreference = 'Stop'
 
@@ -47,14 +50,31 @@ try {
   Copy-Item $ps1 $stage -Force
   Copy-Item $cmd $stage -Force
 
+  if ($VcRedistPath) {
+    if (-not (Test-Path -LiteralPath $VcRedistPath)) {
+      throw "找不到 VC++ Runtime: $VcRedistPath"
+    }
+    $prereqDir = Join-Path $stage 'prerequisites'
+    New-Item -ItemType Directory -Force -Path $prereqDir | Out-Null
+    Copy-Item -LiteralPath $VcRedistPath -Destination (Join-Path $prereqDir 'vc_redist.x64.exe') -Force
+  }
+
+  $manifestLines = @()
+  Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
+    $relative = $_.FullName.Substring($stage.Length).TrimStart('\').Replace('\', '/')
+    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $manifestLines += ($hash + '  ' + $relative)
+  }
+  Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Value $manifestLines -Encoding ASCII
+
   $OutZip = [System.IO.Path]::GetFullPath($OutZip)
   if (Test-Path $OutZip) { Remove-Item $OutZip -Force }
   # -Path 指 stage\* → 文件平铺在 zip 根(exe 与 ps1 同层)。
   Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $OutZip -Force
 
   Write-Host ('套件已生成: ' + $OutZip)
-  Write-Host ('内容(' + (Get-ChildItem $stage).Count + ' 个文件,exe + ' + $dlls.Count + ' dll + ps1 + cmd):')
-  Get-ChildItem $stage | Format-Table Name, Length -AutoSize | Out-String | ForEach-Object { Write-Host $_ }
+  Write-Host ('内容(' + (Get-ChildItem $stage -File -Recurse).Count + ' 个文件,exe + ' + $dlls.Count + ' dll + ps1 + cmd + SHA256SUMS):')
+  Get-ChildItem $stage -File -Recurse | Format-Table FullName, Length -AutoSize | Out-String | ForEach-Object { Write-Host $_ }
   Write-Host ('sha256: ' + (Get-FileHash $OutZip -Algorithm SHA256).Hash)
   Write-Host ''
   Write-Host '下一步:用 dashboard「上传套件」/ chat upload_package / curl 传它拿 file_id → 签 turnkey 引导链接。'

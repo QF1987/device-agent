@@ -201,6 +201,38 @@ function Invoke-CheckedProcess([string]$FilePath, [string[]]$Arguments, [int]$Ex
   }
 }
 
+function Get-ManifestSha256([string]$ManifestPath, [string]$RelativePath) {
+  if (-not (Test-Path -LiteralPath $ManifestPath)) { return '' }
+  $wanted = $RelativePath.Replace('\', '/').TrimStart('./').ToLowerInvariant()
+  foreach ($line in Get-Content -LiteralPath $ManifestPath) {
+    if ($line -match '^([0-9a-fA-F]{64})[\t ]+\*?(.+)$') {
+      $listed = $Matches[2].Trim().Replace('\', '/').TrimStart('./').ToLowerInvariant()
+      if ($listed -eq $wanted) {
+        return $Matches[1].ToLowerInvariant()
+      }
+    }
+  }
+  return ''
+}
+
+function Install-VcRedist([string]$Path, [string]$ExpectedSha256, [string]$SourceLabel) {
+  if (-not $ExpectedSha256) {
+    Fail 8 ('VC++ redistributable sha256 is required for ' + $SourceLabel)
+  }
+  Assert-Sha256 $Path $ExpectedSha256 8
+  Write-Log ('Running VC++ redistributable (' + $SourceLabel + ')')
+  $p = Start-Process -FilePath $Path -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru -WindowStyle Hidden
+  if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 1638 -or $p.ExitCode -eq 3010) {
+    if ($p.ExitCode -eq 3010) {
+      Write-Log 'WARN: VC++ redistributable requested a reboot; continuing with service installation'
+    } elseif ($p.ExitCode -eq 1638) {
+      Write-Log 'VC++ redistributable reports another/newer version is already installed'
+    }
+    return
+  }
+  Fail 8 ('VC++ redistributable failed with exit code ' + $p.ExitCode)
+}
+
 function Install-Prerequisites([hashtable]$OSInfo) {
   Enable-Tls12Client
   Enable-ProcessTls12
@@ -208,10 +240,19 @@ function Install-Prerequisites([hashtable]$OSInfo) {
   if ($VcRedistUrl) {
     $vcPath = Join-Path $BootstrapRoot 'vc_redist.x64.exe'
     Download-File $VcRedistUrl $vcPath
-    Assert-Sha256 $vcPath $VcRedistSha256 8
-    Invoke-CheckedProcess $vcPath @('/install', '/quiet', '/norestart') 8 'VC++ redistributable'
+    Install-VcRedist $vcPath $VcRedistSha256 'download'
   } else {
-    Write-Log 'WARN: vc_redist_url not provided; assuming VC++ runtime is already present or bundled'
+    $bundledRelative = 'prerequisites/vc_redist.x64.exe'
+    $bundledPath = Join-Path $ScriptDir 'prerequisites\vc_redist.x64.exe'
+    if (Test-Path -LiteralPath $bundledPath) {
+      $bundledSha = $VcRedistSha256
+      if (-not $bundledSha) {
+        $bundledSha = Get-ManifestSha256 (Join-Path $ScriptDir 'SHA256SUMS.txt') $bundledRelative
+      }
+      Install-VcRedist $bundledPath $bundledSha 'bundled prerequisites/vc_redist.x64.exe'
+    } else {
+      Write-Log 'WARN: VC++ redistributable not configured or bundled; assuming the runtime is already installed'
+    }
   }
 
   if ($OSInfo.IsWin7) {

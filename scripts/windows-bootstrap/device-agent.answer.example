@@ -38,7 +38,9 @@ install_dir=
 service_name=DeviceAgent
 log_dir=
 
-# Optional prerequisites. Provide fixed first-party URLs and sha256 values.
+# Optional prerequisites. URL mode requires a matching sha256. When the kit
+# contains prerequisites/vc_redist.x64.exe, the installer discovers it and
+# reads its hash from SHA256SUMS.txt; these fields may remain empty.
 vc_redist_url=
 vc_redist_sha256=
 ucrt_url=
