@@ -76,7 +76,11 @@ bool runRemoteDesktopChild(const RemoteDesktopRuntimeConfig& config,
         tunnel_cfg.screen_w = probe.width;
         tunnel_cfg.screen_h = probe.height;
         LOG_INFO("RemoteDesktopRuntime: Windows capture " + std::to_string(probe.width) + "x" +
-                 std::to_string(probe.height));
+                 std::to_string(probe.height) + " mode=" + capturer.lastCaptureMode() +
+                 " force_gdi=" + (capturer.forceGdi() ? "true" : "false") +
+                 " gdi_max_fps=" + std::to_string(capturer.gdiMaxFps()) +
+                 " gdi_tile_size=" + std::to_string(capturer.gdiTileSize()) +
+                 " initial_dirty_rects=" + std::to_string(probe.dirty_rects.size()));
     } else {
         tunnel_cfg.screen_w = config.fallback_width;
         tunnel_cfg.screen_h = config.fallback_height;

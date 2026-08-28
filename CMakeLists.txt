@@ -65,6 +65,7 @@ if(WIN32)
 endif()
 
 set(REMOTE_DESKTOP_SOURCES
+    src/remotedesktop/screen_capturer.cc
     src/remotedesktop/rfb/rfb_protocol.cc
     src/remotedesktop/rfb/rfb_server.cc
     src/remotedesktop/tunnel/tunnel_protocol.cc
@@ -102,6 +103,11 @@ if(WIN32)
     target_compile_definitions(remote_desktop PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
     target_compile_options(remote_desktop PUBLIC /utf-8)
     target_link_libraries(remote_desktop PUBLIC user32 gdi32 dxgi d3d11)
+
+    add_executable(gdi_capture_probe
+        src/remotedesktop/platform/windows/gdi_capture_probe.cc
+    )
+    target_link_libraries(gdi_capture_probe PRIVATE remote_desktop)
 endif()
 
 if(NOT ANDROID AND NOT __ANDROID__)

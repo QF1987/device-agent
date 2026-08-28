@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -28,5 +29,14 @@ public:
 
     virtual bool capture(ScreenFrame& frame, std::string& err) = 0;
 };
+
+// Computes coarse dirty regions without platform APIs. Changed tiles are
+// merged horizontally and vertically. Large or fragmented changes safely
+// fall back to one full-frame rectangle.
+std::vector<Rect> computeTileDirtyRects(const ScreenFrame& previous,
+                                        const ScreenFrame& current,
+                                        uint16_t tile_size = 32,
+                                        size_t max_rects = 256,
+                                        uint8_t full_frame_percent = 60);
 
 }  // namespace device_agent::remotedesktop
