@@ -221,7 +221,11 @@ function Install-VcRedist([string]$Path, [string]$ExpectedSha256, [string]$Sourc
   }
   Assert-Sha256 $Path $ExpectedSha256 8
   Write-Log ('Running VC++ redistributable (' + $SourceLabel + ')')
-  $p = Start-Process -FilePath $Path -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru -WindowStyle Hidden
+  try {
+    $p = Start-Process -FilePath $Path -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru -WindowStyle Hidden
+  } catch {
+    Fail 8 ('VC++ redistributable failed to start (' + $SourceLabel + '): ' + $_.Exception.Message)
+  }
   if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 1638 -or $p.ExitCode -eq 3010) {
     if ($p.ExitCode -eq 3010) {
       Write-Log 'WARN: VC++ redistributable requested a reboot; continuing with service installation'
