@@ -2,6 +2,9 @@
 #include "download/p2p_upload_counters.h"
 #include "client/network_info.h"
 #include "logger/logger.h"
+#ifdef _WIN32
+#include "observability/windows_observability.h"
+#endif
 #include <chrono>
 #include <cmath>
 
@@ -24,6 +27,11 @@ DeviceClient::DeviceClient(const Config& config)
     device_stub_ = terminal_agent::v1::DeviceService::NewStub(channel);
     command_stub_ = terminal_agent::v1::CommandService::NewStub(channel);
 
+#ifdef _WIN32
+    observability_sampler_.reset(new observability::ObservabilitySampler(
+        observability::collect_windows_observability));
+#endif
+
     LOG_INFO("DeviceClient created, server: " + config_.server.server_address());
 }
 
@@ -38,6 +46,10 @@ void DeviceClient::start() {
     }
 
     LOG_INFO("DeviceClient starting...");
+
+#ifdef _WIN32
+    observability_sampler_->start();
+#endif
 
     heartbeat_thread_ = std::thread(&DeviceClient::heartbeat_loop, this);
     status_report_thread_ = std::thread(&DeviceClient::status_report_loop, this);
@@ -69,6 +81,10 @@ void DeviceClient::stop() {
     if (status_report_thread_.joinable()) status_report_thread_.join();
     if (command_stream_thread_.joinable()) command_stream_thread_.join();
 
+#ifdef _WIN32
+    observability_sampler_->stop();
+#endif
+
     connected_.store(false);
     LOG_INFO("DeviceClient stopped");
 }
@@ -87,11 +103,20 @@ void DeviceClient::heartbeat_loop() {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
 
-        // TODO: populate cpu/memory/disk metrics
+#ifdef _WIN32
+        const auto snapshot = observability_sampler_->latest();
+        if (snapshot.has_value()) {
+            observability::populate_heartbeat(*snapshot, &req);
+        } else {
+            observability::populate_windows_capability(req.mutable_capability());
+        }
+#else
+        // 非 Windows collector 不在 S2 范围，保留既有兼容行为。
         req.set_cpu_percent(0);
         req.set_memory_percent(0);
         req.set_disk_percent(0);
         req.set_uptime_seconds(0);
+#endif
 
         terminal_agent::v1::HeartbeatResponse resp;
 
@@ -139,8 +164,13 @@ void DeviceClient::status_report_loop() {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
         status.set_status("online");
+#ifdef _WIN32
+        const auto snapshot = observability_sampler_->latest();
+        if (snapshot.has_value()) {
+            observability::populate_status(*snapshot, &status);
+        }
+#else
         status.set_firmware_version("v1.0.0");
-
         auto* metrics = status.mutable_metrics();
         metrics->set_cpu_percent(0);
         metrics->set_memory_percent(0);
@@ -153,6 +183,7 @@ void DeviceClient::status_report_loop() {
         metrics->set_p2p_upload_bytes(p2p_upload.total);
         metrics->set_p2p_upload_bytes_cellular(p2p_upload.cellular);
         populate_network_info_proto(status.mutable_network_info());
+#endif
 
         terminal_agent::v1::StatusReportResponse resp;
         grpc::ClientContext ctx;

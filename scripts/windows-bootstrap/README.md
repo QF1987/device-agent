@@ -9,6 +9,7 @@
 ```powershell
 .\make-kit.ps1 `
   -AgentDir C:\build\device-agent\Release `
+  -AgentVersion 1.2.3 `
   -VcRedistPath C:\deps\vc_redist.x64.exe `
   -OutZip C:\out\device-agent-kit.zip
 ```
@@ -18,6 +19,14 @@
 - 根目录的 Agent、DLL、CMD、PowerShell 安装脚本；
 - `prerequisites/vc_redist.x64.exe`；
 - `SHA256SUMS.txt`，记录打包时所有 payload 的 SHA-256。
+- `DEVICE_AGENT_MANIFEST.txt`，记录与二进制、EnrollRequest、周期 inventory 一致的 `agent_version`。
+
+`-AgentVersion` 必填，且脚本会执行 `device-agent.exe --version` 做逐字一致性校验；因此正式测试/发布套件缺版本或版本漂移会在打包阶段失败。开发构建仅允许 CMake 默认值 `0.0.0-dev`，正式构建需同时设置：
+
+```powershell
+cmake -S . -B build -DDEVICE_AGENT_BUILD_WINDOWS_AGENT=ON `
+  -DDEVICE_AGENT_RELEASE_BUILD=ON -DDEVICE_AGENT_VERSION=1.2.3
+```
 
 安装脚本的 VC++ Runtime 选择顺序：
 

@@ -60,6 +60,7 @@
 #endif
 #include "remotedesktop/remote_desktop_runtime.h"
 #include "reboot_state/reboot_state.h"
+#include "version/build_info.h"
 
 // ============================================================
 // 匿名命名空间：工具函数和全局状态
@@ -270,6 +271,12 @@ int run_windows_service(int argc, char* argv[]) {
 // main()：程序入口
 // ============================================================
 int main(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--version") {
+            std::cout << "device-agent " << device_agent::agent_version() << "\n";
+            return 0;
+        }
+    }
 #ifdef _WIN32
     if (has_arg(argc, argv, "--service")) {
         return run_windows_service(argc, argv);

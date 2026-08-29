@@ -8,6 +8,8 @@
   会校验 DLL 是否存在 —— 缺 DLL 装到设备会 1053(找不到 libprotobuf.dll)起不来。
 .PARAMETER AgentDir
   含 device-agent.exe + 其 DLL 的目录(构建产物目录)。必填。
+.PARAMETER AgentVersion
+  套件版本，必须与 device-agent.exe --version 完全一致；正式测试包不可省略。
 .PARAMETER ScriptDir
   含 install-device-agent.ps1/.cmd 的目录,默认本脚本所在的 windows-bootstrap 目录。
 .PARAMETER OutZip
@@ -15,20 +17,33 @@
 .PARAMETER VcRedistPath
   可选。Microsoft vc_redist.x64.exe 路径；提供后放入 prerequisites/，并写入 SHA256SUMS.txt。
 .EXAMPLE
-  .\make-kit.ps1 -AgentDir C:\build\device-agent\Release -VcRedistPath C:\deps\vc_redist.x64.exe -OutZip C:\Users\qf\Desktop\device-agent-kit.zip
+  .\make-kit.ps1 -AgentDir C:\build\device-agent\Release -AgentVersion 1.2.3 -VcRedistPath C:\deps\vc_redist.x64.exe -OutZip C:\Users\qf\Desktop\device-agent-kit.zip
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$AgentDir,
+  [Parameter(Mandatory = $true)][string]$AgentVersion,
   [string]$ScriptDir = $PSScriptRoot,
   [string]$OutZip = ".\device-agent-kit.zip",
   [string]$VcRedistPath
 )
 $ErrorActionPreference = 'Stop'
 
+if ($AgentVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' -or $AgentVersion.StartsWith('v')) {
+  throw "AgentVersion 必须是不带 v 前缀的 SemVer: $AgentVersion"
+}
+
 $exe = Join-Path $AgentDir 'device-agent.exe'
 if (-not (Test-Path $exe)) {
   throw "找不到 device-agent.exe: $exe(用 -AgentDir 指向你的构建产物目录)"
+}
+$versionOutput = (& $exe --version 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+  throw "无法读取 device-agent.exe 版本(exit=$LASTEXITCODE): $versionOutput"
+}
+$expectedVersionOutput = 'device-agent ' + $AgentVersion
+if ($versionOutput -ne $expectedVersionOutput) {
+  throw "版本不一致: 参数=$AgentVersion, binary='$versionOutput'"
 }
 $ps1 = Join-Path $ScriptDir 'install-device-agent.ps1'
 $cmd = Join-Path $ScriptDir 'install-device-agent.cmd'
@@ -49,6 +64,8 @@ try {
   $dlls | ForEach-Object { Copy-Item $_.FullName $stage -Force }
   Copy-Item $ps1 $stage -Force
   Copy-Item $cmd $stage -Force
+  Set-Content -LiteralPath (Join-Path $stage 'DEVICE_AGENT_MANIFEST.txt') `
+    -Value @('format=1', ('agent_version=' + $AgentVersion)) -Encoding ASCII
 
   if ($VcRedistPath) {
     if (-not (Test-Path -LiteralPath $VcRedistPath)) {
@@ -73,7 +90,7 @@ try {
   Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $OutZip -Force
 
   Write-Host ('套件已生成: ' + $OutZip)
-  Write-Host ('内容(' + (Get-ChildItem $stage -File -Recurse).Count + ' 个文件,exe + ' + $dlls.Count + ' dll + ps1 + cmd + SHA256SUMS):')
+  Write-Host ('内容(' + (Get-ChildItem $stage -File -Recurse).Count + ' 个文件,exe + ' + $dlls.Count + ' dll + ps1 + cmd + version manifest + SHA256SUMS):')
   Get-ChildItem $stage -File -Recurse | Format-Table FullName, Length -AutoSize | Out-String | ForEach-Object { Write-Host $_ }
   Write-Host ('sha256: ' + (Get-FileHash $OutZip -Algorithm SHA256).Hash)
   Write-Host ''

@@ -3,6 +3,7 @@
 #include <string>
 
 #include "config/config.h"
+#include "terminal_agent/v1/service.pb.h"
 
 namespace device_agent {
 namespace enrollment {
@@ -40,6 +41,7 @@ std::string parse_macos_ioplatform_uuid(const std::string& ioreg_output);
 std::string generate_nonce();
 std::string short_registration_code(const std::string& device_id);
 std::string default_token_file();
+void populate_enrollment_identity(terminal_agent::v1::EnrollRequest* request);
 
 bool load_local_credential(const std::string& path, LocalCredential* out);
 bool save_local_credential(const std::string& path, const LocalCredential& cred,

@@ -48,6 +48,9 @@
 #include "terminal_agent/v1/device.pb.h"
 
 #include "config/config.h"
+#ifdef _WIN32
+#include "observability/observability.h"
+#endif
 
 namespace device_agent {
 
@@ -111,6 +114,11 @@ private:
     std::thread heartbeat_thread_;
     std::thread status_report_thread_;
     std::thread command_stream_thread_;
+
+#ifdef _WIN32
+    // Windows 采集在独立线程中执行；heartbeat/status 只读同一缓存快照。
+    std::unique_ptr<observability::ObservabilitySampler> observability_sampler_;
+#endif
 
     // 运行标志（atomic 保证多线程安全读写）
     std::atomic<bool> running_{false};                // start/stop 控制

@@ -4,6 +4,20 @@ project(device-agent CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(DEVICE_AGENT_VERSION "0.0.0-dev" CACHE STRING
+    "DeviceAgent SemVer without a leading v")
+option(DEVICE_AGENT_RELEASE_BUILD
+    "Require an explicit non-development DeviceAgent version" OFF)
+if(NOT DEVICE_AGENT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$")
+    message(FATAL_ERROR
+        "DEVICE_AGENT_VERSION must be SemVer without a leading v; got '${DEVICE_AGENT_VERSION}'")
+endif()
+if(DEVICE_AGENT_RELEASE_BUILD AND DEVICE_AGENT_VERSION STREQUAL "0.0.0-dev")
+    message(FATAL_ERROR
+        "Release/test package builds must set -DDEVICE_AGENT_VERSION=<semver>")
+endif()
+add_compile_definitions(DEVICE_AGENT_VERSION="${DEVICE_AGENT_VERSION}")
+
 include(GNUInstallDirs)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -20,6 +34,8 @@ set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
     src/client/network_info.cc
+    src/observability/observability.cc
+    src/observability/windows_observability.cc
     src/client/command_handler.cc
     src/config/config.cc
     src/enrollment/enrollment_manager.cc
@@ -45,6 +61,9 @@ endif()
 set(COMMON_HEADERS
     src/client/device_client.h
     src/client/network_info.h
+    src/observability/observability.h
+    src/observability/windows_observability.h
+    src/version/build_info.h
     src/client/command_handler.h
     src/config/config.h
     src/enrollment/enrollment_manager.h
@@ -424,6 +443,34 @@ elseif(WIN32)
             wtsapi32
             winhttp
             bcrypt
+            iphlpapi
+            advapi32
+        )
+
+        add_executable(windows_observability_test
+            src/observability/windows_observability_test.cc
+            src/observability/observability.cc
+            src/observability/windows_observability.cc
+            src/enrollment/enrollment_manager.cc
+            src/config/config.cc
+            src/logger/logger.cc
+            ${WINDOWS_PROTO_SRCS}
+        )
+        target_include_directories(windows_observability_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${GEN_WINDOWS_DIR}
+        )
+        target_compile_definitions(windows_observability_test PRIVATE
+            WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(windows_observability_test PRIVATE /utf-8)
+        target_link_libraries(windows_observability_test PRIVATE
+            Threads::Threads
+            protobuf::libprotobuf
+            gRPC::grpc++
+            ws2_32
+            iphlpapi
+            bcrypt
+            advapi32
         )
     endif()
 
@@ -481,6 +528,28 @@ else()
         ${GEN_DESKTOP_DIR}
     )
     target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
+
+    add_executable(windows_observability_test
+        src/observability/windows_observability_test.cc
+        src/observability/observability.cc
+        src/observability/windows_observability.cc
+        src/enrollment/enrollment_manager.cc
+        src/config/config.cc
+        src/logger/logger.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+    )
+    target_include_directories(windows_observability_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_link_libraries(windows_observability_test PRIVATE
+        Threads::Threads
+        protobuf::libprotobuf
+        gRPC::grpc++
+    )
 
     add_executable(p2p_upload_counters_test
         src/download/p2p_upload_counters_test.cc
