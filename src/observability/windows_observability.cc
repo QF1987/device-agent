@@ -14,11 +14,11 @@
 #define _WIN32_WINNT 0x0A00
 #endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <windows.h>
 #include <winternl.h>
-#include <ws2tcpip.h>
 #endif
 
 namespace device_agent {
