@@ -134,6 +134,10 @@ if(NOT ANDROID AND NOT __ANDROID__)
         src/remotedesktop/rfb/rfb_protocol_test.cc
     )
     target_link_libraries(rfb_protocol_test PRIVATE remote_desktop)
+    if(MSVC)
+        target_compile_options(rfb_protocol_test PRIVATE
+            $<$<CONFIG:Release>:/UNDEBUG>)
+    endif()
 endif()
 
 # ─── Android: build as JNI shared library ─────────────────
@@ -463,7 +467,10 @@ elseif(WIN32)
         )
         target_compile_definitions(windows_observability_test PRIVATE
             WIN32_LEAN_AND_MEAN NOMINMAX)
-        target_compile_options(windows_observability_test PRIVATE /utf-8)
+        target_compile_options(windows_observability_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
         target_link_libraries(windows_observability_test PRIVATE
             Threads::Threads
             protobuf::libprotobuf
