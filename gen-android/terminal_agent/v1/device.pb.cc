@@ -340,6 +340,54 @@ struct DeviceMetricsDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 DeviceMetricsDefaultTypeInternal _DeviceMetrics_default_instance_;
 
+inline constexpr DeviceInventory::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        agent_version_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        platform_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        os_arch_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        hostname_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        os_name_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        os_version_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        cpu_model_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        memory_total_bytes_{::int64_t{0}},
+        system_disk_total_bytes_{::int64_t{0}},
+        cpu_logical_count_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR DeviceInventory::DeviceInventory(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(DeviceInventory_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct DeviceInventoryDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR DeviceInventoryDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~DeviceInventoryDefaultTypeInternal() {}
+  union {
+    DeviceInventory _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 DeviceInventoryDefaultTypeInternal _DeviceInventory_default_instance_;
+
 inline constexpr DeviceConfig::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -549,6 +597,7 @@ inline constexpr StatusReport::Impl_::Impl_(
         metrics_{nullptr},
         config_{nullptr},
         network_info_{nullptr},
+        inventory_{nullptr},
         timestamp_{::int64_t{0}} {}
 
 template <typename>
@@ -672,6 +721,29 @@ const ::uint32_t
         6,
         7,
         0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_._has_bits_),
+        13, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.agent_version_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.platform_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.os_arch_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.hostname_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.os_name_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.os_version_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.cpu_model_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.cpu_logical_count_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.memory_total_bytes_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceInventory, _impl_.system_disk_total_bytes_),
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        9,
+        7,
+        8,
+        0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceConfig, _impl_._has_bits_),
         8, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::DeviceConfig, _impl_.screen_brightness_),
@@ -705,7 +777,7 @@ const ::uint32_t
         7,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_._has_bits_),
-        10, // hasbit index offset
+        11, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.device_id_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.timestamp_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.status_),
@@ -713,13 +785,15 @@ const ::uint32_t
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.metrics_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.config_),
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.network_info_),
+        PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReport, _impl_.inventory_),
         0,
-        6,
+        7,
         1,
         2,
         3,
         4,
         5,
+        6,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::terminal_agent::v1::StatusReportResponse, _impl_._has_bits_),
         5, // hasbit index offset
@@ -842,18 +916,19 @@ static const ::_pbi::MigrationSchema
         {16, sizeof(::terminal_agent::v1::HeartbeatRequest)},
         {33, sizeof(::terminal_agent::v1::HeartbeatResponse)},
         {40, sizeof(::terminal_agent::v1::DeviceMetrics)},
-        {59, sizeof(::terminal_agent::v1::DeviceConfig)},
-        {72, sizeof(::terminal_agent::v1::NetworkInfo)},
-        {91, sizeof(::terminal_agent::v1::StatusReport)},
-        {108, sizeof(::terminal_agent::v1::StatusReportResponse)},
-        {115, sizeof(::terminal_agent::v1::EventReport)},
-        {130, sizeof(::terminal_agent::v1::EventReportResponse)},
-        {137, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
-        {156, sizeof(::terminal_agent::v1::Command)},
-        {171, sizeof(::terminal_agent::v1::CommandStreamRequest)},
-        {176, sizeof(::terminal_agent::v1::CommandResult)},
-        {189, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
-        {214, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
+        {59, sizeof(::terminal_agent::v1::DeviceInventory)},
+        {82, sizeof(::terminal_agent::v1::DeviceConfig)},
+        {95, sizeof(::terminal_agent::v1::NetworkInfo)},
+        {114, sizeof(::terminal_agent::v1::StatusReport)},
+        {133, sizeof(::terminal_agent::v1::StatusReportResponse)},
+        {140, sizeof(::terminal_agent::v1::EventReport)},
+        {155, sizeof(::terminal_agent::v1::EventReportResponse)},
+        {162, sizeof(::terminal_agent::v1::DownloadReadyCommand)},
+        {181, sizeof(::terminal_agent::v1::Command)},
+        {196, sizeof(::terminal_agent::v1::CommandStreamRequest)},
+        {201, sizeof(::terminal_agent::v1::CommandResult)},
+        {214, sizeof(::terminal_agent::v1::ReleaseStatusRequest)},
+        {239, sizeof(::terminal_agent::v1::ReleaseStatusResponse)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::terminal_agent::v1::_AuthContext_default_instance_._instance,
@@ -861,6 +936,7 @@ static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::terminal_agent::v1::_HeartbeatRequest_default_instance_._instance,
     &::terminal_agent::v1::_HeartbeatResponse_default_instance_._instance,
     &::terminal_agent::v1::_DeviceMetrics_default_instance_._instance,
+    &::terminal_agent::v1::_DeviceInventory_default_instance_._instance,
     &::terminal_agent::v1::_DeviceConfig_default_instance_._instance,
     &::terminal_agent::v1::_NetworkInfo_default_instance_._instance,
     &::terminal_agent::v1::_StatusReport_default_instance_._instance,
@@ -878,103 +954,110 @@ const char descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto[] AB
     protodesc_cold) = {
     "\n\036terminal_agent/v1/device.proto\022\021termin"
     "al_agent.v1\"/\n\013AuthContext\022\021\n\tdevice_id\030"
-    "\001 \001(\t\022\r\n\005token\030\002 \001(\t\"_\n\020DeviceCapability"
-    "\022\030\n\020firmware_version\030\001 \001(\t\022\025\n\rproto_vers"
-    "ion\030\002 \001(\005\022\032\n\022supported_features\030\003 \003(\t\"\314\001"
-    "\n\020HeartbeatRequest\022\021\n\tdevice_id\030\001 \001(\t\022\021\n"
-    "\ttimestamp\030\002 \001(\003\022\023\n\013cpu_percent\030\003 \001(\002\022\026\n"
-    "\016memory_percent\030\004 \001(\002\022\024\n\014disk_percent\030\005 "
-    "\001(\002\022\026\n\016uptime_seconds\030\006 \001(\005\0227\n\ncapabilit"
-    "y\030\007 \001(\0132#.terminal_agent.v1.DeviceCapabi"
-    "lity\"E\n\021HeartbeatResponse\022\033\n\023has_pending"
-    "_command\030\001 \001(\010\022\023\n\013server_time\030\002 \001(\003\"\333\001\n\r"
-    "DeviceMetrics\022\023\n\013cpu_percent\030\001 \001(\002\022\026\n\016me"
-    "mory_percent\030\002 \001(\002\022\024\n\014disk_percent\030\003 \001(\002"
-    "\022\030\n\020network_rx_bytes\030\004 \001(\003\022\030\n\020network_tx"
-    "_bytes\030\005 \001(\003\022\026\n\016uptime_seconds\030\006 \001(\005\022\030\n\020"
-    "p2p_upload_bytes\030\007 \001(\003\022!\n\031p2p_upload_byt"
-    "es_cellular\030\010 \001(\003\"\222\001\n\014DeviceConfig\022\031\n\021sc"
-    "reen_brightness\030\001 \001(\005\022\024\n\014volume_level\030\002 "
-    "\001(\005\022\033\n\023auto_reboot_enabled\030\003 \001(\010\022\030\n\020auto"
-    "_reboot_time\030\004 \001(\t\022\032\n\022custom_config_json"
-    "\030\005 \001(\t\"\300\001\n\013NetworkInfo\022\023\n\013gateway_mac\030\001 "
-    "\001(\t\022\r\n\005bssid\030\002 \001(\t\022\016\n\006lan_ip\030\003 \001(\t\022\020\n\010la"
-    "n_cidr\030\004 \001(\t\022\021\n\tpublic_ip\030\005 \001(\t\0220\n\010net_t"
-    "ype\030\006 \001(\0162\036.terminal_agent.v1.NetworkTyp"
-    "e\022\022\n\nis_metered\030\007 \001(\010\022\022\n\nis_roaming\030\010 \001("
-    "\010\"\370\001\n\014StatusReport\022\021\n\tdevice_id\030\001 \001(\t\022\021\n"
-    "\ttimestamp\030\002 \001(\003\022\016\n\006status\030\003 \001(\t\022\030\n\020firm"
-    "ware_version\030\004 \001(\t\0221\n\007metrics\030\005 \001(\0132 .te"
-    "rminal_agent.v1.DeviceMetrics\022/\n\006config\030"
-    "\006 \001(\0132\037.terminal_agent.v1.DeviceConfig\0224"
-    "\n\014network_info\030\007 \001(\0132\036.terminal_agent.v1"
-    ".NetworkInfo\"9\n\024StatusReportResponse\022\020\n\010"
-    "accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\177\n\013Event"
-    "Report\022\021\n\tdevice_id\030\001 \001(\t\022\021\n\ttimestamp\030\002"
-    " \001(\003\022\022\n\nevent_type\030\003 \001(\t\022\020\n\010severity\030\004 \001"
-    "(\t\022\017\n\007message\030\005 \001(\t\022\023\n\013detail_json\030\006 \001(\t"
-    "\"8\n\023EventReportResponse\022\020\n\010accepted\030\001 \001("
-    "\010\022\017\n\007message\030\002 \001(\t\"\256\001\n\024DownloadReadyComm"
-    "and\022\020\n\010batch_id\030\001 \001(\t\022\017\n\007file_id\030\002 \001(\t\022\021"
-    "\n\tfile_type\030\003 \001(\t\022\024\n\014download_url\030\004 \001(\t\022"
-    "\016\n\006sha256\030\005 \001(\t\022\021\n\tfile_size\030\006 \001(\003\022\023\n\013to"
-    "rrent_url\030\007 \001(\t\022\022\n\nmagnet_uri\030\010 \001(\t\"\210\001\n\007"
-    "Command\022\021\n\tdevice_id\030\001 \001(\t\022\022\n\ncommand_id"
-    "\030\002 \001(\t\022\024\n\014command_type\030\003 \001(\t\022\024\n\014payload_"
-    "json\030\004 \001(\t\022\021\n\tissued_at\030\005 \001(\003\022\027\n\017timeout"
-    "_seconds\030\006 \001(\003\")\n\024CommandStreamRequest\022\021"
-    "\n\tdevice_id\030\001 \001(\t\"l\n\rCommandResult\022\022\n\nco"
-    "mmand_id\030\001 \001(\t\022\021\n\tdevice_id\030\002 \001(\t\022\016\n\006sta"
-    "tus\030\003 \001(\t\022\017\n\007message\030\004 \001(\t\022\023\n\013executed_a"
-    "t\030\005 \001(\003\"\351\002\n\024ReleaseStatusRequest\022\021\n\tdevi"
-    "ce_id\030\001 \001(\t\022\020\n\010batch_id\030\002 \001(\t\022\017\n\007file_id"
-    "\030\003 \001(\t\0226\n\006status\030\004 \001(\0162&.terminal_agent."
-    "v1.ReleaseDeviceStatus\022\030\n\020downloaded_byt"
-    "es\030\005 \001(\003\0227\n\nerror_code\030\006 \001(\0162#.terminal_"
-    "agent.v1.ReleaseErrorCode\022\025\n\rerror_messa"
-    "ge\030\007 \001(\t\022\021\n\ttimestamp\030\010 \001(\003\022:\n\017completio"
-    "n_path\030\t \001(\0162!.terminal_agent.v1.Complet"
-    "ionPath\022\022\n\npeer_bytes\030\n \001(\003\022\026\n\016web_seed_"
-    "bytes\030\013 \001(\003\":\n\025ReleaseStatusResponse\022\020\n\010"
-    "accepted\030\001 \001(\010\022\017\n\007message\030\002 \001(\t*D\n\013Netwo"
-    "rkType\022\017\n\013NET_UNKNOWN\020\000\022\014\n\010CELLULAR\020\001\022\010\n"
-    "\004WIFI\020\002\022\014\n\010ETHERNET\020\003*\266\003\n\023ReleaseDeviceS"
-    "tatus\022%\n!RELEASE_DEVICE_STATUS_UNSPECIFI"
-    "ED\020\000\022!\n\035RELEASE_DEVICE_STATUS_PENDING\020\001\022"
-    "\037\n\033RELEASE_DEVICE_STATUS_READY\020\002\022%\n!RELE"
-    "ASE_DEVICE_STATUS_DOWNLOADING\020\003\022$\n RELEA"
-    "SE_DEVICE_STATUS_DOWNLOADED\020\004\022$\n RELEASE"
-    "_DEVICE_STATUS_INSTALLING\020\005\022#\n\037RELEASE_D"
-    "EVICE_STATUS_INSTALLED\020\006\022)\n%RELEASE_DEVI"
-    "CE_STATUS_DOWNLOAD_FAILED\020\007\022(\n$RELEASE_D"
-    "EVICE_STATUS_INSTALL_FAILED\020\010\022#\n\037RELEASE"
-    "_DEVICE_STATUS_CANCELLED\020\t\022\"\n\036RELEASE_DE"
-    "VICE_STATUS_RETRYING\020\n*\234\002\n\020ReleaseErrorC"
-    "ode\022\"\n\036RELEASE_ERROR_CODE_UNSPECIFIED\020\000\022"
-    "$\n RELEASE_ERROR_CODE_NETWORK_ERROR\020\001\022#\n"
-    "\037RELEASE_ERROR_CODE_SERVER_ERROR\020\002\022$\n RE"
-    "LEASE_ERROR_CODE_STORAGE_ERROR\020\003\022&\n\"RELE"
-    "ASE_ERROR_CODE_CHECKSUM_FAILED\020\004\022$\n RELE"
-    "ASE_ERROR_CODE_INSTALL_ERROR\020\005\022%\n!RELEAS"
-    "E_ERROR_CODE_BUSINESS_ERROR\020\006*\221\001\n\016Comple"
-    "tionPath\022\037\n\033COMPLETION_PATH_UNSPECIFIED\020"
-    "\000\022\017\n\013P2P_PRIMARY\020\001\022\024\n\020WEB_SEED_PRIMARY\020\002"
-    "\022\027\n\023HTTP_FALLBACK_STALL\020\003\022\036\n\032HTTP_FALLBA"
-    "CK_SHA_MISMATCH\020\004B;Z9github.com/QF1987/t"
-    "erminal-agent-go/gen/terminal_agent/v1b\006"
-    "proto3"
+    "\001 \001(\t\022\r\n\005token\030\002 \001(\t\"c\n\020DeviceCapability"
+    "\022\034\n\020firmware_version\030\001 \001(\tB\002\030\001\022\025\n\rproto_"
+    "version\030\002 \001(\005\022\032\n\022supported_features\030\003 \003("
+    "\t\"\314\001\n\020HeartbeatRequest\022\021\n\tdevice_id\030\001 \001("
+    "\t\022\021\n\ttimestamp\030\002 \001(\003\022\023\n\013cpu_percent\030\003 \001("
+    "\002\022\026\n\016memory_percent\030\004 \001(\002\022\024\n\014disk_percen"
+    "t\030\005 \001(\002\022\026\n\016uptime_seconds\030\006 \001(\005\0227\n\ncapab"
+    "ility\030\007 \001(\0132#.terminal_agent.v1.DeviceCa"
+    "pability\"E\n\021HeartbeatResponse\022\033\n\023has_pen"
+    "ding_command\030\001 \001(\010\022\023\n\013server_time\030\002 \001(\003\""
+    "\333\001\n\rDeviceMetrics\022\023\n\013cpu_percent\030\001 \001(\002\022\026"
+    "\n\016memory_percent\030\002 \001(\002\022\024\n\014disk_percent\030\003"
+    " \001(\002\022\030\n\020network_rx_bytes\030\004 \001(\003\022\030\n\020networ"
+    "k_tx_bytes\030\005 \001(\003\022\026\n\016uptime_seconds\030\006 \001(\005"
+    "\022\030\n\020p2p_upload_bytes\030\007 \001(\003\022!\n\031p2p_upload"
+    "_bytes_cellular\030\010 \001(\003\"\355\001\n\017DeviceInventor"
+    "y\022\025\n\ragent_version\030\001 \001(\t\022\020\n\010platform\030\002 \001"
+    "(\t\022\017\n\007os_arch\030\003 \001(\t\022\020\n\010hostname\030\004 \001(\t\022\017\n"
+    "\007os_name\030\005 \001(\t\022\022\n\nos_version\030\006 \001(\t\022\021\n\tcp"
+    "u_model\030\007 \001(\t\022\031\n\021cpu_logical_count\030\010 \001(\005"
+    "\022\032\n\022memory_total_bytes\030\t \001(\003\022\037\n\027system_d"
+    "isk_total_bytes\030\n \001(\003\"\222\001\n\014DeviceConfig\022\031"
+    "\n\021screen_brightness\030\001 \001(\005\022\024\n\014volume_leve"
+    "l\030\002 \001(\005\022\033\n\023auto_reboot_enabled\030\003 \001(\010\022\030\n\020"
+    "auto_reboot_time\030\004 \001(\t\022\032\n\022custom_config_"
+    "json\030\005 \001(\t\"\300\001\n\013NetworkInfo\022\023\n\013gateway_ma"
+    "c\030\001 \001(\t\022\r\n\005bssid\030\002 \001(\t\022\016\n\006lan_ip\030\003 \001(\t\022\020"
+    "\n\010lan_cidr\030\004 \001(\t\022\021\n\tpublic_ip\030\005 \001(\t\0220\n\010n"
+    "et_type\030\006 \001(\0162\036.terminal_agent.v1.Networ"
+    "kType\022\022\n\nis_metered\030\007 \001(\010\022\022\n\nis_roaming\030"
+    "\010 \001(\010\"\263\002\n\014StatusReport\022\021\n\tdevice_id\030\001 \001("
+    "\t\022\021\n\ttimestamp\030\002 \001(\003\022\016\n\006status\030\003 \001(\t\022\034\n\020"
+    "firmware_version\030\004 \001(\tB\002\030\001\0221\n\007metrics\030\005 "
+    "\001(\0132 .terminal_agent.v1.DeviceMetrics\022/\n"
+    "\006config\030\006 \001(\0132\037.terminal_agent.v1.Device"
+    "Config\0224\n\014network_info\030\007 \001(\0132\036.terminal_"
+    "agent.v1.NetworkInfo\0225\n\tinventory\030\010 \001(\0132"
+    "\".terminal_agent.v1.DeviceInventory\"9\n\024S"
+    "tatusReportResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n"
+    "\007message\030\002 \001(\t\"\177\n\013EventReport\022\021\n\tdevice_"
+    "id\030\001 \001(\t\022\021\n\ttimestamp\030\002 \001(\003\022\022\n\nevent_typ"
+    "e\030\003 \001(\t\022\020\n\010severity\030\004 \001(\t\022\017\n\007message\030\005 \001"
+    "(\t\022\023\n\013detail_json\030\006 \001(\t\"8\n\023EventReportRe"
+    "sponse\022\020\n\010accepted\030\001 \001(\010\022\017\n\007message\030\002 \001("
+    "\t\"\256\001\n\024DownloadReadyCommand\022\020\n\010batch_id\030\001"
+    " \001(\t\022\017\n\007file_id\030\002 \001(\t\022\021\n\tfile_type\030\003 \001(\t"
+    "\022\024\n\014download_url\030\004 \001(\t\022\016\n\006sha256\030\005 \001(\t\022\021"
+    "\n\tfile_size\030\006 \001(\003\022\023\n\013torrent_url\030\007 \001(\t\022\022"
+    "\n\nmagnet_uri\030\010 \001(\t\"\210\001\n\007Command\022\021\n\tdevice"
+    "_id\030\001 \001(\t\022\022\n\ncommand_id\030\002 \001(\t\022\024\n\014command"
+    "_type\030\003 \001(\t\022\024\n\014payload_json\030\004 \001(\t\022\021\n\tiss"
+    "ued_at\030\005 \001(\003\022\027\n\017timeout_seconds\030\006 \001(\003\")\n"
+    "\024CommandStreamRequest\022\021\n\tdevice_id\030\001 \001(\t"
+    "\"l\n\rCommandResult\022\022\n\ncommand_id\030\001 \001(\t\022\021\n"
+    "\tdevice_id\030\002 \001(\t\022\016\n\006status\030\003 \001(\t\022\017\n\007mess"
+    "age\030\004 \001(\t\022\023\n\013executed_at\030\005 \001(\003\"\351\002\n\024Relea"
+    "seStatusRequest\022\021\n\tdevice_id\030\001 \001(\t\022\020\n\010ba"
+    "tch_id\030\002 \001(\t\022\017\n\007file_id\030\003 \001(\t\0226\n\006status\030"
+    "\004 \001(\0162&.terminal_agent.v1.ReleaseDeviceS"
+    "tatus\022\030\n\020downloaded_bytes\030\005 \001(\003\0227\n\nerror"
+    "_code\030\006 \001(\0162#.terminal_agent.v1.ReleaseE"
+    "rrorCode\022\025\n\rerror_message\030\007 \001(\t\022\021\n\ttimes"
+    "tamp\030\010 \001(\003\022:\n\017completion_path\030\t \001(\0162!.te"
+    "rminal_agent.v1.CompletionPath\022\022\n\npeer_b"
+    "ytes\030\n \001(\003\022\026\n\016web_seed_bytes\030\013 \001(\003\":\n\025Re"
+    "leaseStatusResponse\022\020\n\010accepted\030\001 \001(\010\022\017\n"
+    "\007message\030\002 \001(\t*D\n\013NetworkType\022\017\n\013NET_UNK"
+    "NOWN\020\000\022\014\n\010CELLULAR\020\001\022\010\n\004WIFI\020\002\022\014\n\010ETHERN"
+    "ET\020\003*\266\003\n\023ReleaseDeviceStatus\022%\n!RELEASE_"
+    "DEVICE_STATUS_UNSPECIFIED\020\000\022!\n\035RELEASE_D"
+    "EVICE_STATUS_PENDING\020\001\022\037\n\033RELEASE_DEVICE"
+    "_STATUS_READY\020\002\022%\n!RELEASE_DEVICE_STATUS"
+    "_DOWNLOADING\020\003\022$\n RELEASE_DEVICE_STATUS_"
+    "DOWNLOADED\020\004\022$\n RELEASE_DEVICE_STATUS_IN"
+    "STALLING\020\005\022#\n\037RELEASE_DEVICE_STATUS_INST"
+    "ALLED\020\006\022)\n%RELEASE_DEVICE_STATUS_DOWNLOA"
+    "D_FAILED\020\007\022(\n$RELEASE_DEVICE_STATUS_INST"
+    "ALL_FAILED\020\010\022#\n\037RELEASE_DEVICE_STATUS_CA"
+    "NCELLED\020\t\022\"\n\036RELEASE_DEVICE_STATUS_RETRY"
+    "ING\020\n*\234\002\n\020ReleaseErrorCode\022\"\n\036RELEASE_ER"
+    "ROR_CODE_UNSPECIFIED\020\000\022$\n RELEASE_ERROR_"
+    "CODE_NETWORK_ERROR\020\001\022#\n\037RELEASE_ERROR_CO"
+    "DE_SERVER_ERROR\020\002\022$\n RELEASE_ERROR_CODE_"
+    "STORAGE_ERROR\020\003\022&\n\"RELEASE_ERROR_CODE_CH"
+    "ECKSUM_FAILED\020\004\022$\n RELEASE_ERROR_CODE_IN"
+    "STALL_ERROR\020\005\022%\n!RELEASE_ERROR_CODE_BUSI"
+    "NESS_ERROR\020\006*\221\001\n\016CompletionPath\022\037\n\033COMPL"
+    "ETION_PATH_UNSPECIFIED\020\000\022\017\n\013P2P_PRIMARY\020"
+    "\001\022\024\n\020WEB_SEED_PRIMARY\020\002\022\027\n\023HTTP_FALLBACK"
+    "_STALL\020\003\022\036\n\032HTTP_FALLBACK_SHA_MISMATCH\020\004"
+    "B;Z9github.com/QF1987/terminal-agent-go/"
+    "gen/terminal_agent/v1b\006proto3"
 };
 static ::absl::once_flag descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto = {
     false,
     false,
-    3446,
+    3749,
     descriptor_table_protodef_terminal_5fagent_2fv1_2fdevice_2eproto,
     "terminal_agent/v1/device.proto",
     &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto_once,
     nullptr,
     0,
-    17,
+    18,
     schemas,
     file_default_instances,
     TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto::offsets,
@@ -1457,7 +1540,7 @@ DeviceCapability::_table_ = {
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
     {::_pbi::TcParser::MiniParse, {}},
-    // string firmware_version = 1;
+    // string firmware_version = 1 [deprecated = true];
     {::_pbi::TcParser::FastUS1,
      {10, 0, 0, PROTOBUF_FIELD_OFFSET(DeviceCapability, _impl_.firmware_version_)}},
     // int32 proto_version = 2;
@@ -1469,7 +1552,7 @@ DeviceCapability::_table_ = {
   }}, {{
     65535, 65535
   }}, {{
-    // string firmware_version = 1;
+    // string firmware_version = 1 [deprecated = true];
     {PROTOBUF_FIELD_OFFSET(DeviceCapability, _impl_.firmware_version_), _Internal::kHasBitsOffset + 0, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // int32 proto_version = 2;
@@ -1519,7 +1602,7 @@ PROTOBUF_NOINLINE void DeviceCapability::Clear() {
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
-  // string firmware_version = 1;
+  // string firmware_version = 1 [deprecated = true];
   if ((this_._impl_._has_bits_[0] & 0x00000001u) != 0) {
     if (!this_._internal_firmware_version().empty()) {
       const ::std::string& _s = this_._internal_firmware_version();
@@ -1583,7 +1666,7 @@ PROTOBUF_NOINLINE void DeviceCapability::Clear() {
   }
   cached_has_bits = this_._impl_._has_bits_[0];
   if ((cached_has_bits & 0x00000003u) != 0) {
-    // string firmware_version = 1;
+    // string firmware_version = 1 [deprecated = true];
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (!this_._internal_firmware_version().empty()) {
         total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
@@ -2837,6 +2920,629 @@ void DeviceMetrics::InternalSwap(DeviceMetrics* PROTOBUF_RESTRICT PROTOBUF_NONNU
 }
 // ===================================================================
 
+class DeviceInventory::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<DeviceInventory>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_._has_bits_);
+};
+
+DeviceInventory::DeviceInventory(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, DeviceInventory_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:terminal_agent.v1.DeviceInventory)
+}
+PROTOBUF_NDEBUG_INLINE DeviceInventory::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    const ::terminal_agent::v1::DeviceInventory& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        agent_version_(arena, from.agent_version_),
+        platform_(arena, from.platform_),
+        os_arch_(arena, from.os_arch_),
+        hostname_(arena, from.hostname_),
+        os_name_(arena, from.os_name_),
+        os_version_(arena, from.os_version_),
+        cpu_model_(arena, from.cpu_model_) {}
+
+DeviceInventory::DeviceInventory(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const DeviceInventory& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, DeviceInventory_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  DeviceInventory* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::memcpy(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, memory_total_bytes_),
+           reinterpret_cast<const char *>(&from._impl_) +
+               offsetof(Impl_, memory_total_bytes_),
+           offsetof(Impl_, cpu_logical_count_) -
+               offsetof(Impl_, memory_total_bytes_) +
+               sizeof(Impl_::cpu_logical_count_));
+
+  // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.DeviceInventory)
+}
+PROTOBUF_NDEBUG_INLINE DeviceInventory::Impl_::Impl_(
+    ::google::protobuf::internal::InternalVisibility visibility,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        agent_version_(arena),
+        platform_(arena),
+        os_arch_(arena),
+        hostname_(arena),
+        os_name_(arena),
+        os_version_(arena),
+        cpu_model_(arena) {}
+
+inline void DeviceInventory::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char *>(&_impl_) +
+               offsetof(Impl_, memory_total_bytes_),
+           0,
+           offsetof(Impl_, cpu_logical_count_) -
+               offsetof(Impl_, memory_total_bytes_) +
+               sizeof(Impl_::cpu_logical_count_));
+}
+DeviceInventory::~DeviceInventory() {
+  // @@protoc_insertion_point(destructor:terminal_agent.v1.DeviceInventory)
+  SharedDtor(*this);
+}
+inline void DeviceInventory::SharedDtor(MessageLite& self) {
+  DeviceInventory& this_ = static_cast<DeviceInventory&>(self);
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.agent_version_.Destroy();
+  this_._impl_.platform_.Destroy();
+  this_._impl_.os_arch_.Destroy();
+  this_._impl_.hostname_.Destroy();
+  this_._impl_.os_name_.Destroy();
+  this_._impl_.os_version_.Destroy();
+  this_._impl_.cpu_model_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL DeviceInventory::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) DeviceInventory(arena);
+}
+constexpr auto DeviceInventory::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(DeviceInventory),
+                                            alignof(DeviceInventory));
+}
+constexpr auto DeviceInventory::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_DeviceInventory_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &DeviceInventory::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<DeviceInventory>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &DeviceInventory::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<DeviceInventory>(), &DeviceInventory::ByteSizeLong,
+              &DeviceInventory::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_._cached_size_),
+          false,
+      },
+      &DeviceInventory::kDescriptorMethods,
+      &descriptor_table_terminal_5fagent_2fv1_2fdevice_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull DeviceInventory_class_data_ =
+        DeviceInventory::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+DeviceInventory::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&DeviceInventory_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(DeviceInventory_class_data_.tc_table);
+  return DeviceInventory_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<4, 10, 0, 112, 2>
+DeviceInventory::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_._has_bits_),
+    0, // no _extensions_
+    10, 120,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294966272,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    10,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    DeviceInventory_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceInventory>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // string agent_version = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 0, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.agent_version_)}},
+    // string platform = 2;
+    {::_pbi::TcParser::FastUS1,
+     {18, 1, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.platform_)}},
+    // string os_arch = 3;
+    {::_pbi::TcParser::FastUS1,
+     {26, 2, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_arch_)}},
+    // string hostname = 4;
+    {::_pbi::TcParser::FastUS1,
+     {34, 3, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.hostname_)}},
+    // string os_name = 5;
+    {::_pbi::TcParser::FastUS1,
+     {42, 4, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_name_)}},
+    // string os_version = 6;
+    {::_pbi::TcParser::FastUS1,
+     {50, 5, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_version_)}},
+    // string cpu_model = 7;
+    {::_pbi::TcParser::FastUS1,
+     {58, 6, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.cpu_model_)}},
+    // int32 cpu_logical_count = 8;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(DeviceInventory, _impl_.cpu_logical_count_), 9>(),
+     {64, 9, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.cpu_logical_count_)}},
+    // int64 memory_total_bytes = 9;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DeviceInventory, _impl_.memory_total_bytes_), 7>(),
+     {72, 7, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.memory_total_bytes_)}},
+    // int64 system_disk_total_bytes = 10;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(DeviceInventory, _impl_.system_disk_total_bytes_), 8>(),
+     {80, 8, 0, PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.system_disk_total_bytes_)}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string agent_version = 1;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.agent_version_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string platform = 2;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.platform_), _Internal::kHasBitsOffset + 1, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string os_arch = 3;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_arch_), _Internal::kHasBitsOffset + 2, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string hostname = 4;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.hostname_), _Internal::kHasBitsOffset + 3, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string os_name = 5;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_name_), _Internal::kHasBitsOffset + 4, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string os_version = 6;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.os_version_), _Internal::kHasBitsOffset + 5, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // string cpu_model = 7;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.cpu_model_), _Internal::kHasBitsOffset + 6, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int32 cpu_logical_count = 8;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.cpu_logical_count_), _Internal::kHasBitsOffset + 9, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // int64 memory_total_bytes = 9;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.memory_total_bytes_), _Internal::kHasBitsOffset + 7, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+    // int64 system_disk_total_bytes = 10;
+    {PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.system_disk_total_bytes_), _Internal::kHasBitsOffset + 8, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
+  }},
+  // no aux_entries
+  {{
+    "\41\15\10\7\10\7\12\11\0\0\0\0\0\0\0\0"
+    "terminal_agent.v1.DeviceInventory"
+    "agent_version"
+    "platform"
+    "os_arch"
+    "hostname"
+    "os_name"
+    "os_version"
+    "cpu_model"
+  }},
+};
+PROTOBUF_NOINLINE void DeviceInventory::Clear() {
+// @@protoc_insertion_point(message_clear_start:terminal_agent.v1.DeviceInventory)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if ((cached_has_bits & 0x0000007fu) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      _impl_.agent_version_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      _impl_.platform_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      _impl_.os_arch_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      _impl_.hostname_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      _impl_.os_name_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      _impl_.os_version_.ClearNonDefaultToEmpty();
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      _impl_.cpu_model_.ClearNonDefaultToEmpty();
+    }
+  }
+  _impl_.memory_total_bytes_ = ::int64_t{0};
+  if ((cached_has_bits & 0x00000300u) != 0) {
+    ::memset(&_impl_.system_disk_total_bytes_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.cpu_logical_count_) -
+        reinterpret_cast<char*>(&_impl_.system_disk_total_bytes_)) + sizeof(_impl_.cpu_logical_count_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL DeviceInventory::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const DeviceInventory& this_ = static_cast<const DeviceInventory&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL DeviceInventory::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const DeviceInventory& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(serialize_to_array_start:terminal_agent.v1.DeviceInventory)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // string agent_version = 1;
+  if ((this_._impl_._has_bits_[0] & 0x00000001u) != 0) {
+    if (!this_._internal_agent_version().empty()) {
+      const ::std::string& _s = this_._internal_agent_version();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.agent_version");
+      target = stream->WriteStringMaybeAliased(1, _s, target);
+    }
+  }
+
+  // string platform = 2;
+  if ((this_._impl_._has_bits_[0] & 0x00000002u) != 0) {
+    if (!this_._internal_platform().empty()) {
+      const ::std::string& _s = this_._internal_platform();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.platform");
+      target = stream->WriteStringMaybeAliased(2, _s, target);
+    }
+  }
+
+  // string os_arch = 3;
+  if ((this_._impl_._has_bits_[0] & 0x00000004u) != 0) {
+    if (!this_._internal_os_arch().empty()) {
+      const ::std::string& _s = this_._internal_os_arch();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.os_arch");
+      target = stream->WriteStringMaybeAliased(3, _s, target);
+    }
+  }
+
+  // string hostname = 4;
+  if ((this_._impl_._has_bits_[0] & 0x00000008u) != 0) {
+    if (!this_._internal_hostname().empty()) {
+      const ::std::string& _s = this_._internal_hostname();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.hostname");
+      target = stream->WriteStringMaybeAliased(4, _s, target);
+    }
+  }
+
+  // string os_name = 5;
+  if ((this_._impl_._has_bits_[0] & 0x00000010u) != 0) {
+    if (!this_._internal_os_name().empty()) {
+      const ::std::string& _s = this_._internal_os_name();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.os_name");
+      target = stream->WriteStringMaybeAliased(5, _s, target);
+    }
+  }
+
+  // string os_version = 6;
+  if ((this_._impl_._has_bits_[0] & 0x00000020u) != 0) {
+    if (!this_._internal_os_version().empty()) {
+      const ::std::string& _s = this_._internal_os_version();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.os_version");
+      target = stream->WriteStringMaybeAliased(6, _s, target);
+    }
+  }
+
+  // string cpu_model = 7;
+  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+    if (!this_._internal_cpu_model().empty()) {
+      const ::std::string& _s = this_._internal_cpu_model();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "terminal_agent.v1.DeviceInventory.cpu_model");
+      target = stream->WriteStringMaybeAliased(7, _s, target);
+    }
+  }
+
+  // int32 cpu_logical_count = 8;
+  if ((this_._impl_._has_bits_[0] & 0x00000200u) != 0) {
+    if (this_._internal_cpu_logical_count() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<8>(
+              stream, this_._internal_cpu_logical_count(), target);
+    }
+  }
+
+  // int64 memory_total_bytes = 9;
+  if ((this_._impl_._has_bits_[0] & 0x00000080u) != 0) {
+    if (this_._internal_memory_total_bytes() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<9>(
+              stream, this_._internal_memory_total_bytes(), target);
+    }
+  }
+
+  // int64 system_disk_total_bytes = 10;
+  if ((this_._impl_._has_bits_[0] & 0x00000100u) != 0) {
+    if (this_._internal_system_disk_total_bytes() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<10>(
+              stream, this_._internal_system_disk_total_bytes(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:terminal_agent.v1.DeviceInventory)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t DeviceInventory::ByteSizeLong(const MessageLite& base) {
+  const DeviceInventory& this_ = static_cast<const DeviceInventory&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t DeviceInventory::ByteSizeLong() const {
+  const DeviceInventory& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:terminal_agent.v1.DeviceInventory)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x000000ffu) != 0) {
+    // string agent_version = 1;
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!this_._internal_agent_version().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_agent_version());
+      }
+    }
+    // string platform = 2;
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!this_._internal_platform().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_platform());
+      }
+    }
+    // string os_arch = 3;
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!this_._internal_os_arch().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_os_arch());
+      }
+    }
+    // string hostname = 4;
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (!this_._internal_hostname().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_hostname());
+      }
+    }
+    // string os_name = 5;
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (!this_._internal_os_name().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_os_name());
+      }
+    }
+    // string os_version = 6;
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!this_._internal_os_version().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_os_version());
+      }
+    }
+    // string cpu_model = 7;
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!this_._internal_cpu_model().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_cpu_model());
+      }
+    }
+    // int64 memory_total_bytes = 9;
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (this_._internal_memory_total_bytes() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_memory_total_bytes());
+      }
+    }
+  }
+  if ((cached_has_bits & 0x00000300u) != 0) {
+    // int64 system_disk_total_bytes = 10;
+    if ((cached_has_bits & 0x00000100u) != 0) {
+      if (this_._internal_system_disk_total_bytes() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+            this_._internal_system_disk_total_bytes());
+      }
+    }
+    // int32 cpu_logical_count = 8;
+    if ((cached_has_bits & 0x00000200u) != 0) {
+      if (this_._internal_cpu_logical_count() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_cpu_logical_count());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void DeviceInventory::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::google::protobuf::MessageLite& from_msg) {
+  auto* const _this = static_cast<DeviceInventory*>(&to_msg);
+  auto& from = static_cast<const DeviceInventory&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:terminal_agent.v1.DeviceInventory)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x000000ffu) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      if (!from._internal_agent_version().empty()) {
+        _this->_internal_set_agent_version(from._internal_agent_version());
+      } else {
+        if (_this->_impl_.agent_version_.IsDefault()) {
+          _this->_internal_set_agent_version("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      if (!from._internal_platform().empty()) {
+        _this->_internal_set_platform(from._internal_platform());
+      } else {
+        if (_this->_impl_.platform_.IsDefault()) {
+          _this->_internal_set_platform("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000004u) != 0) {
+      if (!from._internal_os_arch().empty()) {
+        _this->_internal_set_os_arch(from._internal_os_arch());
+      } else {
+        if (_this->_impl_.os_arch_.IsDefault()) {
+          _this->_internal_set_os_arch("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000008u) != 0) {
+      if (!from._internal_hostname().empty()) {
+        _this->_internal_set_hostname(from._internal_hostname());
+      } else {
+        if (_this->_impl_.hostname_.IsDefault()) {
+          _this->_internal_set_hostname("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000010u) != 0) {
+      if (!from._internal_os_name().empty()) {
+        _this->_internal_set_os_name(from._internal_os_name());
+      } else {
+        if (_this->_impl_.os_name_.IsDefault()) {
+          _this->_internal_set_os_name("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000020u) != 0) {
+      if (!from._internal_os_version().empty()) {
+        _this->_internal_set_os_version(from._internal_os_version());
+      } else {
+        if (_this->_impl_.os_version_.IsDefault()) {
+          _this->_internal_set_os_version("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      if (!from._internal_cpu_model().empty()) {
+        _this->_internal_set_cpu_model(from._internal_cpu_model());
+      } else {
+        if (_this->_impl_.cpu_model_.IsDefault()) {
+          _this->_internal_set_cpu_model("");
+        }
+      }
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
+      if (from._internal_memory_total_bytes() != 0) {
+        _this->_impl_.memory_total_bytes_ = from._impl_.memory_total_bytes_;
+      }
+    }
+  }
+  if ((cached_has_bits & 0x00000300u) != 0) {
+    if ((cached_has_bits & 0x00000100u) != 0) {
+      if (from._internal_system_disk_total_bytes() != 0) {
+        _this->_impl_.system_disk_total_bytes_ = from._impl_.system_disk_total_bytes_;
+      }
+    }
+    if ((cached_has_bits & 0x00000200u) != 0) {
+      if (from._internal_cpu_logical_count() != 0) {
+        _this->_impl_.cpu_logical_count_ = from._impl_.cpu_logical_count_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void DeviceInventory::CopyFrom(const DeviceInventory& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:terminal_agent.v1.DeviceInventory)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void DeviceInventory::InternalSwap(DeviceInventory* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.agent_version_, &other->_impl_.agent_version_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.platform_, &other->_impl_.platform_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.os_arch_, &other->_impl_.os_arch_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.hostname_, &other->_impl_.hostname_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.os_name_, &other->_impl_.os_name_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.os_version_, &other->_impl_.os_version_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.cpu_model_, &other->_impl_.cpu_model_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.cpu_logical_count_)
+      + sizeof(DeviceInventory::_impl_.cpu_logical_count_)
+      - PROTOBUF_FIELD_OFFSET(DeviceInventory, _impl_.memory_total_bytes_)>(
+          reinterpret_cast<char*>(&_impl_.memory_total_bytes_),
+          reinterpret_cast<char*>(&other->_impl_.memory_total_bytes_));
+}
+
+::google::protobuf::Metadata DeviceInventory::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
 class DeviceConfig::_Internal {
  public:
   using HasBits =
@@ -3831,6 +4537,9 @@ StatusReport::StatusReport(
   _impl_.network_info_ = ((cached_has_bits & 0x00000020u) != 0)
                 ? ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.network_info_)
                 : nullptr;
+  _impl_.inventory_ = ((cached_has_bits & 0x00000040u) != 0)
+                ? ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.inventory_)
+                : nullptr;
   _impl_.timestamp_ = from._impl_.timestamp_;
 
   // @@protoc_insertion_point(copy_constructor:terminal_agent.v1.StatusReport)
@@ -3866,6 +4575,7 @@ inline void StatusReport::SharedDtor(MessageLite& self) {
   delete this_._impl_.metrics_;
   delete this_._impl_.config_;
   delete this_._impl_.network_info_;
+  delete this_._impl_.inventory_;
   this_._impl_.~Impl_();
 }
 
@@ -3912,17 +4622,17 @@ StatusReport::GetClassData() const {
   return StatusReport_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 7, 3, 70, 2>
+const ::_pbi::TcParseTable<3, 8, 4, 78, 2>
 StatusReport::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(StatusReport, _impl_._has_bits_),
     0, // no _extensions_
-    7, 56,  // max_field_number, fast_idx_mask
+    8, 56,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967168,  // skipmap
+    4294967040,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    7,  // num_field_entries
-    3,  // num_aux_entries
+    8,  // num_field_entries
+    4,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     StatusReport_class_data_.base(),
     nullptr,  // post_loop_handler
@@ -3931,17 +4641,19 @@ StatusReport::_table_ = {
     ::_pbi::TcParser::GetTable<::terminal_agent::v1::StatusReport>(),  // to_prefetch
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
+    // .terminal_agent.v1.DeviceInventory inventory = 8;
+    {::_pbi::TcParser::FastMtS1,
+     {66, 6, 3, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.inventory_)}},
     // string device_id = 1;
     {::_pbi::TcParser::FastUS1,
      {10, 0, 0, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.device_id_)}},
     // int64 timestamp = 2;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(StatusReport, _impl_.timestamp_), 6>(),
-     {16, 6, 0, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_)}},
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(StatusReport, _impl_.timestamp_), 7>(),
+     {16, 7, 0, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_)}},
     // string status = 3;
     {::_pbi::TcParser::FastUS1,
      {26, 1, 0, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.status_)}},
-    // string firmware_version = 4;
+    // string firmware_version = 4 [deprecated = true];
     {::_pbi::TcParser::FastUS1,
      {34, 2, 0, PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.firmware_version_)}},
     // .terminal_agent.v1.DeviceMetrics metrics = 5;
@@ -3960,12 +4672,12 @@ StatusReport::_table_ = {
     {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.device_id_), _Internal::kHasBitsOffset + 0, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // int64 timestamp = 2;
-    {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_), _Internal::kHasBitsOffset + 6, 0,
+    {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.timestamp_), _Internal::kHasBitsOffset + 7, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kInt64)},
     // string status = 3;
     {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.status_), _Internal::kHasBitsOffset + 1, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-    // string firmware_version = 4;
+    // string firmware_version = 4 [deprecated = true];
     {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.firmware_version_), _Internal::kHasBitsOffset + 2, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // .terminal_agent.v1.DeviceMetrics metrics = 5;
@@ -3977,14 +4689,18 @@ StatusReport::_table_ = {
     // .terminal_agent.v1.NetworkInfo network_info = 7;
     {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.network_info_), _Internal::kHasBitsOffset + 5, 2,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // .terminal_agent.v1.DeviceInventory inventory = 8;
+    {PROTOBUF_FIELD_OFFSET(StatusReport, _impl_.inventory_), _Internal::kHasBitsOffset + 6, 3,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
   }},
   {{
       {::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceMetrics>()},
       {::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceConfig>()},
       {::_pbi::TcParser::GetTable<::terminal_agent::v1::NetworkInfo>()},
+      {::_pbi::TcParser::GetTable<::terminal_agent::v1::DeviceInventory>()},
   }},
   {{
-    "\36\11\0\6\20\0\0\0"
+    "\36\11\0\6\20\0\0\0\0\0\0\0\0\0\0\0"
     "terminal_agent.v1.StatusReport"
     "device_id"
     "status"
@@ -3999,7 +4715,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000003fu) != 0) {
+  if ((cached_has_bits & 0x0000007fu) != 0) {
     if ((cached_has_bits & 0x00000001u) != 0) {
       _impl_.device_id_.ClearNonDefaultToEmpty();
     }
@@ -4020,6 +4736,10 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
     if ((cached_has_bits & 0x00000020u) != 0) {
       ABSL_DCHECK(_impl_.network_info_ != nullptr);
       _impl_.network_info_->Clear();
+    }
+    if ((cached_has_bits & 0x00000040u) != 0) {
+      ABSL_DCHECK(_impl_.inventory_ != nullptr);
+      _impl_.inventory_->Clear();
     }
   }
   _impl_.timestamp_ = ::int64_t{0};
@@ -4053,7 +4773,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
   }
 
   // int64 timestamp = 2;
-  if ((this_._impl_._has_bits_[0] & 0x00000040u) != 0) {
+  if ((this_._impl_._has_bits_[0] & 0x00000080u) != 0) {
     if (this_._internal_timestamp() != 0) {
       target =
           ::google::protobuf::internal::WireFormatLite::WriteInt64ToArrayWithField<2>(
@@ -4071,7 +4791,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
     }
   }
 
-  // string firmware_version = 4;
+  // string firmware_version = 4 [deprecated = true];
   if ((this_._impl_._has_bits_[0] & 0x00000004u) != 0) {
     if (!this_._internal_firmware_version().empty()) {
       const ::std::string& _s = this_._internal_firmware_version();
@@ -4103,6 +4823,13 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
         stream);
   }
 
+  // .terminal_agent.v1.DeviceInventory inventory = 8;
+  if ((cached_has_bits & 0x00000040u) != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        8, *this_._impl_.inventory_, this_._impl_.inventory_->GetCachedSize(), target,
+        stream);
+  }
+
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -4128,7 +4855,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000007fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     // string device_id = 1;
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (!this_._internal_device_id().empty()) {
@@ -4143,7 +4870,7 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
                                         this_._internal_status());
       }
     }
-    // string firmware_version = 4;
+    // string firmware_version = 4 [deprecated = true];
     if ((cached_has_bits & 0x00000004u) != 0) {
       if (!this_._internal_firmware_version().empty()) {
         total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
@@ -4165,8 +4892,13 @@ PROTOBUF_NOINLINE void StatusReport::Clear() {
       total_size += 1 +
                     ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.network_info_);
     }
-    // int64 timestamp = 2;
+    // .terminal_agent.v1.DeviceInventory inventory = 8;
     if ((cached_has_bits & 0x00000040u) != 0) {
+      total_size += 1 +
+                    ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.inventory_);
+    }
+    // int64 timestamp = 2;
+    if ((cached_has_bits & 0x00000080u) != 0) {
       if (this_._internal_timestamp() != 0) {
         total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
             this_._internal_timestamp());
@@ -4187,7 +4919,7 @@ void StatusReport::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::go
   (void) cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x0000007fu) != 0) {
+  if ((cached_has_bits & 0x000000ffu) != 0) {
     if ((cached_has_bits & 0x00000001u) != 0) {
       if (!from._internal_device_id().empty()) {
         _this->_internal_set_device_id(from._internal_device_id());
@@ -4240,6 +4972,14 @@ void StatusReport::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::go
       }
     }
     if ((cached_has_bits & 0x00000040u) != 0) {
+      ABSL_DCHECK(from._impl_.inventory_ != nullptr);
+      if (_this->_impl_.inventory_ == nullptr) {
+        _this->_impl_.inventory_ = ::google::protobuf::Message::CopyConstruct(arena, *from._impl_.inventory_);
+      } else {
+        _this->_impl_.inventory_->MergeFrom(*from._impl_.inventory_);
+      }
+    }
+    if ((cached_has_bits & 0x00000080u) != 0) {
       if (from._internal_timestamp() != 0) {
         _this->_impl_.timestamp_ = from._impl_.timestamp_;
       }

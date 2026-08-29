@@ -54,10 +54,9 @@ message AuthContext {
 //   - 设备不支持 "config_push" → 前端不展示远程配置按钮，提示"固件版本过低"
 //   - 设备升级固件后新增 capability → 服务端自动解锁对应功能
 message DeviceCapability {
-  // 固件版本号，语义化版本格式
-  // 示例："v2.3.1"、"v1.0.0-rc1"
-  // 用于服务端判断是否需要推送固件升级
-  string firmware_version = 1;
+  // Deprecated：历史字段曾混入 agent 版本，现禁止继续使用。
+  // 保留 field number 仅为 wire compatibility；真实 firmware adapter 上线前必须留空。
+  string firmware_version = 1 [deprecated = true];
 
   // 协议版本号，整数
   // 与 proto 文件的 package 版本对应（当前为 1）
@@ -73,6 +72,8 @@ message DeviceCapability {
   //   "heartbeat_metrics"    - 增强心跳（含 CPU/内存/磁盘等性能指标）
   //   "event_report"         - 支持事件上报（故障/交易失败/配置变更等）
   //   "status_report"        - 支持完整状态快照上报
+  //   "inventory_basic"      - 支持上报基础设备/OS/硬件清单
+  //   "network_info"         - 支持上报真实网络指纹快照
   //   "config_push"          - 支持接收服务端远程配置下发
   //   "command_reboot"       - 支持远程重启指令
   //   "command_firmware"     - 支持 OTA 固件升级指令
@@ -169,6 +170,37 @@ message DeviceMetrics {
   int64  p2p_upload_bytes_cellular = 8;
 }
 
+// 设备清单快照
+//
+// 这些字段描述 agent 构建版本及设备/OS/硬件事实，与 DeviceMetrics 的运行时
+// 使用率分离。采集失败或平台不支持时保持零值，服务端结合 capability 判定
+// unavailable，不得用固定模拟值补齐。
+message DeviceInventory {
+  // DeviceAgent 二进制/安装包版本，SemVer，不带 "v" 前缀。
+  string agent_version = 1;
+
+  // 规范化平台值，例如 "win"、"linux"、"android"、"macos"。
+  string platform = 2;
+
+  // 操作系统架构，例如 "amd64"、"arm64"。
+  string os_arch = 3;
+
+  // 设备主机名。
+  string hostname = 4;
+
+  // 操作系统名称与版本分开上报，例如 "Windows 10 Pro" / "10.0.19045"。
+  string os_name = 5;
+  string os_version = 6;
+
+  // CPU 型号与逻辑处理器数量；无法采集时分别为空字符串 / 0。
+  string cpu_model = 7;
+  int32  cpu_logical_count = 8;
+
+  // 物理内存总量与系统盘总容量，单位 byte；无法采集时为 0。
+  int64  memory_total_bytes = 9;
+  int64  system_disk_total_bytes = 10;
+}
+
 // 设备配置
 // 设备当前的运行配置，与 devices 表的 config JSON 字段对应
 // 只保留所有终端类型通用的配置项，业务相关配置放 custom_config_json
@@ -260,9 +292,9 @@ message StatusReport {
   //   "maintenance"  - 维护中（人工介入，如现场检修）
   string status = 3;
 
-  // 当前固件版本号
-  // 与 DeviceCapability.firmware_version 语义相同，这里冗余传输方便服务端直接使用
-  string firmware_version = 4;
+  // Deprecated：历史字段曾混入 agent 版本，现禁止继续使用。
+  // 保留 field number 仅为 wire compatibility；真实 firmware adapter 上线前必须留空。
+  string firmware_version = 4 [deprecated = true];
 
   // 性能指标快照
   DeviceMetrics metrics = 5;
@@ -272,6 +304,9 @@ message StatusReport {
 
   // 网络指纹快照。用于后续 LAN 自动归簇和 P2P 策略层。
   NetworkInfo network_info = 7;
+
+  // agent 构建版本及设备/OS/硬件清单快照。
+  DeviceInventory inventory = 8;
 }
 
 // 状态上报响应
