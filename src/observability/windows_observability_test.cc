@@ -6,6 +6,7 @@
 #include <mutex>
 #include <thread>
 
+#include "download/p2p_upload_counters.h"
 #include "enrollment/enrollment_manager.h"
 #include "version/build_info.h"
 
@@ -54,19 +55,25 @@ int main() {
     }
 
     terminal_agent::v1::StatusReport status;
-    populate_status(success, &status);
+    device_agent::reset_p2p_upload_counters_for_test();
+    device_agent::accumulate_p2p_upload(1200, device_agent::NetworkType::WIFI);
+    device_agent::accumulate_p2p_upload(34, device_agent::NetworkType::CELLULAR);
+    const auto p2p = device_agent::p2p_upload_counters();
+    populate_status(success, p2p.total, p2p.cellular, &status);
     assert(status.has_inventory());
     assert(status.has_metrics());
     assert(status.has_network_info());
     assert(status.inventory().agent_version() == device_agent::agent_version());
     assert(status.inventory().agent_version().find('v') != 0);
+    assert(status.metrics().p2p_upload_bytes() == 1234);
+    assert(status.metrics().p2p_upload_bytes_cellular() == 34);
 
     auto zero_raw = complete_raw(0.0f);
     zero_raw.memory_percent = 0.0f;
     zero_raw.system_disk_percent = 0.0f;
     const auto zero = finalize_observation(std::move(zero_raw));
     terminal_agent::v1::StatusReport zero_status;
-    populate_status(zero, &zero_status);
+    populate_status(zero, 0, 0, &zero_status);
     assert(zero_status.has_metrics());
     assert(zero_status.metrics().cpu_percent() == 0.0f);
     assert(zero_status.metrics().memory_percent() == 0.0f);
@@ -80,7 +87,7 @@ int main() {
     assert(permission_failure.inventory_availability == Availability::kPartial);
     assert(permission_failure.telemetry_availability == Availability::kPartial);
     terminal_agent::v1::StatusReport permission_status;
-    populate_status(permission_failure, &permission_status);
+    populate_status(permission_failure, 1234, 56, &permission_status);
     assert(permission_status.has_inventory());
     assert(!permission_status.has_metrics());
 
@@ -101,7 +108,7 @@ int main() {
     assert(missing_network.network_availability == Availability::kUnavailable);
     assert(missing_network.telemetry_availability == Availability::kPartial);
     terminal_agent::v1::StatusReport missing_network_status;
-    populate_status(missing_network, &missing_network_status);
+    populate_status(missing_network, 1234, 56, &missing_network_status);
     assert(!missing_network_status.has_network_info());
     assert(!missing_network_status.has_metrics());
 
@@ -112,7 +119,7 @@ int main() {
     assert(stale_heartbeat.has_capability());
     assert(stale_heartbeat.cpu_percent() == 0.0f);
     terminal_agent::v1::StatusReport stale_status;
-    populate_status(stale, &stale_status);
+    populate_status(stale, 1234, 56, &stale_status);
     assert(!stale_status.has_inventory());
     assert(!stale_status.has_metrics());
     assert(!stale_status.has_network_info());

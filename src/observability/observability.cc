@@ -86,6 +86,8 @@ void populate_heartbeat(const ObservabilitySnapshot& snapshot,
 }
 
 void populate_status(const ObservabilitySnapshot& snapshot,
+                     std::int64_t p2p_upload_bytes,
+                     std::int64_t p2p_upload_bytes_cellular,
                      terminal_agent::v1::StatusReport* out) {
     if (out == nullptr) {
         return;
@@ -126,6 +128,8 @@ void populate_status(const ObservabilitySnapshot& snapshot,
         metrics->set_network_rx_bytes(*snapshot.values.network_rx_bytes);
         metrics->set_network_tx_bytes(*snapshot.values.network_tx_bytes);
         metrics->set_uptime_seconds(*snapshot.values.uptime_seconds);
+        metrics->set_p2p_upload_bytes(p2p_upload_bytes);
+        metrics->set_p2p_upload_bytes_cellular(p2p_upload_bytes_cellular);
     }
 
     if (snapshot.network_availability != Availability::kUnavailable) {

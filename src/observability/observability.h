@@ -66,6 +66,8 @@ void populate_windows_capability(terminal_agent::v1::DeviceCapability* out);
 void populate_heartbeat(const ObservabilitySnapshot& snapshot,
                         terminal_agent::v1::HeartbeatRequest* out);
 void populate_status(const ObservabilitySnapshot& snapshot,
+                     std::int64_t p2p_upload_bytes,
+                     std::int64_t p2p_upload_bytes_cellular,
                      terminal_agent::v1::StatusReport* out);
 
 class ObservabilitySampler {

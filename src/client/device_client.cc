@@ -167,7 +167,9 @@ void DeviceClient::status_report_loop() {
 #ifdef _WIN32
         const auto snapshot = observability_sampler_->latest();
         if (snapshot.has_value()) {
-            observability::populate_status(*snapshot, &status);
+            const auto p2p_upload = p2p_upload_counters();
+            observability::populate_status(
+                *snapshot, p2p_upload.total, p2p_upload.cellular, &status);
         }
 #else
         status.set_firmware_version("v1.0.0");

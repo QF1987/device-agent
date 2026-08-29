@@ -451,6 +451,7 @@ elseif(WIN32)
             src/observability/windows_observability_test.cc
             src/observability/observability.cc
             src/observability/windows_observability.cc
+            src/download/p2p_upload_counters.cc
             src/enrollment/enrollment_manager.cc
             src/config/config.cc
             src/logger/logger.cc
@@ -533,6 +534,7 @@ else()
         src/observability/windows_observability_test.cc
         src/observability/observability.cc
         src/observability/windows_observability.cc
+        src/download/p2p_upload_counters.cc
         src/enrollment/enrollment_manager.cc
         src/config/config.cc
         src/logger/logger.cc
