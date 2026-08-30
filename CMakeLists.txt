@@ -505,6 +505,66 @@ elseif(WIN32)
         )
     endif()
 
+    # Windows P2P Phase A：libtorrent P2PDownloadManager 原生编译 + 离线测试。
+    # 仅测试目标；不接入生产 device-agent（仍用 WindowsDownloadManager），
+    # 不改变 capability manifest（Windows 不声明 p2p_config）。
+    # 依赖 vcpkg x64-windows：vcpkg install libtorrent（传递 openssl/boost）。
+    option(DEVICE_AGENT_BUILD_WINDOWS_P2P
+        "Build Windows libtorrent P2P core + native offline tests (Phase A)" OFF)
+    if(DEVICE_AGENT_BUILD_WINDOWS_P2P)
+        find_package(OpenSSL REQUIRED)
+        find_package(libtorrent-rasterbar CONFIG REQUIRED)
+
+        add_executable(p2p_download_manager_test
+            src/download/p2p_download_manager_test.cc
+            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_download_manager_test PRIVATE
+            TORRENT_ABI_VERSION=3
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(p2p_download_manager_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            libtorrent-rasterbar::libtorrent-rasterbar
+        )
+
+        add_executable(network_policy_test
+            src/download/network_policy_test.cc
+            src/download/network_policy.cc
+        )
+        target_include_directories(network_policy_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_options(network_policy_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+
+        add_executable(p2p_config_store_test
+            src/config/p2p_config_store_test.cc
+            src/config/p2p_config_store.cc
+        )
+        target_include_directories(p2p_config_store_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_options(p2p_config_store_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+    endif()
+
 # ─── Desktop (Linux/macOS): build as standalone executable ─
 else()
     message(STATUS "=== Building device-agent for desktop ===")

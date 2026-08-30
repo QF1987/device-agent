@@ -12,7 +12,12 @@
 #include <string>
 #include <sys/stat.h>
 #include <thread>
+#ifdef _WIN32
+#include <direct.h>
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -30,12 +35,51 @@ std::string bencoded_string(const std::string& value) {
     return std::to_string(value.size()) + ":" + value;
 }
 
-std::string make_test_dir() {
+int test_pid() {
+#ifdef _WIN32
+    return _getpid();
+#else
+    return getpid();
+#endif
+}
+
+void test_mkdir(const std::string& path) {
+#ifdef _WIN32
+    _mkdir(path.c_str());
+#else
+    mkdir(path.c_str(), 0700);
+#endif
+}
+
+std::string test_temp_base() {
+#ifdef _WIN32
+    const char* tmp = std::getenv("TEMP");
+    if (tmp == nullptr) {
+        tmp = std::getenv("TMP");
+    }
+    return tmp != nullptr ? std::string(tmp) : std::string(".");
+#else
     const char* tmp = std::getenv("TMPDIR");
-    std::string base = tmp != nullptr ? tmp : "/data/local/tmp";
-    std::string dir = base + "/p2p-download-manager-test-" + std::to_string(getpid());
-    mkdir(dir.c_str(), 0700);
+    return tmp != nullptr ? std::string(tmp) : std::string("/data/local/tmp");
+#endif
+}
+
+std::string make_test_dir() {
+    std::string dir = test_temp_base() + "/p2p-download-manager-test-" +
+                      std::to_string(test_pid());
+    test_mkdir(dir);
     return dir;
+}
+
+bool file_readable(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return in.good();
+}
+
+void wait_for(bool& flag) {
+    for (int i = 0; i < 40 && !flag; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
 }
 
 void write_seedless_torrent(const std::string& path) {
@@ -130,6 +174,26 @@ int main() {
     state_machine.mark_idle();
     assert(state_machine.state() == P2PDownloadState::Idle);
 
+#ifdef _WIN32
+    assert(device_agent::dirname_or_current_for_test("C:\\a\\b.torrent") == "C:\\a");
+    assert(device_agent::dirname_or_current_for_test("C:/a/b.torrent") == "C:/a");
+    assert(device_agent::dirname_or_current_for_test("C:\\file.torrent") == "C:");
+    assert(device_agent::dirname_or_current_for_test("bare.torrent") == ".");
+    assert(device_agent::join_path_for_test("C:\\dest", "f.bin") == "C:\\dest\\f.bin");
+    assert(device_agent::join_path_for_test("C:\\dest\\", "f.bin") == "C:\\dest\\f.bin");
+    assert(device_agent::join_path_for_test("C:\\dest/", "f.bin") == "C:\\dest/f.bin");
+    assert(device_agent::join_path_for_test("", "f.bin") == ".\\f.bin");
+    assert(device_agent::join_path_for_test(".", "f.bin") == ".\\f.bin");
+#else
+    assert(device_agent::dirname_or_current_for_test("/a/b.torrent") == "/a");
+    assert(device_agent::dirname_or_current_for_test("/file.torrent") == "/");
+    assert(device_agent::dirname_or_current_for_test("bare.torrent") == ".");
+    assert(device_agent::join_path_for_test("/dest", "f.bin") == "/dest/f.bin");
+    assert(device_agent::join_path_for_test("/dest/", "f.bin") == "/dest/f.bin");
+    assert(device_agent::join_path_for_test("", "f.bin") == "./f.bin");
+    assert(device_agent::join_path_for_test(".", "f.bin") == "./f.bin");
+#endif
+
     auto config_store = std::make_shared<P2PConfigStore>();
     std::string config_error;
     assert(config_store->apply(
@@ -213,7 +277,7 @@ int main() {
     const std::string dir = make_test_dir();
     const std::string torrent_path = dir + "/fixture.torrent";
     const std::string save_dir = dir + "/save";
-    mkdir(save_dir.c_str(), 0700);
+    test_mkdir(save_dir);
     write_seedless_torrent(torrent_path);
 
     const std::string sha_path = dir + "/sha-fixture.bin";
@@ -225,6 +289,129 @@ int main() {
     std::string sha_error;
     assert(device_agent::sha256_file_for_test(sha_path, sha_hex, sha_error));
     assert(sha_hex == kShaFixtureDigest);
+
+    std::string missing_hex;
+    std::string missing_error;
+    assert(!device_agent::sha256_file_for_test(dir + "/missing-for-sha-test.bin",
+                                               missing_hex, missing_error));
+    assert(!missing_error.empty());
+
+    // magnet_uri 优先于 torrent_url：无效 magnet + 合法 torrent fixture，
+    // 必须报 magnet 解析错误而不是加载 torrent。
+    {
+        P2PDownloadManager magnet_priority_manager;
+        bool magnet_priority_complete = false;
+        DownloadRequest magnet_priority_req;
+        magnet_priority_req.magnet_uri = "magnet:?xt=urn:btih:invalid";
+        magnet_priority_req.torrent_url = torrent_path;
+        magnet_priority_manager.download(magnet_priority_req, nullptr,
+            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
+                assert(!ok);
+                assert(err.find("failed to parse magnet URI") != std::string::npos);
+                magnet_priority_complete = true;
+            });
+        wait_for(magnet_priority_complete);
+        assert(magnet_priority_complete);
+        assert(!magnet_priority_manager.is_downloading());
+    }
+
+    // 注入 fallback：无 P2P source、仅 url 的直接 HTTP 下载端到端成功，
+    // completion_path = HttpFallbackStall，peer_bytes = 0。
+    {
+        P2PDownloadManager direct_fallback_manager;
+        direct_fallback_manager.set_http_fallback_for_test(
+            [](const std::string&, const std::string& output_path, std::string&) {
+                std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+                out << kShaFixture;
+                return true;
+            });
+        DownloadRequest direct_req;
+        direct_req.url = "http://127.0.0.1:9/direct-fallback.bin";
+        direct_req.dest_path = save_dir;
+        direct_req.expected_sha256 = kShaFixtureDigest;
+        bool direct_done = false;
+        bool direct_ok = false;
+        std::string direct_err;
+        int direct_completion_path = -1;
+        int64_t direct_peer_bytes = -1;
+        direct_fallback_manager.download(direct_req, nullptr,
+            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+                direct_ok = ok;
+                direct_err = err;
+                direct_completion_path = telemetry.completion_path;
+                direct_peer_bytes = telemetry.peer_bytes;
+                direct_done = true;
+            });
+        wait_for(direct_done);
+        assert(direct_done);
+        assert(direct_ok);
+        assert(direct_err.empty());
+        assert(direct_completion_path ==
+               static_cast<int>(CompletionPathTelemetry::HttpFallbackStall));
+        assert(direct_peer_bytes == 0);
+        assert(file_readable(save_dir + "/direct-fallback.bin"));
+    }
+
+    // 注入 fallback + 错误 SHA256：下载成功但校验必须失败（fail-closed）。
+    {
+        P2PDownloadManager sha_mismatch_manager;
+        sha_mismatch_manager.set_http_fallback_for_test(
+            [](const std::string&, const std::string& output_path, std::string&) {
+                std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+                out << kShaFixture;
+                return true;
+            });
+        DownloadRequest sha_req;
+        sha_req.url = "http://127.0.0.1:9/sha-mismatch.bin";
+        sha_req.dest_path = save_dir;
+        sha_req.expected_sha256 = std::string(64, '0');
+        bool sha_done = false;
+        bool sha_ok = true;
+        std::string sha_verify_error;
+        sha_mismatch_manager.download(sha_req, nullptr,
+            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
+                sha_ok = ok;
+                sha_verify_error = err;
+                sha_done = true;
+            });
+        wait_for(sha_done);
+        assert(sha_done);
+        assert(!sha_ok);
+        assert(sha_verify_error.find("sha256 mismatch") != std::string::npos);
+        assert(!sha_mismatch_manager.is_downloading());
+    }
+
+    // torrent_url 指向 HTTP：注入 fallback 下载 .torrent 元数据（写入经
+    // join_path 的 Windows/POSIX 路径），随后 torrent 加载 + cancel 生命周期。
+    {
+        P2PDownloadManager metadata_manager;
+        metadata_manager.set_http_fallback_for_test(
+            [&torrent_path](const std::string&, const std::string& output_path, std::string&) {
+                std::ifstream in(torrent_path, std::ios::binary);
+                std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+                out << in.rdbuf();
+                return static_cast<bool>(out);
+            });
+        DownloadRequest metadata_req;
+        metadata_req.torrent_url = "http://127.0.0.1:9/fixture.torrent";
+        metadata_req.dest_path = save_dir;
+        metadata_req.file_id = "metadata-probe";
+        metadata_req.file_size = 64 * 1024 * 1024;
+        metadata_manager.download(metadata_req, nullptr, nullptr);
+        assert(wait_until_downloading(metadata_manager));
+        const std::string metadata_path = save_dir + "/metadata-probe.torrent";
+        bool metadata_written = false;
+        for (int i = 0; i < 40 && !metadata_written; ++i) {
+            metadata_written = file_readable(metadata_path);
+            if (!metadata_written) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+        }
+        assert(metadata_written);
+        metadata_manager.cancel();
+        assert(!metadata_manager.is_downloading());
+        assert(metadata_manager.state() == P2PDownloadState::Idle);
+    }
 
     auto network_policy = std::make_shared<device_agent::NetworkPolicy>();
     network_policy->on_network_changed(NetworkType::WIFI);
@@ -418,6 +605,39 @@ int main() {
     no_seed_manager.cancel();
     assert(!no_seed_manager.is_downloading());
     P2PConfigStore::set_global(nullptr);
+
+    // fresh 实例状态隔离：前序用例的 global config / 会话状态不泄漏到新实例，
+    // alpha_defaults 回到出厂默认（fresh process/test instance 语义）。
+    {
+        assert(!P2PConfigStore::has_global());
+        const char* ttl_env = std::getenv("P2P_SEEDING_TTL");
+        const bool ttl_env_absent = ttl_env == nullptr || *ttl_env == '\0';
+        const auto fresh_defaults = P2PSeedingPolicy::alpha_defaults();
+        if (ttl_env_absent) {
+            assert(fresh_defaults.ttl == std::chrono::seconds(21600));
+        }
+        assert(fresh_defaults.max_share_ratio == 1.0);
+        assert(fresh_defaults.max_upload_kbps == 0);
+        assert(!fresh_defaults.cellular_seeding_enabled);
+        assert(fresh_defaults.p2p_enabled);
+        assert(fresh_defaults.seeding_enabled);
+        assert(fresh_defaults.min_file_size_mb_for_p2p == 10);
+
+        P2PDownloadManager fresh_manager;
+        assert(!fresh_manager.is_downloading());
+        assert(fresh_manager.state() == P2PDownloadState::Idle);
+        DownloadRequest empty_probe{};
+        bool probe_done = false;
+        fresh_manager.download(empty_probe, nullptr,
+            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
+                assert(!ok);
+                assert(err.find("no p2p download source") != std::string::npos);
+                probe_done = true;
+            });
+        wait_for(probe_done);
+        assert(probe_done);
+        assert(!fresh_manager.is_downloading());
+    }
 
     return 0;
 }

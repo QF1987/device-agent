@@ -82,6 +82,13 @@ public:
             int64_t)> on_complete_with_path;
     };
 
+    // HTTP web-seed fallback seam：把 torrent 元数据 / stall / sha-mismatch 的
+    // 直接 HTTP 下载抽成可注入点。默认实现由平台提供（POSIX socket）；
+    // Windows 默认 fail-closed，测试与未来平台原生实现（如 WinHTTP）可注入替换。
+    using HttpFallback = std::function<bool(const std::string& url,
+                                            const std::string& output_path,
+                                            std::string& error)>;
+
     explicit P2PDownloadManager(
         Callbacks callbacks = {},
         P2PSeedingPolicy seeding_policy = P2PSeedingPolicy::alpha_defaults(),
@@ -102,6 +109,8 @@ public:
 #ifdef DEVICE_AGENT_TESTING
     std::vector<int> active_max_uploads_for_test() const;
     std::vector<int> active_upload_limits_for_test() const;
+    // 注入 HTTP fallback（必须在 download() 之前调用；仅测试构建暴露）。
+    void set_http_fallback_for_test(HttpFallback fallback);
 #endif
 
 private:
@@ -109,6 +118,10 @@ private:
                       ProgressCallback on_progress,
                       CompleteCallback on_complete);
     void join_worker();
+    // HTTP fallback 分发：优先注入实现，否则平台默认实现。
+    bool download_via_http_fallback(const std::string& url,
+                                    const std::string& output_path,
+                                    std::string& error);
     void set_state_downloading();
     void set_state_seeding();
     void set_state_stopping();
@@ -132,6 +145,7 @@ private:
     std::int64_t last_upload_sample_{0};
     std::atomic<bool> downloading_{false};
     std::atomic<bool> cancel_requested_{false};
+    HttpFallback http_fallback_;
     Callbacks callbacks_;
     P2PSeedingStateMachine state_machine_;
 };
@@ -143,6 +157,10 @@ CompletionPathTelemetry completion_path_for_test(bool stall_fallback,
                                                  int64_t web_seed_bytes,
                                                  int64_t total_payload_download,
                                                  bool has_web_seed_hint);
+
+// 路径 helper 测试探针（Windows 反斜杠 / POSIX 正斜杠语义）。
+std::string join_path_for_test(const std::string& dir, const std::string& name);
+std::string dirname_or_current_for_test(const std::string& path);
 #endif
 
 }  // namespace device_agent

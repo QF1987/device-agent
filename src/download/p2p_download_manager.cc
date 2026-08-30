@@ -69,7 +69,11 @@ struct PeerCounterSample {
 using PeerCounterLedger = std::unordered_map<std::string, PeerCounterSample>;
 
 std::string dirname_or_current(const std::string& path) {
+#ifdef _WIN32
+    const auto slash = path.find_last_of("/\\");
+#else
     const auto slash = path.find_last_of('/');
+#endif
     if (slash == std::string::npos) {
         return ".";
     }
@@ -284,7 +288,7 @@ bool run_web_seed_http_fallback(const std::string& url,
 #else
     (void)url;
     (void)output_path;
-    error = "web seed fallback is only available on Android";
+    error = "web seed http fallback is not available on this platform";
     return false;
 #endif
 }
@@ -344,12 +348,23 @@ std::string basename_from_url(const std::string& url) {
 
 std::string join_path(const std::string& dir, const std::string& name) {
     if (dir.empty() || dir == ".") {
+#ifdef _WIN32
+        return ".\\" + name;
+#else
         return "./" + name;
+#endif
     }
+#ifdef _WIN32
+    if (dir.back() == '/' || dir.back() == '\\') {
+        return dir + name;
+    }
+    return dir + "\\" + name;
+#else
     if (dir.back() == '/') {
         return dir + name;
     }
     return dir + "/" + name;
+#endif
 }
 
 std::string direct_http_output_path(const DownloadRequest& req) {
@@ -1037,6 +1052,14 @@ CompletionPathTelemetry completion_path_for_test(bool stall_fallback,
                                   total_payload_download,
                                   has_web_seed_hint);
 }
+
+std::string join_path_for_test(const std::string& dir, const std::string& name) {
+    return join_path(dir, name);
+}
+
+std::string dirname_or_current_for_test(const std::string& path) {
+    return dirname_or_current(path);
+}
 #endif
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
@@ -1227,6 +1250,10 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
     }
     return values;
 }
+
+void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
+    http_fallback_ = std::move(fallback);
+}
 #endif
 
 void P2PDownloadManager::sample_upload(std::int64_t all_time_upload) {
@@ -1290,6 +1317,15 @@ void P2PDownloadManager::join_worker() {
         worker = std::move(worker_);
     }
     worker.join();
+}
+
+bool P2PDownloadManager::download_via_http_fallback(const std::string& url,
+                                                    const std::string& output_path,
+                                                    std::string& error) {
+    if (http_fallback_) {
+        return http_fallback_(url, output_path, error);
+    }
+    return run_web_seed_http_fallback(url, output_path, error);
 }
 
 void P2PDownloadManager::set_state_downloading() {
@@ -1357,7 +1393,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 callbacks_.on_started(req, downloaded_path);
             }
             std::string fallback_error;
-            if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+            if (download_via_http_fallback(req.url, downloaded_path, fallback_error)) {
                 success = true;
                 completed_by_stall_fallback = true;
                 has_web_seed_hint = true;
@@ -1384,7 +1420,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 LOG_INFO("P2PDownloadManager: downloading torrent metadata " + source.value +
                          " -> " + metadata_path);
                 std::string metadata_error;
-                if (!run_web_seed_http_fallback(source.value, metadata_path, metadata_error)) {
+                if (!download_via_http_fallback(source.value, metadata_path, metadata_error)) {
                     error = "failed to download torrent metadata: " + metadata_error;
                 } else {
                     torrent_source = metadata_path;
@@ -1578,7 +1614,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
+                        if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                             completed_by_stall_fallback = true;
                         } else {
@@ -1598,7 +1634,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
+                        if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                             completed_by_stall_fallback = true;
                         } else {
@@ -1655,7 +1691,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             if (!fallback_web_seed_url.empty()) {
                                 LOG_WARN("P2PDownloadManager: sha256 verify failed; falling back to direct HTTP download");
                                 std::string fallback_error;
-                                if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
+                                if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
                                         verify_sha256_with_retry(downloaded_path,
                                                                  req.expected_sha256,
                                                                  verify_error)) {
