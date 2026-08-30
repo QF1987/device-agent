@@ -62,7 +62,6 @@ struct ObservabilitySnapshot {
 using Collector = std::function<ObservabilitySnapshot()>;
 
 ObservabilitySnapshot finalize_observation(RawObservation raw);
-void populate_windows_capability(terminal_agent::v1::DeviceCapability* out);
 void populate_heartbeat(const ObservabilitySnapshot& snapshot,
                         terminal_agent::v1::HeartbeatRequest* out);
 void populate_status(const ObservabilitySnapshot& snapshot,

@@ -33,6 +33,7 @@ endfunction()
 set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
+    src/capability/capability_manifest.cc
     src/client/network_info.cc
     src/observability/observability.cc
     src/observability/windows_observability.cc
@@ -60,6 +61,7 @@ endif()
 
 set(COMMON_HEADERS
     src/client/device_client.h
+    src/capability/capability_manifest.h
     src/client/network_info.h
     src/observability/observability.h
     src/observability/windows_observability.h
@@ -483,6 +485,24 @@ elseif(WIN32)
             bcrypt
             advapi32
         )
+
+        add_executable(capability_manifest_test
+            src/capability/capability_manifest_test.cc
+            src/capability/capability_manifest.cc
+            ${WINDOWS_PROTO_SRCS}
+        )
+        target_include_directories(capability_manifest_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${GEN_WINDOWS_DIR}
+        )
+        target_compile_options(capability_manifest_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(capability_manifest_test PRIVATE
+            protobuf::libprotobuf
+            gRPC::grpc++
+        )
     endif()
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─
@@ -528,6 +548,20 @@ else()
         gRPC::grpc++
         z
     )
+
+    add_executable(capability_manifest_test
+        src/capability/capability_manifest_test.cc
+        src/capability/capability_manifest.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+    )
+    target_include_directories(capability_manifest_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_compile_options(capability_manifest_test PRIVATE
+        $<$<CONFIG:Release>:-UNDEBUG>
+    )
+    target_link_libraries(capability_manifest_test PRIVATE protobuf::libprotobuf)
 
     add_executable(network_info_test
         src/client/network_info_test.cc

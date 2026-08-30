@@ -1,4 +1,5 @@
 #include "client/device_client.h"
+#include "capability/capability_manifest.h"
 #include "download/p2p_upload_counters.h"
 #include "client/network_info.h"
 #include "logger/logger.h"
@@ -93,6 +94,10 @@ void DeviceClient::set_command_callback(CommandCallback cb) {
     command_callback_ = std::move(cb);
 }
 
+void DeviceClient::set_runtime_capability_provider(RuntimeCapabilityProvider provider) {
+    runtime_capability_provider_ = std::move(provider);
+}
+
 void DeviceClient::heartbeat_loop() {
     int retry_count = 0;
 
@@ -103,12 +108,16 @@ void DeviceClient::heartbeat_loop() {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
 
+        capability::RuntimeCapabilities runtime_capabilities;
+        if (runtime_capability_provider_) {
+            runtime_capabilities = runtime_capability_provider_();
+        }
+        capability::populate_current_manifest(runtime_capabilities, req.mutable_capability());
+
 #ifdef _WIN32
         const auto snapshot = observability_sampler_->latest();
         if (snapshot.has_value()) {
             observability::populate_heartbeat(*snapshot, &req);
-        } else {
-            observability::populate_windows_capability(req.mutable_capability());
         }
 #else
         // 非 Windows collector 不在 S2 范围，保留既有兼容行为。

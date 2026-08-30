@@ -116,6 +116,7 @@ struct RemoteDesktopRuntime::Impl {
 
     RemoteDesktopRuntimeConfig config;
     std::atomic<bool> stop{false};
+    std::atomic<bool> worker_running{false};
     std::thread worker;
 #ifdef _WIN32
     PROCESS_INFORMATION child{};
@@ -181,10 +182,12 @@ bool RemoteDesktopRuntime::start(std::string& err) {
 #endif
 
     impl_->worker = std::thread([this]() {
+        impl_->worker_running.store(true);
         std::string run_err;
         if (!runRemoteDesktopChild(impl_->config, impl_->stop, run_err)) {
             LOG_ERROR("RemoteDesktopRuntime: stopped with error: " + run_err);
         }
+        impl_->worker_running.store(false);
     });
     LOG_INFO("RemoteDesktopRuntime: started in-process worker");
     return true;
@@ -206,7 +209,7 @@ void RemoteDesktopRuntime::stop() {
 }
 
 bool RemoteDesktopRuntime::running() const {
-    if (impl_->worker.joinable()) {
+    if (impl_->worker_running.load()) {
         return true;
     }
 #ifdef _WIN32

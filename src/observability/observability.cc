@@ -52,25 +52,11 @@ ObservabilitySnapshot finalize_observation(RawObservation raw) {
     return out;
 }
 
-void populate_windows_capability(terminal_agent::v1::DeviceCapability* out) {
-    if (out == nullptr) {
-        return;
-    }
-    out->set_proto_version(1);
-    out->clear_supported_features();
-    out->add_supported_features("heartbeat_basic");
-    out->add_supported_features("heartbeat_metrics");
-    out->add_supported_features("status_report");
-    out->add_supported_features("inventory_basic");
-    out->add_supported_features("network_info");
-}
-
 void populate_heartbeat(const ObservabilitySnapshot& snapshot,
                         terminal_agent::v1::HeartbeatRequest* out) {
     if (out == nullptr) {
         return;
     }
-    populate_windows_capability(out->mutable_capability());
     const auto now = std::chrono::system_clock::now();
     if (snapshot.collected_at.time_since_epoch().count() == 0 ||
         snapshot.collected_at > now || now - snapshot.collected_at > kSnapshotMaxAge) {

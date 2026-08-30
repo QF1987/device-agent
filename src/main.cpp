@@ -498,6 +498,12 @@ int run_agent(int argc, char* argv[]) {
             LOG_ERROR("Remote desktop failed to start: " + rd_err);
         } else {
             LOG_INFO("Remote desktop runtime started");
+            client->set_runtime_capability_provider(
+                [runtime = remote_desktop_runtime.get()]() {
+                    device_agent::capability::RuntimeCapabilities capabilities;
+                    capabilities.remote_desktop_vnc = runtime != nullptr && runtime->running();
+                    return capabilities;
+                });
         }
     }
 #endif

@@ -48,6 +48,7 @@
 #include "terminal_agent/v1/device.pb.h"
 
 #include "config/config.h"
+#include "capability/capability_manifest.h"
 #ifdef _WIN32
 #include "observability/observability.h"
 #endif
@@ -58,6 +59,7 @@ namespace device_agent {
 // 当收到服务端下发的指令时，DeviceClient 调用此回调
 // 设备端在此回调中处理指令，然后调用 report_command_result 回报结果
 using CommandCallback = std::function<void(const terminal_agent::v1::Command&)>;
+using RuntimeCapabilityProvider = std::function<capability::RuntimeCapabilities()>;
 
 // gRPC 设备客户端
 class DeviceClient {
@@ -75,6 +77,9 @@ public:
     // 设置指令回调
     // 回调在 command_stream_thread 中执行，不要做耗时操作
     void set_command_callback(CommandCallback cb);
+
+    // 必须在 start() 前设置；每次 heartbeat 调用，反映动态 runtime readiness。
+    void set_runtime_capability_provider(RuntimeCapabilityProvider provider);
 
     // 手动上报状态（除定期上报外，也可以主动调用）
     bool report_status(const terminal_agent::v1::StatusReport& status);
@@ -126,6 +131,7 @@ private:
     std::atomic<bool> command_stream_running_{false}; // 指令流状态
 
     CommandCallback command_callback_;  // 指令回调
+    RuntimeCapabilityProvider runtime_capability_provider_;
 
     // stub_mu_：保护 stub 重连时的并发访问
     // 只有在重连时需要锁，正常运行时只有对应线程访问

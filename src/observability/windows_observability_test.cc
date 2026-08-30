@@ -48,11 +48,7 @@ int main() {
     terminal_agent::v1::HeartbeatRequest heartbeat;
     populate_heartbeat(success, &heartbeat);
     assert(heartbeat.cpu_percent() == 12.5f);
-    assert(heartbeat.capability().supported_features_size() == 5);
-    for (const auto& feature : heartbeat.capability().supported_features()) {
-        assert(feature != "command_firmware");
-        assert(feature != "p2p_config");
-    }
+    assert(!heartbeat.has_capability());
 
     terminal_agent::v1::StatusReport status;
     device_agent::reset_p2p_upload_counters_for_test();
@@ -116,7 +112,7 @@ int main() {
     stale.collected_at = std::chrono::system_clock::now() - std::chrono::minutes(1);
     terminal_agent::v1::HeartbeatRequest stale_heartbeat;
     populate_heartbeat(stale, &stale_heartbeat);
-    assert(stale_heartbeat.has_capability());
+    assert(!stale_heartbeat.has_capability());
     assert(stale_heartbeat.cpu_percent() == 0.0f);
     terminal_agent::v1::StatusReport stale_status;
     populate_status(stale, 1234, 56, &stale_status);
