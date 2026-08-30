@@ -9,7 +9,7 @@ Part of the [DeviceOps](https://github.com/QF1987/terminal-agent) ecosystem — 
 - **Heartbeat**: Periodic liveness signals to the management server
 - **Status Reporting**: Full device state snapshots on a configurable interval
 - **Event Reporting**: Real-time fault/transaction/event notifications
-- **Command Stream**: Long-lived connection receiving capability-gated commands from the server
+- **Command Stream**: Long-lived connection receiving commands from the server; individual command paths enforce their own eligibility checks
 - **Command Result Reporting**: Execution results sent back to the server
 
 ## Architecture

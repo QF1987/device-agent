@@ -137,6 +137,9 @@ if(NOT ANDROID AND NOT __ANDROID__)
     if(MSVC)
         target_compile_options(rfb_protocol_test PRIVATE
             $<$<CONFIG:Release>:/UNDEBUG>)
+    else()
+        target_compile_options(rfb_protocol_test PRIVATE
+            $<$<CONFIG:Release>:-UNDEBUG>)
     endif()
 endif()
 
