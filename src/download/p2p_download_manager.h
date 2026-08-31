@@ -84,7 +84,8 @@ public:
 
     // HTTP web-seed fallback seam：把 torrent 元数据 / stall / sha-mismatch 的
     // 直接 HTTP 下载抽成可注入点。默认实现由平台提供（POSIX socket）；
-    // Windows 默认 fail-closed，测试与未来平台原生实现（如 WinHTTP）可注入替换。
+    // Windows 默认 fail-closed，生产注入（如 Windows 混合 manager 注入 WinHTTP
+    // 适配，ADR-20260831-01 D2）与测试可替换。
     using HttpFallback = std::function<bool(const std::string& url,
                                             const std::string& output_path,
                                             std::string& error)>;
@@ -92,7 +93,8 @@ public:
     explicit P2PDownloadManager(
         Callbacks callbacks = {},
         P2PSeedingPolicy seeding_policy = P2PSeedingPolicy::alpha_defaults(),
-        std::shared_ptr<NetworkPolicy> network_policy = nullptr);
+        std::shared_ptr<NetworkPolicy> network_policy = nullptr,
+        HttpFallback http_fallback = nullptr);
     ~P2PDownloadManager() override;
 
     P2PDownloadManager(const P2PDownloadManager&) = delete;

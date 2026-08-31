@@ -566,6 +566,35 @@ elseif(WIN32)
             /utf-8
             $<$<CONFIG:Release>:/UNDEBUG>
         )
+
+        # Windows 混合 manager（ADR-20260831-01 B1）：核心路由平台中立，
+        # 生产 WinHTTP 适配经 windows_download_manager.cc 引入。
+        add_executable(windows_p2p_download_manager_test
+            src/download/windows_p2p_download_manager_test.cc
+            src/download/windows_p2p_download_manager.cc
+            src/download/windows_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(windows_p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(windows_p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(windows_p2p_download_manager_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(windows_p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            LibtorrentRasterbar::torrent-rasterbar
+            ws2_32
+        )
     endif()
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─
@@ -727,6 +756,28 @@ else()
             DEVICE_AGENT_TESTING
         )
         target_link_libraries(p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+
+        # Windows 混合 manager 核心路由为平台中立（ADR-20260831-01 B1），
+        # Linux 侧同样离线跑路由/回退/guard 逻辑（生产 WinHTTP 适配仅 _WIN32）。
+        add_executable(windows_p2p_download_manager_test
+            src/download/windows_p2p_download_manager_test.cc
+            src/download/windows_p2p_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(windows_p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(windows_p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+        )
+        target_link_libraries(windows_p2p_download_manager_test PRIVATE
             Threads::Threads
             OpenSSL::Crypto
             PkgConfig::LIBTORRENT_RASTERBAR

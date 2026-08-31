@@ -1116,9 +1116,11 @@ bool P2PSeedingStateMachine::should_stop(
 P2PDownloadManager::P2PDownloadManager(
         Callbacks callbacks,
         P2PSeedingPolicy seeding_policy,
-        std::shared_ptr<NetworkPolicy> network_policy)
+        std::shared_ptr<NetworkPolicy> network_policy,
+        HttpFallback http_fallback)
     : network_policy_(std::move(network_policy)),
       seeding_policy_(seeding_policy),
+      http_fallback_(std::move(http_fallback)),
       callbacks_(std::move(callbacks)),
       state_machine_(seeding_policy) {
     if (network_policy_) {

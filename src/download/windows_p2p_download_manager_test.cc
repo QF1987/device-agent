@@ -1,0 +1,651 @@
+// ============================================================
+// download/windows_p2p_download_manager_test.cc
+// ============================================================
+// ADR-20260831-01 · B1 离线确定性测试：路由、单 active、P2P 失败回退一次、
+// cancel race、generation guard、生产 WinHTTP 适配（loopback）。
+// 全程无公网 tracker / 真实 backend / 家庭设备；HTTP 仅 loopback/不可达端口。
+// ============================================================
+
+#include "download/windows_p2p_download_manager.h"
+
+#include "config/p2p_config_store.h"
+#include "download/network_policy.h"
+
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <sys/stat.h>
+#include <thread>
+#include <vector>
+#ifdef _WIN32
+#include <direct.h>
+#include <process.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
+namespace {
+
+constexpr const char* kShaFixture = "device-agent windows hybrid fixture\n";
+constexpr const char* kShaFixtureDigest =
+    "ceeebd5361828983ce1c8ed485d6f8e54e2cb2f6f34c68735d97ba8fd83fea53";
+
+std::string bencoded_string(const std::string& value) {
+    return std::to_string(value.size()) + ":" + value;
+}
+
+// 20 字节 piece hash（与 Phase A fixture 同构，hash 不需真实匹配——下载走回退）。
+const unsigned char kPieceHash[20] = {
+    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa,
+    0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x01, 0x02, 0x03, 0x04, 0x05,
+};
+
+int test_pid() {
+#ifdef _WIN32
+    return _getpid();
+#else
+    return getpid();
+#endif
+}
+
+void test_mkdir(const std::string& path) {
+#ifdef _WIN32
+    _mkdir(path.c_str());
+#else
+    mkdir(path.c_str(), 0700);
+#endif
+}
+
+std::string test_temp_base() {
+#ifdef _WIN32
+    const char* tmp = std::getenv("TEMP");
+    if (tmp == nullptr) {
+        tmp = std::getenv("TMP");
+    }
+    return tmp != nullptr ? std::string(tmp) : std::string(".");
+#else
+    const char* tmp = std::getenv("TMPDIR");
+    return tmp != nullptr ? std::string(tmp) : std::string("/tmp");
+#endif
+}
+
+std::string make_test_dir(const char* tag) {
+    std::string dir = test_temp_base() + "/windows-p2p-hybrid-test-" + tag + "-" +
+                      std::to_string(test_pid());
+    test_mkdir(dir);
+    return dir;
+}
+
+void write_seedless_torrent(const std::string& path) {
+    const std::string announce = "http://127.0.0.1:9/announce";
+    const std::string web_seed = "http://127.0.0.1:9/test.bin";
+
+    std::string data = "d";
+    data += "8:announce" + bencoded_string(announce);
+    data += "4:info";
+    data += "d6:lengthi16384e";
+    data += "4:name" + bencoded_string("test.bin");
+    data += "12:piece lengthi16384e";
+    data += "6:pieces20:";
+    data.append(reinterpret_cast<const char*>(kPieceHash), sizeof(kPieceHash));
+    data += "e";
+    data += "8:url-list" + bencoded_string(web_seed);
+    data += "e";
+
+    std::ofstream out(path, std::ios::binary);
+    out.write(data.data(), static_cast<std::streamsize>(data.size()));
+}
+
+void assert_true(bool value) {
+    assert(value);
+}
+
+bool wait_until_downloading(device_agent::WindowsP2PDownloadManager& manager) {
+    for (int i = 0; i < 40; ++i) {
+        if (manager.is_downloading()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
+
+// worker 回调 → 主线程结果快照（mutex+cv，禁止普通 bool 跨线程轮询）。
+struct CompletionCapture {
+    void store(bool success, const std::string& error,
+               const device_agent::DownloadCompletionTelemetry* telemetry) {
+        std::lock_guard<std::mutex> lock(mu_);
+        done_ = true;
+        ok_ = success;
+        err_ = error;
+        if (telemetry != nullptr) {
+            completion_path_ = telemetry->completion_path;
+            peer_bytes_ = telemetry->peer_bytes;
+            web_seed_bytes_ = telemetry->web_seed_bytes;
+        }
+        cv_.notify_all();
+    }
+
+    bool wait_and_get(bool* ok_out, std::string* err_out,
+                      int* completion_path_out = nullptr,
+                      int64_t* web_seed_bytes_out = nullptr) {
+        std::unique_lock<std::mutex> lock(mu_);
+        const bool completed = cv_.wait_for(lock, std::chrono::seconds(10),
+                                            [this] { return done_; });
+        if (ok_out != nullptr) *ok_out = ok_;
+        if (err_out != nullptr) *err_out = err_;
+        if (completion_path_out != nullptr) *completion_path_out = completion_path_;
+        if (web_seed_bytes_out != nullptr) *web_seed_bytes_out = web_seed_bytes_;
+        return completed;
+    }
+
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_ = false;
+    bool ok_ = false;
+    std::string err_;
+    int completion_path_ = -1;
+    int64_t peer_bytes_ = -1;
+    int64_t web_seed_bytes_ = -1;
+};
+
+// 可配置的 HTTP manager fake：记录调用、可写 fixture 成功/失败/阻塞。
+class FakeHttpManager : public device_agent::IDownloadManager {
+public:
+    device_agent::P2PDownloadManager::HttpFallback as_fallback() {
+        return [this](const std::string& url, const std::string& output_path,
+                      std::string& error) {
+            ++calls;
+            last_url = url;
+            last_path = output_path;
+            if (fail_next) {
+                error = "fake http failure";
+                return false;
+            }
+            std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+            out << kShaFixture;
+            return static_cast<bool>(out);
+        };
+    }
+
+    void download(const device_agent::DownloadRequest& req,
+                  device_agent::IDownloadManager::ProgressCallback on_progress,
+                  device_agent::IDownloadManager::CompleteCallback on_complete) override {
+        (void)on_progress;
+        ++calls;
+        last_url = req.url;
+        last_path = req.dest_path;
+        device_agent::DownloadCompletionTelemetry telemetry;
+        if (fail_next) {
+            if (on_complete) {
+                on_complete(false, "fake http failure", telemetry);
+            }
+            return;
+        }
+        std::string path = req.dest_path;
+        if (!path.empty() && path.back() != '\\' && path.back() != '/') {
+#ifdef _WIN32
+            path += "\\";
+#else
+            path += "/";
+#endif
+        }
+        path += req.file_id.empty() ? std::string("download.bin") : req.file_id;
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << kShaFixture;
+        telemetry.completion_path = 2;  // WebSeedPrimary
+        telemetry.web_seed_bytes = static_cast<int64_t>(out.tellp());
+        if (on_complete) {
+            on_complete(true, "", telemetry);
+        }
+    }
+
+    void cancel() override {
+        ++cancel_calls;
+    }
+
+    bool is_downloading() const override {
+        return false;
+    }
+
+    std::atomic<int> calls{0};
+    std::atomic<int> cancel_calls{0};
+    std::atomic<bool> fail_next{false};
+    std::string last_url;
+    std::string last_path;
+};
+
+// ─── Windows 真实适配 loopback server（_WIN32 only）─────────────────
+#ifdef _WIN32
+
+class LoopbackServer {
+public:
+    bool start(const std::string& fixture_bytes, const std::string& torrent_bytes) {
+        fixture_ = fixture_bytes;
+        torrent_ = torrent_bytes;
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+            return false;
+        }
+        sock_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (sock_ == INVALID_SOCKET) {
+            return false;
+        }
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = 0;
+        if (::bind(sock_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 ||
+            ::listen(sock_, 4) != 0) {
+            return false;
+        }
+        int len = sizeof(addr);
+        if (::getsockname(sock_, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+            return false;
+        }
+        port_ = ntohs(addr.sin_port);
+        thread_ = std::thread([this] { serve(); });
+        return true;
+    }
+
+    int port() const { return port_; }
+
+    void stop() {
+        if (sock_ != INVALID_SOCKET) {
+            ::closesocket(sock_);
+            sock_ = INVALID_SOCKET;
+        }
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+        WSACleanup();
+    }
+
+private:
+    void serve() {
+        for (int i = 0; i < 4; ++i) {
+            SOCKET client = ::accept(sock_, nullptr, nullptr);
+            if (client == INVALID_SOCKET) {
+                return;
+            }
+            char buffer[2048];
+            const int received = ::recv(client, buffer, sizeof(buffer), 0);
+            const std::string request(buffer, received > 0 ? static_cast<std::size_t>(received) : 0);
+            const bool want_torrent = request.find("fixture.torrent") != std::string::npos;
+            const std::string& body = want_torrent ? torrent_ : fixture_;
+            std::string response = "HTTP/1.1 200 OK\r\nContent-Length: " +
+                                   std::to_string(body.size()) +
+                                   "\r\nConnection: close\r\n\r\n" + body;
+            ::send(client, response.data(), static_cast<int>(response.size()), 0);
+            ::closesocket(client);
+        }
+    }
+
+    std::string fixture_;
+    std::string torrent_;
+    SOCKET sock_ = INVALID_SOCKET;
+    int port_ = 0;
+    std::thread thread_;
+};
+
+#endif  // _WIN32
+
+}  // namespace
+
+int main() {
+    using device_agent::DownloadRequest;
+    using device_agent::NetworkPolicy;
+    using device_agent::NetworkType;
+    using device_agent::P2PConfigStore;
+    using device_agent::P2PDownloadManager;
+    using device_agent::WindowsHttpFallbackAdapter;
+    using device_agent::WindowsP2PDownloadManager;
+
+    const std::string dir = make_test_dir("main");
+    const std::string save_dir = dir + "\\save";
+    test_mkdir(save_dir);
+    const std::string torrent_path = dir + "\\fixture.torrent";
+    write_seedless_torrent(torrent_path);
+
+    // 1. HTTP-only 路由：无 P2P source → 直达 http manager，telemetry 透传。
+    {
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.url = "http://127.0.0.1:9/direct.bin";
+        req.dest_path = save_dir;
+        req.file_id = "direct.bin";
+        req.expected_sha256 = kShaFixtureDigest;
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        std::string err;
+        int completion_path = -1;
+        int64_t web_seed_bytes = -1;
+        assert_true(capture.wait_and_get(&ok, &err, &completion_path, &web_seed_bytes));
+        assert(ok);
+        assert(err.empty());
+        assert(completion_path == 2);
+        assert(web_seed_bytes > 0);
+        assert(http.calls.load() == 1);
+    }
+
+    // 2. policy disabled → HTTP 路由。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"p2p_enabled":false})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.torrent_url = "C:\\fixtures\\x.torrent";
+        req.url = "http://127.0.0.1:9/fallback.bin";
+        req.dest_path = save_dir;
+        req.file_id = "fallback.bin";
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        assert_true(capture.wait_and_get(&ok, nullptr));
+        assert(ok);
+        assert(http.calls.load() == 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 3. min_file_size 门槛 → HTTP 路由。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":64})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.torrent_url = "C:\\fixtures\\x.torrent";
+        req.url = "http://127.0.0.1:9/small.bin";
+        req.dest_path = save_dir;
+        req.file_id = "small.bin";
+        req.file_size = 16 * 1024 * 1024;
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        assert_true(capture.wait_and_get(&ok, nullptr));
+        assert(ok);
+        assert(http.calls.load() == 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 4. cellular denied → HTTP 路由。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"cellular_download_enabled":false,"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        auto network_policy = std::make_shared<NetworkPolicy>();
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(network_policy, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        network_policy->on_network_changed(NetworkType::CELLULAR);
+        DownloadRequest req;
+        req.torrent_url = "C:\\fixtures\\x.torrent";
+        req.url = "http://127.0.0.1:9/cell.bin";
+        req.dest_path = save_dir;
+        req.file_id = "cell.bin";
+        req.file_size = 64 * 1024 * 1024;
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        assert_true(capture.wait_and_get(&ok, nullptr));
+        assert(ok);
+        assert(http.calls.load() == 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 5. P2P 失败（invalid magnet 快败）→ 回退 HTTP 恰好一次 → 成功。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.magnet_uri = "magnet:?xt=urn:btih:invalid";
+        req.url = "http://127.0.0.1:9/after-p2p.bin";
+        req.dest_path = save_dir;
+        req.file_id = "after-p2p.bin";
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        std::string err;
+        int completion_path = -1;
+        assert_true(capture.wait_and_get(&ok, &err, &completion_path));
+        assert(ok);
+        assert(completion_path == 2);
+        assert(http.calls.load() == 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 6. P2P 失败且无 http url → 不回退，透传 P2P 失败。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.magnet_uri = "magnet:?xt=urn:btih:invalid";
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = true;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert(!ok);
+        assert(err.find("failed to parse magnet URI") != std::string::npos);
+        assert(http.calls.load() == 0);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 7. metadata 经适配失败 → hybrid 回退一次成功（torrent_url=http）。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(nullptr, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.torrent_url = "http://127.0.0.1:9/fixture.torrent";
+        req.url = "http://127.0.0.1:9/meta-fallback.bin";
+        req.dest_path = save_dir;
+        req.file_id = "meta-fallback.bin";
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        assert_true(capture.wait_and_get(&ok, nullptr));
+        assert(ok);
+        assert(http.calls.load() == 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 8. cancel race：P2P 路由下载中取消 → 恰好一次取消失败，不启动回退。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        auto network_policy = std::make_shared<NetworkPolicy>();
+        network_policy->on_network_changed(NetworkType::WIFI);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(network_policy, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.torrent_url = torrent_path;
+        req.url = "http://127.0.0.1:9/after-cancel.bin";
+        req.dest_path = save_dir;
+        req.file_id = "after-cancel.bin";
+        req.file_size = 64 * 1024 * 1024;
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        assert_true(wait_until_downloading(manager));
+        manager.cancel();
+        bool ok = true;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert(!ok);
+        assert(err.find("cancel") != std::string::npos);
+        assert(http.calls.load() == 0);
+        assert(http.cancel_calls.load() >= 1);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 9. 单 active：进行中第二个请求立即失败。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        auto network_policy = std::make_shared<NetworkPolicy>();
+        network_policy->on_network_changed(NetworkType::WIFI);
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(network_policy, {}, std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}));
+        DownloadRequest req;
+        req.torrent_url = torrent_path;
+        req.dest_path = save_dir;
+        req.file_size = 64 * 1024 * 1024;
+        CompletionCapture first;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            first.store(ok, err, &t);
+        });
+        assert(manager.is_downloading());
+        bool second_ok = true;
+        std::string second_err;
+        manager.download(req, nullptr,
+                         [&](bool ok, const std::string& err,
+                             const device_agent::DownloadCompletionTelemetry&) {
+                             second_ok = ok;
+                             second_err = err;
+                         });
+        assert(!second_ok);
+        assert(second_err.find("already active") != std::string::npos);
+        assert(http.calls.load() == 0);
+        manager.cancel();
+        bool first_ok = true;
+        assert_true(first.wait_and_get(&first_ok, nullptr));
+        assert(!first_ok);
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // 10. 默认适配（POSIX fail-closed / Windows 真实 WDM）：无注入时直达路由。
+    {
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+        WindowsP2PDownloadManager manager;
+        DownloadRequest req;
+        req.url = "http://127.0.0.1:9/default.bin";
+        req.dest_path = save_dir;
+        req.file_id = "default.bin";
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = true;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+#ifdef _WIN32
+        // 真实 WDM 对 127.0.0.1:9（discard 端口，无监听）必然失败但错误非空。
+        assert(!ok);
+        assert(!err.empty());
+#else
+        assert(!ok);
+        assert(err.find("unavailable") != std::string::npos);
+#endif
+        P2PConfigStore::set_global(nullptr);
+    }
+
+#ifdef _WIN32
+    // 11. Windows 真实 WinHTTP 适配端到端（loopback）：直达下载 + 元数据 fallback。
+    {
+        LoopbackServer server;
+        assert_true(server.start(kShaFixture, ""));
+        const std::string base = "http://127.0.0.1:" + std::to_string(server.port());
+
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+
+        WindowsP2PDownloadManager manager;
+        DownloadRequest req;
+        req.url = base + "/payload.bin";
+        req.dest_path = save_dir;
+        req.file_id = "payload.bin";
+        req.expected_sha256 = kShaFixtureDigest;
+        CompletionCapture capture;
+        manager.download(req, nullptr, [&](bool ok, const std::string& err,
+                                           const device_agent::DownloadCompletionTelemetry& t) {
+            capture.store(ok, err, &t);
+        });
+        bool ok = false;
+        std::string err;
+        int completion_path = -1;
+        int64_t web_seed_bytes = -1;
+        assert_true(capture.wait_and_get(&ok, &err, &completion_path, &web_seed_bytes));
+        assert(ok);
+        assert(err.empty());
+        assert(completion_path == 2);
+        assert(web_seed_bytes > 0);
+
+        std::ifstream downloaded(save_dir + "\\payload.bin", std::ios::binary);
+        std::string content((std::istreambuf_iterator<char>(downloaded)),
+                            std::istreambuf_iterator<char>());
+        assert(content == kShaFixture);
+
+        server.stop();
+        P2PConfigStore::set_global(nullptr);
+    }
+#endif
+
+    return 0;
+}
