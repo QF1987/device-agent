@@ -17,10 +17,29 @@ void expect(bool condition, const std::string& message) {
     }
 }
 
+#ifdef _WIN32
+// MSVC 没有 POSIX setenv/unsetenv；_putenv_s(name, "") 语义为删除。
+void test_unsetenv(const char* name) {
+    _putenv_s(name, "");
+}
+
+void test_setenv(const char* name, const char* value) {
+    _putenv_s(name, value);
+}
+#else
+void test_unsetenv(const char* name) {
+    unsetenv(name);
+}
+
+void test_setenv(const char* name, const char* value) {
+    setenv(name, value, 1);
+}
+#endif
+
 }  // namespace
 
 int main() {
-    unsetenv("P2P_SEEDING_TTL");
+    test_unsetenv("P2P_SEEDING_TTL");
     P2PConfigStore store;
     auto defaults = store.snapshot();
     expect(defaults.seeding_ttl_seconds == 21600, "default ttl mismatch");
@@ -36,7 +55,7 @@ int main() {
     expect(defaults.min_file_size_mb_for_p2p == 10, "default min file size mismatch");
 
     std::string error;
-    setenv("P2P_SEEDING_TTL", "120", 1);
+    test_setenv("P2P_SEEDING_TTL", "120");
     P2PConfigStore env_store;
     auto env_defaults = env_store.snapshot();
     expect(env_defaults.seeding_ttl_seconds == 120, "env ttl override mismatch");
@@ -48,11 +67,11 @@ int main() {
     auto global_env_defaults = P2PConfigStore::global_snapshot();
     expect(global_env_defaults.seeding_ttl_seconds == 120, "global default env ttl mismatch");
 
-    setenv("P2P_SEEDING_TTL", "invalid", 1);
+    test_setenv("P2P_SEEDING_TTL", "invalid");
     P2PConfigStore invalid_env_store;
     auto invalid_env_defaults = invalid_env_store.snapshot();
     expect(invalid_env_defaults.seeding_ttl_seconds == 21600, "invalid env ttl did not fall back");
-    unsetenv("P2P_SEEDING_TTL");
+    test_unsetenv("P2P_SEEDING_TTL");
 
     const bool ok = store.apply(
         R"({"kind":"p2p_seeding","seeding_ttl_seconds":7200,"max_share_ratio":1.5,"cellular_seeding_enabled":true,"max_upload_kbps":128})",
