@@ -108,16 +108,9 @@ void DeviceClient::notify_network_type(
     if (!network_type_observer_) {
         return;
     }
-    // ADR-20260831-01 D4：仅在有效网络事实时通知；partial/缺失/未知不通知，
-    // NetworkPolicy 保持 NONE（上传 fail closed）。
-    if (snapshot.network_availability != observability::Availability::kAvailable) {
-        return;
-    }
-    if (!snapshot.values.net_type.has_value()) {
-        return;
-    }
-    network_type_observer_(
-        observability::network_type_from_proto(*snapshot.values.net_type));
+    // RV-20260901-WIN-P2P-B2-02：每次快照必达——未知/缺失/partial/unavailable
+    // 显式把 NetworkPolicy 收敛到 NONE，不保留 last-known（fail closed）。
+    network_type_observer_(observability::network_type_for_policy(snapshot));
 }
 #endif
 

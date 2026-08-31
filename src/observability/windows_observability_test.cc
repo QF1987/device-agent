@@ -180,5 +180,63 @@ int main() {
     assert(device_agent::observability::network_type_from_proto(PNT::CELLULAR) == NT::CELLULAR);
     assert(device_agent::observability::network_type_from_proto(PNT::NET_UNKNOWN) == NT::NONE);
 
+    assert(device_agent::observability::network_type_from_proto(PNT::NET_UNKNOWN) == NT::NONE);
+
+    // RV-20260901-WIN-P2P-B2-02：确定性状态转移——未知/不完整快照显式收敛
+    // NONE，不保留 last-known WIFI；CELLULAR 映射保持。
+    {
+        device_agent::NetworkPolicy policy;
+        assert(!policy.should_seed());  // 初始 NONE
+        assert(policy.current_type() == NT::NONE);
+
+        // 有效 WIFI（complete_raw 的 net_type=ETHERNET → 内部 WIFI）→ should_seed
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(success));
+        assert(policy.current_type() == NT::WIFI);
+        assert(policy.should_seed());
+
+        auto unavailable = success;
+        unavailable.network_availability = Availability::kUnavailable;
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(unavailable));
+        assert(policy.current_type() == NT::NONE);
+        assert(!policy.should_seed());
+
+        auto partial = success;
+        partial.network_availability = Availability::kPartial;
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(partial));
+        assert(policy.current_type() == NT::NONE);
+        assert(!policy.should_seed());
+
+        auto missing = success;
+        missing.values.net_type.reset();
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(missing));
+        assert(policy.current_type() == NT::NONE);
+        assert(!policy.should_seed());
+
+        auto unknown = success;
+        unknown.values.net_type = PNT::NET_UNKNOWN;
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(unknown));
+        assert(policy.current_type() == NT::NONE);
+        assert(!policy.should_seed());
+
+        // CELLULAR 保持 CELLULAR（不做种）。
+        auto cellular = success;
+        cellular.values.net_type = PNT::CELLULAR;
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(cellular));
+        assert(policy.current_type() == NT::CELLULAR);
+        assert(!policy.should_seed());
+
+        // 恢复 WIFI → WIFI（可做种）。
+        policy.on_network_changed(
+            device_agent::observability::network_type_for_policy(success));
+        assert(policy.current_type() == NT::WIFI);
+        assert(policy.should_seed());
+    }
+
     return 0;
 }

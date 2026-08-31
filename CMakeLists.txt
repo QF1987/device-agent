@@ -694,6 +694,7 @@ else()
         src/observability/observability.cc
         src/observability/windows_observability.cc
         src/download/p2p_upload_counters.cc
+        src/download/network_policy.cc
         src/enrollment/enrollment_manager.cc
         src/config/config.cc
         src/logger/logger.cc
@@ -705,6 +706,11 @@ else()
     target_include_directories(windows_observability_test PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${GEN_DESKTOP_DIR}
+    )
+    # RV-20260901-WIN-P2P-B2-03：非 MSVC Release 也保留 assert（target-local），
+    # production device-agent flags 不变。
+    target_compile_options(windows_observability_test PRIVATE
+        $<$<CONFIG:Release>:-UNDEBUG>
     )
     target_link_libraries(windows_observability_test PRIVATE
         Threads::Threads

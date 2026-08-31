@@ -51,6 +51,16 @@ NetworkType network_type_from_proto(terminal_agent::v1::NetworkType type) {
     }
 }
 
+NetworkType network_type_for_policy(const ObservabilitySnapshot& snapshot) {
+    // RV-20260901-WIN-P2P-B2-02：未知/不完整快照显式收敛 NONE，
+    // 防止 last-known WIFI 在无活动适配器/蜂窝切换场景下 fail open。
+    if (snapshot.network_availability != Availability::kAvailable ||
+        !snapshot.values.net_type.has_value()) {
+        return NetworkType::NONE;
+    }
+    return network_type_from_proto(*snapshot.values.net_type);
+}
+
 ObservabilitySnapshot finalize_observation(RawObservation raw) {
     ObservabilitySnapshot out;
     out.inventory_availability = availability_for(

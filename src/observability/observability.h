@@ -68,6 +68,11 @@ using Collector = std::function<ObservabilitySnapshot()>;
 // NET_UNKNOWN → NONE（fail closed）。供 Windows DeviceClient 窄回调映射。
 NetworkType network_type_from_proto(terminal_agent::v1::NetworkType type);
 
+// 快照 → NetworkPolicy 收敛值（RV-20260901-WIN-P2P-B2-02）：network 事实
+// unavailable/partial/缺失/NET_UNKNOWN 一律收敛 NONE（不保留 last-known，
+// 杜绝 fail closed 退化 fail open）；有效 WIFI/ETHERNET/CELLULAR 按上映射。
+NetworkType network_type_for_policy(const ObservabilitySnapshot& snapshot);
+
 ObservabilitySnapshot finalize_observation(RawObservation raw);
 void populate_heartbeat(const ObservabilitySnapshot& snapshot,
                         terminal_agent::v1::HeartbeatRequest* out);

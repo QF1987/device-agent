@@ -495,8 +495,12 @@ int run_agent(int argc, char* argv[]) {
         // 后 apply 覆盖）。
         auto p2p_network_policy = std::make_shared<device_agent::NetworkPolicy>();
         auto p2p_http_adapter = std::make_shared<device_agent::WindowsHttpFallbackAdapter>();
-        device_agent::P2PConfigStore::set_global(
-            std::make_shared<device_agent::P2PConfigStore>());
+        // 同一 store 实例：set_global 供 hybrid 读策略，handler 注入供
+        // update_config kind=p2p_seeding 热更新（RV-20260901-WIN-P2P-B2-01，
+        // 对齐 Android wiring——二者不是替代关系）。
+        auto p2p_config_store = std::make_shared<device_agent::P2PConfigStore>();
+        device_agent::P2PConfigStore::set_global(p2p_config_store);
+        handler.set_p2p_config_store(p2p_config_store);
         auto p2p_hybrid = std::make_shared<device_agent::WindowsP2PDownloadManager>(
             p2p_network_policy,
             device_agent::P2PDownloadManager::Callbacks{},
@@ -507,9 +511,9 @@ int run_agent(int argc, char* argv[]) {
             [p2p_network_policy](device_agent::NetworkType type) {
                 p2p_network_policy->on_network_changed(type);
             });
-        // runtime p2p_config 动态声明：manager/config/network/fallback 初始化
-        // 全部完成后置 ready（compile 门由 CMake option 承担）；VNC 合并的
-        // provider 在 remote desktop 段统一设置（引用捕获，见下）。
+        // runtime p2p_config 动态声明：manager/config/network/fallback 与
+        // command apply wiring 全部完成后才置 ready（compile 门由 CMake
+        // option 承担）；VNC 合并的 provider 在 remote desktop 段统一设置。
         p2p_runtime_ready->store(true);
         LOG_INFO("Using WindowsExecutor + WindowsP2PDownloadManager (hybrid) download_dir=" + download_dir);
 #else
