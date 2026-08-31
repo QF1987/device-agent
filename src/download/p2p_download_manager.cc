@@ -1492,19 +1492,23 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
+                    // 初始 throttle 与 on_network_changed 共用同一
+                    // seeding_allowed_on_network 判定（RV-20260831-WIN-P2P-A-04）：
+                    // 同一把锁内取 network type + seeding policy 快照，锁外调
+                    // libtorrent；不再单独读 should_seed 或做 cellular 放宽。
                     NetworkType network_type = NetworkType::WIFI;
+                    P2PSeedingPolicy policy;
                     {
                         std::lock_guard<std::mutex> lock(mu_);
                         active_handles_.push_back(handle);
+                        policy = seeding_policy_;
                         network_type = network_policy_ ? network_type_ : NetworkType::WIFI;
                     }
                     if (network_policy_) {
-                        bool should_seed = network_policy_->should_seed();
-                        if (!should_seed && network_type == NetworkType::CELLULAR &&
-                                seeding_policy_.cellular_seeding_enabled) {
-                            should_seed = true;
-                        }
-                        set_upload_throttle(handle, !should_seed, seeding_policy_);
+                        set_upload_throttle(
+                            handle,
+                            !seeding_allowed_on_network(network_type, policy),
+                            policy);
                     }
                 }
             }

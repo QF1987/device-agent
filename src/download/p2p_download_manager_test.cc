@@ -456,11 +456,12 @@ int main() {
     }
 
     auto network_policy = std::make_shared<device_agent::NetworkPolicy>();
-    network_policy->on_network_changed(NetworkType::WIFI);
     P2PDownloadManager manager(
         {},
         P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 7, false},
         network_policy);
+    // 订阅后再发事件：manager 的 network_type_ 才为 WIFI，初始 throttle 依据它。
+    network_policy->on_network_changed(NetworkType::WIFI);
     std::mutex mu;
     std::condition_variable cv;
     bool complete_called = false;
@@ -512,11 +513,11 @@ int main() {
     }
 
     auto unlimited_policy = std::make_shared<device_agent::NetworkPolicy>();
-    unlimited_policy->on_network_changed(NetworkType::WIFI);
     P2PDownloadManager unlimited_manager(
         {},
         P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 0, true},
         unlimited_policy);
+    unlimited_policy->on_network_changed(NetworkType::WIFI);
     DownloadRequest unlimited_req;
     unlimited_req.torrent_url = torrent_path;
     unlimited_req.dest_path = save_dir;
@@ -529,11 +530,11 @@ int main() {
     assert(!unlimited_manager.is_downloading());
 
     auto default_cellular_policy = std::make_shared<device_agent::NetworkPolicy>();
-    default_cellular_policy->on_network_changed(NetworkType::WIFI);
     P2PDownloadManager default_cellular_manager(
         {},
         P2PSeedingPolicy{std::chrono::seconds(3), 1.25, 0, false},
         default_cellular_policy);
+    default_cellular_policy->on_network_changed(NetworkType::WIFI);
     DownloadRequest default_cellular_req;
     default_cellular_req.torrent_url = torrent_path;
     default_cellular_req.dest_path = save_dir;
@@ -554,8 +555,8 @@ int main() {
         &config_error));
     P2PConfigStore::set_global(hot_config);
     auto hot_policy = std::make_shared<device_agent::NetworkPolicy>();
-    hot_policy->on_network_changed(NetworkType::WIFI);
     P2PDownloadManager hot_manager({}, P2PSeedingPolicy::alpha_defaults(), hot_policy);
+    hot_policy->on_network_changed(NetworkType::WIFI);
     DownloadRequest hot_req;
     hot_req.torrent_url = torrent_path;
     hot_req.dest_path = save_dir;
@@ -635,27 +636,96 @@ int main() {
         &config_error));
     P2PConfigStore::set_global(no_seed_config);
     auto no_seed_policy = std::make_shared<device_agent::NetworkPolicy>();
-    no_seed_policy->on_network_changed(NetworkType::WIFI);
     P2PDownloadManager no_seed_manager(
         {},
         P2PSeedingPolicy::alpha_defaults(),
         no_seed_policy);
+    no_seed_policy->on_network_changed(NetworkType::WIFI);
     DownloadRequest no_seed_req;
     no_seed_req.torrent_url = torrent_path;
     no_seed_req.dest_path = save_dir;
     no_seed_req.file_size = 64 * 1024 * 1024;
     no_seed_manager.download(no_seed_req, nullptr, nullptr);
     assert_true(wait_until_downloading(no_seed_manager));
-    // 先等 torrent handle 就绪；seeding_enabled=false 的上传抑制由网络变化
-    // handler 强制，重发同值 WIFI 事件触发该 handler（断言开启时暴露：
-    // 初始 apply 路径不含 seeding_enabled 门）。
-    assert_true(wait_until_active_handle(no_seed_manager));
-    no_seed_policy->on_network_changed(NetworkType::WIFI);
+    // global off：初始 throttle 必须直接生效（RV-04 统一判定后无需重发网络事件）。
     assert_true(wait_until_upload_throttle(
         no_seed_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     no_seed_manager.cancel();
     assert(!no_seed_manager.is_downloading());
     P2PConfigStore::set_global(nullptr);
+
+    // LAN off：lan_upload_enabled=false 时 WIFI 初始 throttle 必须抑制。
+    {
+        auto lan_off_config = std::make_shared<P2PConfigStore>();
+        assert_true(lan_off_config->apply(
+            R"({"lan_upload_enabled":false,"min_file_size_mb_for_p2p":0})",
+            &config_error));
+        P2PConfigStore::set_global(lan_off_config);
+        auto lan_off_policy = std::make_shared<device_agent::NetworkPolicy>();
+        P2PDownloadManager lan_off_manager(
+            {}, P2PSeedingPolicy::alpha_defaults(), lan_off_policy);
+        lan_off_policy->on_network_changed(NetworkType::WIFI);
+        DownloadRequest lan_off_req;
+        lan_off_req.torrent_url = torrent_path;
+        lan_off_req.dest_path = save_dir;
+        lan_off_req.file_size = 64 * 1024 * 1024;
+        lan_off_manager.download(lan_off_req, nullptr, nullptr);
+        assert_true(wait_until_downloading(lan_off_manager));
+        assert_true(wait_until_upload_throttle(
+            lan_off_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
+        lan_off_manager.cancel();
+        assert(!lan_off_manager.is_downloading());
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // cellular global-off + cellular-on：总开关关闭时 cellular 标志
+    // 不得在初始 throttle 重新放行上传。
+    {
+        auto cellular_gated_config = std::make_shared<P2PConfigStore>();
+        assert_true(cellular_gated_config->apply(
+            R"({"seeding_enabled":false,"cellular_seeding_enabled":true,"min_file_size_mb_for_p2p":0})",
+            &config_error));
+        P2PConfigStore::set_global(cellular_gated_config);
+        auto cellular_gated_policy = std::make_shared<device_agent::NetworkPolicy>();
+        P2PDownloadManager cellular_gated_manager(
+            {}, P2PSeedingPolicy::alpha_defaults(), cellular_gated_policy);
+        cellular_gated_policy->on_network_changed(NetworkType::CELLULAR);
+        DownloadRequest cellular_gated_req;
+        cellular_gated_req.torrent_url = torrent_path;
+        cellular_gated_req.dest_path = save_dir;
+        cellular_gated_req.file_size = 64 * 1024 * 1024;
+        cellular_gated_manager.download(cellular_gated_req, nullptr, nullptr);
+        assert_true(wait_until_downloading(cellular_gated_manager));
+        assert_true(wait_until_upload_throttle(
+            cellular_gated_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
+        cellular_gated_manager.cancel();
+        assert(!cellular_gated_manager.is_downloading());
+        P2PConfigStore::set_global(nullptr);
+    }
+
+    // cellular on + 全局开：CELLULAR 下初始 throttle 允许做种（默认上限）。
+    {
+        auto cellular_on_config = std::make_shared<P2PConfigStore>();
+        assert_true(cellular_on_config->apply(
+            R"({"cellular_seeding_enabled":true,"min_file_size_mb_for_p2p":0})",
+            &config_error));
+        P2PConfigStore::set_global(cellular_on_config);
+        auto cellular_on_policy = std::make_shared<device_agent::NetworkPolicy>();
+        P2PDownloadManager cellular_on_manager(
+            {}, P2PSeedingPolicy::alpha_defaults(), cellular_on_policy);
+        cellular_on_policy->on_network_changed(NetworkType::CELLULAR);
+        DownloadRequest cellular_on_req;
+        cellular_on_req.torrent_url = torrent_path;
+        cellular_on_req.dest_path = save_dir;
+        cellular_on_req.file_size = 64 * 1024 * 1024;
+        cellular_on_manager.download(cellular_on_req, nullptr, nullptr);
+        assert_true(wait_until_downloading(cellular_on_manager));
+        assert_true(wait_until_upload_throttle(
+            cellular_on_manager, kDefaultMaxUploadPeers, kLibtorrentUploadLimitUnlimited));
+        cellular_on_manager.cancel();
+        assert(!cellular_on_manager.is_downloading());
+        P2PConfigStore::set_global(nullptr);
+    }
 
     // fresh 实例状态隔离：前序用例的 global config / 会话状态不泄漏到新实例，
     // alpha_defaults 回到出厂默认（fresh process/test instance 语义）。
