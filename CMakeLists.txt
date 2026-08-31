@@ -509,11 +509,15 @@ elseif(WIN32)
     # 仅测试目标；不接入生产 device-agent（仍用 WindowsDownloadManager），
     # 不改变 capability manifest（Windows 不声明 p2p_config）。
     # 依赖 vcpkg x64-windows：vcpkg install libtorrent（传递 openssl/boost）。
+    # config package/target 名 = vcpkg libtorrent port / libtorrent 上游 CMake
+    # 实际导出（RV-20260831-WIN-P2P-A-01）：LibtorrentRasterbar /
+    # LibtorrentRasterbar::torrent-rasterbar；ABI 定义（TORRENT_LINKING_SHARED、
+    # TORRENT_USE_OPENSSL 等）由 imported target 传播，不做手工 ABI override。
     option(DEVICE_AGENT_BUILD_WINDOWS_P2P
         "Build Windows libtorrent P2P core + native offline tests (Phase A)" OFF)
     if(DEVICE_AGENT_BUILD_WINDOWS_P2P)
         find_package(OpenSSL REQUIRED)
-        find_package(libtorrent-rasterbar CONFIG REQUIRED)
+        find_package(LibtorrentRasterbar CONFIG REQUIRED)
 
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
@@ -526,7 +530,6 @@ elseif(WIN32)
             ${CMAKE_SOURCE_DIR}/src
         )
         target_compile_definitions(p2p_download_manager_test PRIVATE
-            TORRENT_ABI_VERSION=3
             DEVICE_AGENT_TESTING
             WIN32_LEAN_AND_MEAN NOMINMAX
         )
@@ -537,7 +540,7 @@ elseif(WIN32)
         target_link_libraries(p2p_download_manager_test PRIVATE
             Threads::Threads
             OpenSSL::Crypto
-            libtorrent-rasterbar::libtorrent-rasterbar
+            LibtorrentRasterbar::torrent-rasterbar
         )
 
         add_executable(network_policy_test

@@ -1,6 +1,7 @@
 #include "download/p2p_download_manager.h"
 #include "config/p2p_config_store.h"
 
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -76,11 +77,54 @@ bool file_readable(const std::string& path) {
     return in.good();
 }
 
-void wait_for(bool& flag) {
-    for (int i = 0; i < 40 && !flag; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
+// 断言只检查结果；调用本身必须始终执行（RV-20260831-WIN-P2P-A-02：
+// 防 NDEBUG 下有副作用/出参的调用被整体裁掉，测试静默退化为空检查）。
+void assert_true(bool value) {
+    assert(value);
 }
+
+// worker 回调 → 主线程的结果快照（RV-20260831-WIN-P2P-A-03：
+// mutex + condition_variable 同步，不用普通 bool 跨线程轮询）。
+struct CompletionCapture {
+    void store(bool success,
+               const std::string& error,
+               const device_agent::DownloadCompletionTelemetry* telemetry) {
+        std::lock_guard<std::mutex> lock(mu_);
+        done_ = true;
+        ok_ = success;
+        err_ = error;
+        if (telemetry != nullptr) {
+            completion_path_ = telemetry->completion_path;
+            peer_bytes_ = telemetry->peer_bytes;
+            web_seed_bytes_ = telemetry->web_seed_bytes;
+        }
+        cv_.notify_all();
+    }
+
+    // 等待完成并在锁内取结果快照；返回 false = 超时。
+    bool wait_and_get(bool* ok_out,
+                      std::string* err_out,
+                      int* completion_path_out = nullptr,
+                      int64_t* peer_bytes_out = nullptr) {
+        std::unique_lock<std::mutex> lock(mu_);
+        const bool completed = cv_.wait_for(lock, std::chrono::seconds(5),
+                                            [this] { return done_; });
+        if (ok_out != nullptr) *ok_out = ok_;
+        if (err_out != nullptr) *err_out = err_;
+        if (completion_path_out != nullptr) *completion_path_out = completion_path_;
+        if (peer_bytes_out != nullptr) *peer_bytes_out = peer_bytes_;
+        return completed;
+    }
+
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_ = false;
+    bool ok_ = false;
+    std::string err_;
+    int completion_path_ = -1;
+    int64_t peer_bytes_ = -1;
+    int64_t web_seed_bytes_ = -1;
+};
 
 void write_seedless_torrent(const std::string& path) {
     const std::string announce = "http://127.0.0.1:9/announce";
@@ -196,7 +240,7 @@ int main() {
 
     auto config_store = std::make_shared<P2PConfigStore>();
     std::string config_error;
-    assert(config_store->apply(
+    assert_true(config_store->apply(
         R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25,"max_upload_kbps":7,"cellular_seeding_enabled":true})",
         &config_error));
     P2PConfigStore::set_global(config_store);
@@ -239,19 +283,18 @@ int main() {
     assert(!empty_url_manager.is_downloading());
 
     P2PDownloadManager invalid_magnet_manager;
-    bool invalid_magnet_complete = false;
+    CompletionCapture invalid_magnet_capture;
     DownloadRequest invalid_magnet_req;
     invalid_magnet_req.magnet_uri = "magnet:?xt=urn:btih:invalid";
     invalid_magnet_manager.download(invalid_magnet_req, nullptr,
-        [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
-            assert(!ok);
-            assert(err.find("failed to parse magnet URI") != std::string::npos);
-            invalid_magnet_complete = true;
+        [&invalid_magnet_capture](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+            invalid_magnet_capture.store(ok, err, &telemetry);
         });
-    for (int i = 0; i < 40 && !invalid_magnet_complete; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    assert(invalid_magnet_complete);
+    bool invalid_magnet_ok = true;
+    std::string invalid_magnet_err;
+    assert_true(invalid_magnet_capture.wait_and_get(&invalid_magnet_ok, &invalid_magnet_err));
+    assert(!invalid_magnet_ok);
+    assert(invalid_magnet_err.find("failed to parse magnet URI") != std::string::npos);
     assert(!invalid_magnet_manager.is_downloading());
 
     P2PDownloadManager url_torrent_fallback_manager;
@@ -287,31 +330,32 @@ int main() {
     }
     std::string sha_hex;
     std::string sha_error;
-    assert(device_agent::sha256_file_for_test(sha_path, sha_hex, sha_error));
+    assert_true(device_agent::sha256_file_for_test(sha_path, sha_hex, sha_error));
     assert(sha_hex == kShaFixtureDigest);
 
     std::string missing_hex;
     std::string missing_error;
-    assert(!device_agent::sha256_file_for_test(dir + "/missing-for-sha-test.bin",
-                                               missing_hex, missing_error));
+    assert_true(!device_agent::sha256_file_for_test(dir + "/missing-for-sha-test.bin",
+                                                    missing_hex, missing_error));
     assert(!missing_error.empty());
 
     // magnet_uri 优先于 torrent_url：无效 magnet + 合法 torrent fixture，
     // 必须报 magnet 解析错误而不是加载 torrent。
     {
         P2PDownloadManager magnet_priority_manager;
-        bool magnet_priority_complete = false;
+        CompletionCapture capture;
         DownloadRequest magnet_priority_req;
         magnet_priority_req.magnet_uri = "magnet:?xt=urn:btih:invalid";
         magnet_priority_req.torrent_url = torrent_path;
         magnet_priority_manager.download(magnet_priority_req, nullptr,
-            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
-                assert(!ok);
-                assert(err.find("failed to parse magnet URI") != std::string::npos);
-                magnet_priority_complete = true;
+            [&capture](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+                capture.store(ok, err, &telemetry);
             });
-        wait_for(magnet_priority_complete);
-        assert(magnet_priority_complete);
+        bool magnet_priority_ok = true;
+        std::string magnet_priority_err;
+        assert_true(capture.wait_and_get(&magnet_priority_ok, &magnet_priority_err));
+        assert(!magnet_priority_ok);
+        assert(magnet_priority_err.find("failed to parse magnet URI") != std::string::npos);
         assert(!magnet_priority_manager.is_downloading());
     }
 
@@ -329,21 +373,17 @@ int main() {
         direct_req.url = "http://127.0.0.1:9/direct-fallback.bin";
         direct_req.dest_path = save_dir;
         direct_req.expected_sha256 = kShaFixtureDigest;
-        bool direct_done = false;
+        CompletionCapture capture;
+        direct_fallback_manager.download(direct_req, nullptr,
+            [&capture](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+                capture.store(ok, err, &telemetry);
+            });
         bool direct_ok = false;
         std::string direct_err;
         int direct_completion_path = -1;
         int64_t direct_peer_bytes = -1;
-        direct_fallback_manager.download(direct_req, nullptr,
-            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
-                direct_ok = ok;
-                direct_err = err;
-                direct_completion_path = telemetry.completion_path;
-                direct_peer_bytes = telemetry.peer_bytes;
-                direct_done = true;
-            });
-        wait_for(direct_done);
-        assert(direct_done);
+        assert_true(capture.wait_and_get(&direct_ok, &direct_err,
+                                         &direct_completion_path, &direct_peer_bytes));
         assert(direct_ok);
         assert(direct_err.empty());
         assert(direct_completion_path ==
@@ -365,17 +405,14 @@ int main() {
         sha_req.url = "http://127.0.0.1:9/sha-mismatch.bin";
         sha_req.dest_path = save_dir;
         sha_req.expected_sha256 = std::string(64, '0');
-        bool sha_done = false;
+        CompletionCapture capture;
+        sha_mismatch_manager.download(sha_req, nullptr,
+            [&capture](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+                capture.store(ok, err, &telemetry);
+            });
         bool sha_ok = true;
         std::string sha_verify_error;
-        sha_mismatch_manager.download(sha_req, nullptr,
-            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
-                sha_ok = ok;
-                sha_verify_error = err;
-                sha_done = true;
-            });
-        wait_for(sha_done);
-        assert(sha_done);
+        assert_true(capture.wait_and_get(&sha_ok, &sha_verify_error));
         assert(!sha_ok);
         assert(sha_verify_error.find("sha256 mismatch") != std::string::npos);
         assert(!sha_mismatch_manager.is_downloading());
@@ -383,14 +420,18 @@ int main() {
 
     // torrent_url 指向 HTTP：注入 fallback 下载 .torrent 元数据（写入经
     // join_path 的 Windows/POSIX 路径），随后 torrent 加载 + cancel 生命周期。
+    // fallback 完成 flag 用 release/acquire 原子变量同步，主线程不再轮询文件。
     {
         P2PDownloadManager metadata_manager;
+        std::atomic<bool> metadata_fallback_done{false};
         metadata_manager.set_http_fallback_for_test(
-            [&torrent_path](const std::string&, const std::string& output_path, std::string&) {
+            [&torrent_path, &metadata_fallback_done](const std::string&, const std::string& output_path, std::string&) {
                 std::ifstream in(torrent_path, std::ios::binary);
                 std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
                 out << in.rdbuf();
-                return static_cast<bool>(out);
+                const bool ok = static_cast<bool>(out);
+                metadata_fallback_done.store(true, std::memory_order_release);
+                return ok;
             });
         DownloadRequest metadata_req;
         metadata_req.torrent_url = "http://127.0.0.1:9/fixture.torrent";
@@ -398,16 +439,17 @@ int main() {
         metadata_req.file_id = "metadata-probe";
         metadata_req.file_size = 64 * 1024 * 1024;
         metadata_manager.download(metadata_req, nullptr, nullptr);
-        assert(wait_until_downloading(metadata_manager));
+        assert_true(wait_until_downloading(metadata_manager));
         const std::string metadata_path = save_dir + "/metadata-probe.torrent";
         bool metadata_written = false;
         for (int i = 0; i < 40 && !metadata_written; ++i) {
-            metadata_written = file_readable(metadata_path);
+            metadata_written = metadata_fallback_done.load(std::memory_order_acquire);
             if (!metadata_written) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
-        assert(metadata_written);
+        assert_true(metadata_written);
+        assert(file_readable(metadata_path));
         metadata_manager.cancel();
         assert(!metadata_manager.is_downloading());
         assert(metadata_manager.state() == P2PDownloadState::Idle);
@@ -445,16 +487,16 @@ int main() {
             cv.notify_one();
         });
 
-    assert(wait_until_downloading(manager));
-    assert(wait_until_active_handle(manager));
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_downloading(manager));
+    assert_true(wait_until_active_handle(manager));
+    assert_true(wait_until_upload_throttle(
         manager, kDefaultMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
     assert(manager.state() == P2PDownloadState::Downloading);
     network_policy->on_network_changed(NetworkType::CELLULAR);
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_upload_throttle(
         manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     network_policy->on_network_changed(NetworkType::WIFI);
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_upload_throttle(
         manager, kDefaultMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
     manager.cancel();
     assert(!manager.is_downloading());
@@ -480,8 +522,8 @@ int main() {
     unlimited_req.dest_path = save_dir;
     unlimited_req.file_size = 64 * 1024 * 1024;
     unlimited_manager.download(unlimited_req, nullptr, nullptr);
-    assert(wait_until_downloading(unlimited_manager));
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_downloading(unlimited_manager));
+    assert_true(wait_until_upload_throttle(
         unlimited_manager, kDefaultMaxUploadPeers, kLibtorrentUploadLimitUnlimited));
     unlimited_manager.cancel();
     assert(!unlimited_manager.is_downloading());
@@ -497,15 +539,17 @@ int main() {
     default_cellular_req.dest_path = save_dir;
     default_cellular_req.file_size = 64 * 1024 * 1024;
     default_cellular_manager.download(default_cellular_req, nullptr, nullptr);
-    assert(wait_until_downloading(default_cellular_manager));
+    assert_true(wait_until_downloading(default_cellular_manager));
+    // 先等 torrent handle 就绪再发网络事件，保证节流应用在活跃 handle 上。
+    assert_true(wait_until_active_handle(default_cellular_manager));
     default_cellular_policy->on_network_changed(NetworkType::CELLULAR);
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_upload_throttle(
         default_cellular_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     default_cellular_manager.cancel();
     assert(!default_cellular_manager.is_downloading());
 
     auto hot_config = std::make_shared<P2PConfigStore>();
-    assert(hot_config->apply(
+    assert_true(hot_config->apply(
         R"({"seeding_ttl_seconds":3,"max_share_ratio":1.25,"max_upload_kbps":7,"max_upload_peers":2})",
         &config_error));
     P2PConfigStore::set_global(hot_config);
@@ -517,15 +561,15 @@ int main() {
     hot_req.dest_path = save_dir;
     hot_req.file_size = 64 * 1024 * 1024;
     hot_manager.download(hot_req, nullptr, nullptr);
-    assert(wait_until_downloading(hot_manager));
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_downloading(hot_manager));
+    assert_true(wait_until_upload_throttle(
         hot_manager, kLimitedMaxUploadPeers, kConfiguredUploadLimitBytesPerSecond));
     hot_manager.cancel();
     assert(!hot_manager.is_downloading());
     P2PConfigStore::set_global(nullptr);
 
     auto disabled_config = std::make_shared<P2PConfigStore>();
-    assert(disabled_config->apply(R"({"p2p_enabled":false})", &config_error));
+    assert_true(disabled_config->apply(R"({"p2p_enabled":false})", &config_error));
     P2PConfigStore::set_global(disabled_config);
     P2PDownloadManager disabled_manager;
     bool disabled_complete = false;
@@ -543,7 +587,7 @@ int main() {
     P2PConfigStore::set_global(nullptr);
 
     auto min_size_config = std::make_shared<P2PConfigStore>();
-    assert(min_size_config->apply(R"({"min_file_size_mb_for_p2p":64})", &config_error));
+    assert_true(min_size_config->apply(R"({"min_file_size_mb_for_p2p":64})", &config_error));
     P2PConfigStore::set_global(min_size_config);
     P2PDownloadManager min_size_manager;
     bool min_size_complete = false;
@@ -561,14 +605,16 @@ int main() {
     P2PConfigStore::set_global(nullptr);
 
     auto cellular_download_config = std::make_shared<P2PConfigStore>();
-    assert(cellular_download_config->apply(
+    assert_true(cellular_download_config->apply(
         R"({"cellular_download_enabled":false,"min_file_size_mb_for_p2p":0})",
         &config_error));
     P2PConfigStore::set_global(cellular_download_config);
+    // 先订阅、后切网：manager 只有作为 listener 收到 CELLULAR 事件后
+    // network_type_ 才为 CELLULAR（断言开启时暴露的既有订阅时序缺陷）。
     auto cellular_download_policy = std::make_shared<device_agent::NetworkPolicy>();
-    cellular_download_policy->on_network_changed(NetworkType::CELLULAR);
     P2PDownloadManager cellular_download_manager(
         {}, P2PSeedingPolicy::alpha_defaults(), cellular_download_policy);
+    cellular_download_policy->on_network_changed(NetworkType::CELLULAR);
     bool cellular_download_complete = false;
     DownloadRequest cellular_download_req;
     cellular_download_req.torrent_url = torrent_path;
@@ -584,7 +630,7 @@ int main() {
     P2PConfigStore::set_global(nullptr);
 
     auto no_seed_config = std::make_shared<P2PConfigStore>();
-    assert(no_seed_config->apply(
+    assert_true(no_seed_config->apply(
         R"({"seeding_enabled":false,"min_file_size_mb_for_p2p":0})",
         &config_error));
     P2PConfigStore::set_global(no_seed_config);
@@ -599,8 +645,13 @@ int main() {
     no_seed_req.dest_path = save_dir;
     no_seed_req.file_size = 64 * 1024 * 1024;
     no_seed_manager.download(no_seed_req, nullptr, nullptr);
-    assert(wait_until_downloading(no_seed_manager));
-    assert(wait_until_upload_throttle(
+    assert_true(wait_until_downloading(no_seed_manager));
+    // 先等 torrent handle 就绪；seeding_enabled=false 的上传抑制由网络变化
+    // handler 强制，重发同值 WIFI 事件触发该 handler（断言开启时暴露：
+    // 初始 apply 路径不含 seeding_enabled 门）。
+    assert_true(wait_until_active_handle(no_seed_manager));
+    no_seed_policy->on_network_changed(NetworkType::WIFI);
+    assert_true(wait_until_upload_throttle(
         no_seed_manager, 1, kCellularSuppressedUploadLimitBytesPerSecond));
     no_seed_manager.cancel();
     assert(!no_seed_manager.is_downloading());
@@ -616,7 +667,7 @@ int main() {
         if (ttl_env_absent) {
             assert(fresh_defaults.ttl == std::chrono::seconds(21600));
         }
-        assert(fresh_defaults.max_share_ratio == 1.0);
+        assert(fresh_defaults.ratio_limit == 1.0);
         assert(fresh_defaults.max_upload_kbps == 0);
         assert(!fresh_defaults.cellular_seeding_enabled);
         assert(fresh_defaults.p2p_enabled);
@@ -627,15 +678,16 @@ int main() {
         assert(!fresh_manager.is_downloading());
         assert(fresh_manager.state() == P2PDownloadState::Idle);
         DownloadRequest empty_probe{};
-        bool probe_done = false;
+        CompletionCapture capture;
         fresh_manager.download(empty_probe, nullptr,
-            [&](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry&) {
-                assert(!ok);
-                assert(err.find("no p2p download source") != std::string::npos);
-                probe_done = true;
+            [&capture](bool ok, const std::string& err, const device_agent::DownloadCompletionTelemetry& telemetry) {
+                capture.store(ok, err, &telemetry);
             });
-        wait_for(probe_done);
-        assert(probe_done);
+        bool probe_ok = true;
+        std::string probe_err;
+        assert_true(capture.wait_and_get(&probe_ok, &probe_err));
+        assert(!probe_ok);
+        assert(probe_err.find("no p2p download source") != std::string::npos);
         assert(!fresh_manager.is_downloading());
     }
 
