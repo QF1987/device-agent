@@ -9,7 +9,12 @@
 #include "config/p2p_config_store.h"
 #include "logger/logger.h"
 
+#ifdef _WIN32
+#include "download/windows_download_manager.h"
+#endif
+
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <utility>
@@ -35,13 +40,14 @@ P2PDownloadManager::HttpFallback WindowsHttpFallbackAdapter::fallback() {
 }
 
 void WindowsHttpFallbackAdapter::cancel() {
+    // 与 run() 的发布临界区互斥：cancel 要么发生在发布前（latch 生效，run
+    // 不启动），要么观察到 active_ 并送达 request_cancel（含 job 尚未启动
+    // 的窗口——由 job 自身取消标志兜底，见 WdmRunJob）。
     std::lock_guard<std::mutex> lock(mu_);
     cancel_requested_ = true;
-#ifdef _WIN32
-    if (active_ != nullptr) {
-        active_->cancel();
+    if (active_) {
+        active_->request_cancel();
     }
-#endif
 }
 
 void WindowsHttpFallbackAdapter::reset() {
@@ -49,67 +55,136 @@ void WindowsHttpFallbackAdapter::reset() {
     cancel_requested_ = false;
 }
 
+#ifdef DEVICE_AGENT_TESTING
+void WindowsHttpFallbackAdapter::set_job_factory_for_test(
+    std::function<std::unique_ptr<RunJob>(const std::string&,
+                                          const std::string&)>
+        factory) {
+    std::lock_guard<std::mutex> lock(mu_);
+    job_factory_ = std::move(factory);
+}
+
+void WindowsHttpFallbackAdapter::set_start_gate_for_test(
+    std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
+    start_gate_ = std::move(gate);
+}
+#endif
+
+std::unique_ptr<WindowsHttpFallbackAdapter::RunJob>
+WindowsHttpFallbackAdapter::create_job(const std::string& url,
+                                       const std::string& output_path) {
+#ifdef DEVICE_AGENT_TESTING
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (job_factory_) {
+            return job_factory_(url, output_path);
+        }
+    }
+#endif
+#ifdef _WIN32
+    struct WdmRunJob : RunJob {
+        // job 级取消标志：request_cancel 先于 execute 到达时，
+        // execute 立即失败且不产生任何网络 I/O（WDM.download 会清自己的
+        // cancel 标志，故不能只依赖 WDM）。
+        std::atomic<bool> job_cancelled_{false};
+        WindowsDownloadManager wdm;
+        DownloadRequest req;
+
+        explicit WdmRunJob(const std::string& url,
+                           const std::string& output_path) {
+            const auto sep = output_path.find_last_of("/\\");
+            if (sep == std::string::npos) {
+                req.file_id = output_path;
+            } else {
+                req.dest_path = output_path.substr(0, sep);
+                req.file_id = output_path.substr(sep + 1);
+            }
+            req.url = url;
+        }
+
+        bool execute(std::string& error) override {
+            if (job_cancelled_.load()) {
+                error = "windows http fallback cancelled";
+                return false;
+            }
+            std::mutex done_mu;
+            std::condition_variable done_cv;
+            bool done = false;
+            bool ok = false;
+            std::string child_error;
+            wdm.download(req, nullptr,
+                         [&](bool success, const std::string& err,
+                             const DownloadCompletionTelemetry&) {
+                             std::lock_guard<std::mutex> lock(done_mu);
+                             done = true;
+                             ok = success;
+                             child_error = err;
+                             done_cv.notify_all();
+                         });
+            {
+                std::unique_lock<std::mutex> lock(done_mu);
+                done_cv.wait(lock, [&] { return done; });
+            }
+            error = child_error;
+            return ok;
+        }
+
+        void request_cancel() override {
+            job_cancelled_.store(true);
+            wdm.cancel();
+        }
+    };
+    return std::unique_ptr<RunJob>(new WdmRunJob(url, output_path));
+#else
+    (void)url;
+    (void)output_path;
+    struct FailClosedRunJob : RunJob {
+        bool execute(std::string& error) override {
+            error = "windows http fallback is not available on this platform";
+            return false;
+        }
+        void request_cancel() override {}
+    };
+    return std::unique_ptr<RunJob>(new FailClosedRunJob());
+#endif
+}
+
 bool WindowsHttpFallbackAdapter::run(const std::string& url,
                                      const std::string& output_path,
                                      std::string& error) {
-#ifdef _WIN32
     {
+        // 快路径：latch 已置时不构造 job（正确性由下方原子临界区保证）。
         std::lock_guard<std::mutex> lock(mu_);
         if (cancel_requested_) {
             error = "windows http fallback cancelled";
             return false;
         }
     }
-
-    // 每次调用独立 WDM 实例：Range/.part/SHA256/原子改名语义与生产主路一致。
-    WindowsDownloadManager wdm;
+    std::unique_ptr<RunJob> job = create_job(url, output_path);
     {
+        // RV-20260831-WIN-P2P-B1-01：latch 复查与 active 发布必须在同一
+        // 互斥临界区。线性化保证：cancel 与 run 的任一顺序要么让 run 在
+        // 发布前观察到已取消（不启动），要么让 cancel 观察到 active_ 并
+        // 送达 request_cancel；不存在两者之间的漏取消窗口。
         std::lock_guard<std::mutex> lock(mu_);
-        active_ = &wdm;
+        if (cancel_requested_) {
+            error = "windows http fallback cancelled";
+            return false;
+        }
+        active_ = std::move(job);
     }
-
-    std::mutex done_mu;
-    std::condition_variable done_cv;
-    bool done = false;
-    bool ok = false;
-    std::string child_error;
-
-    DownloadRequest req;
-    const auto sep = output_path.find_last_of("/\\");
-    if (sep == std::string::npos) {
-        req.file_id = output_path;
-    } else {
-        req.dest_path = output_path.substr(0, sep);
-        req.file_id = output_path.substr(sep + 1);
+#ifdef DEVICE_AGENT_TESTING
+    if (start_gate_) {
+        start_gate_();  // 确定性窗口入口：已发布、job 未启动
     }
-    req.url = url;
-
-    wdm.download(req, nullptr,
-                 [&](bool success, const std::string& err,
-                     const DownloadCompletionTelemetry&) {
-                     std::lock_guard<std::mutex> lock(done_mu);
-                     done = true;
-                     ok = success;
-                     child_error = err;
-                     done_cv.notify_all();
-                 });
-    {
-        std::unique_lock<std::mutex> lock(done_mu);
-        done_cv.wait(lock, [&] { return done; });
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(mu_);
-        active_ = nullptr;
-    }
-    error = child_error;
-    return ok;
-#else
-    (void)url;
-    (void)output_path;
-    error = "windows http fallback is not available on this platform";
-    return false;
 #endif
+    const bool ok = active_->execute(error);
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        active_.reset();
+    }
+    return ok;
 }
 
 // ─── WindowsP2PDownloadManager ───────────────────────────────

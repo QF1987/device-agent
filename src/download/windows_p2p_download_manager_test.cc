@@ -647,5 +647,130 @@ int main() {
     }
 #endif
 
+    // 12. adapter latch/发布原子性回归（RV-20260831-WIN-P2P-B1-01）。
+    //     (a) cancel 先于 run：latch 生效，job factory 不被调用（不启动）。
+    //     (b) cancel 恰落在发布边界之后（gate 保证已发布、job 未启动）：
+    //         request_cancel 必达 job，run 以 cancelled 失败，恰好一次返回。
+    //     (c) reset 清 latch 后可正常运行。
+    {
+        using device_agent::WindowsHttpFallbackAdapter;
+        struct GateJob : WindowsHttpFallbackAdapter::RunJob {
+            std::atomic<int> cancel_calls{0};
+            std::atomic<bool> released{false};
+            std::atomic<bool> succeed{false};
+            bool execute(std::string& error) override {
+                while (!released.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+                if (cancel_calls.load() > 0) {
+                    error = "windows http fallback cancelled";
+                    return false;
+                }
+                if (!succeed.load()) {
+                    error = "fake job failure";
+                    return false;
+                }
+                return true;
+            }
+            void request_cancel() override { ++cancel_calls; }
+        };
+
+        // (a) latch 前置：run 不启动 job。
+        {
+            WindowsHttpFallbackAdapter adapter;
+            std::atomic<int> factory_calls{0};
+            adapter.cancel();
+            adapter.set_job_factory_for_test(
+                [&](const std::string&, const std::string&) {
+                    ++factory_calls;
+                    return std::unique_ptr<WindowsHttpFallbackAdapter::RunJob>(
+                        nullptr);
+                });
+            std::string err;
+            const bool ok = adapter.fallback()("http://127.0.0.1:9/x", "out", err);
+            assert(!ok);
+            assert(err.find("cancelled") != std::string::npos);
+            assert(factory_calls.load() == 0);
+        }
+
+        // (b) 发布边界 cancel：必达 job → cancelled 失败，恰好一次。
+        {
+            WindowsHttpFallbackAdapter adapter;
+            auto cancel_counter = std::make_shared<std::atomic<int>>(0);
+            auto release_flag = std::make_shared<std::atomic<bool>>(false);
+            adapter.set_job_factory_for_test(
+                [cancel_counter, release_flag](const std::string&,
+                                               const std::string&) {
+                    struct GateJob : WindowsHttpFallbackAdapter::RunJob {
+                        std::shared_ptr<std::atomic<int>> counter;
+                        std::shared_ptr<std::atomic<bool>> release;
+                        bool execute(std::string& error) override {
+                            while (!release->load()) {
+                                std::this_thread::sleep_for(
+                                    std::chrono::milliseconds(5));
+                            }
+                            if (counter->load() > 0) {
+                                error = "windows http fallback cancelled";
+                                return false;
+                            }
+                            error = "fake job failure";
+                            return false;
+                        }
+                        void request_cancel() override { ++(*counter); }
+                    };
+                    auto* job = new GateJob();
+                    job->counter = cancel_counter;
+                    job->release = release_flag;
+                    return std::unique_ptr<
+                        WindowsHttpFallbackAdapter::RunJob>(job);
+                });
+            std::atomic<bool> gate_entered{false};
+            std::atomic<bool> gate_release{false};
+            adapter.set_start_gate_for_test([&] {
+                gate_entered.store(true);
+                while (!gate_release.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+            });
+            bool ok = true;
+            std::string err;
+            std::thread runner([&] {
+                ok = adapter.fallback()("http://127.0.0.1:9/x", "out", err);
+            });
+            while (!gate_entered.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            adapter.cancel();  // 落在发布边界之后（确定性）
+            gate_release.store(true);   // 释放 start gate（已进入）
+            release_flag->store(true);  // 释放 job execute
+            runner.join();
+            assert(!ok);
+            assert(err.find("cancelled") != std::string::npos);
+            assert(cancel_counter->load() == 1);
+            adapter.set_job_factory_for_test(nullptr);
+            adapter.set_start_gate_for_test(nullptr);
+        }
+
+        // (c) reset 清 latch 后正常运行。
+        {
+            WindowsHttpFallbackAdapter adapter;
+            adapter.cancel();
+            adapter.reset();
+            adapter.set_job_factory_for_test(
+                [](const std::string&, const std::string&) {
+                    struct OkJob : WindowsHttpFallbackAdapter::RunJob {
+                        bool execute(std::string&) override { return true; }
+                        void request_cancel() override {}
+                    };
+                    return std::unique_ptr<WindowsHttpFallbackAdapter::RunJob>(
+                        new OkJob());
+                });
+            std::string err;
+            const bool ok = adapter.fallback()("http://127.0.0.1:9/x", "out", err);
+            assert(ok);
+            adapter.set_job_factory_for_test(nullptr);
+        }
+    }
+
     return 0;
 }

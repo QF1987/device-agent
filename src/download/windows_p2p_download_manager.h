@@ -31,17 +31,20 @@
 
 namespace device_agent {
 
-#ifdef _WIN32
-class WindowsDownloadManager;  // fwd：仅适配器实现持有指针
-#endif
-
 // 可取消的同步 HTTP fallback 适配：P2PDownloadManager 内部的
 // metadata/stall/SHA fallback 经由它落到 Windows 生产 WinHTTP 实现。
-// _WIN32：每次调用创建独立 WindowsDownloadManager，同步等待完成，
-//         完整保留 WinHTTP Range/.part/SHA256/原子改名；cancel() 中止在飞。
-// 其它平台：run() fail-closed（仅逻辑测试用）。
+// 核心控制流（latch 检查 + active 发布原子性）平台中立，便于离线确定性
+// 测试；_WIN32 的 job 包装真实 WindowsDownloadManager，其它平台 fail-closed。
 class WindowsHttpFallbackAdapter {
 public:
+    // 平台 job：execute 阻塞至完成或被 request_cancel 中止；实现必须保证
+    // request_cancel 在 execute 之前到达时，execute 立即失败且不产生网络 I/O。
+    struct RunJob {
+        virtual ~RunJob() = default;
+        virtual bool execute(std::string& error) = 0;
+        virtual void request_cancel() = 0;
+    };
+
     WindowsHttpFallbackAdapter() = default;
     ~WindowsHttpFallbackAdapter() = default;
 
@@ -51,20 +54,36 @@ public:
     // 返回注入 P2PDownloadManager 的 fallback（绑定 this）。
     P2PDownloadManager::HttpFallback fallback();
 
-    // 取消当前在飞的下载；无在飞时 no-op。latch 保持到下一次 reset()。
+    // 取消当前在飞的下载；无在飞时仅置 latch（下一次 run 直接失败）。
     void cancel();
 
     // 新请求开始前清除取消 latch。
     void reset();
 
+#ifdef DEVICE_AGENT_TESTING
+    // 测试 seam（RV-20260831-WIN-P2P-B1-01 回归）：替换平台 job、并在
+    // “active 已发布、job 未启动”边界上插入确定性 gate。
+    void set_job_factory_for_test(
+        std::function<std::unique_ptr<RunJob>(const std::string& url,
+                                              const std::string& output_path)>
+            factory);
+    void set_start_gate_for_test(std::function<void()> gate);
+#endif
+
 private:
+    std::unique_ptr<RunJob> create_job(const std::string& url,
+                                       const std::string& output_path);
     bool run(const std::string& url, const std::string& output_path,
              std::string& error);
 
     std::mutex mu_;
     bool cancel_requested_{false};
-#ifdef _WIN32
-    WindowsDownloadManager* active_{nullptr};
+    std::unique_ptr<RunJob> active_;
+#ifdef DEVICE_AGENT_TESTING
+    std::function<std::unique_ptr<RunJob>(const std::string&,
+                                          const std::string&)>
+        job_factory_;
+    std::function<void()> start_gate_;
 #endif
 };
 
