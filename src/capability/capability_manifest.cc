@@ -43,6 +43,11 @@ std::vector<std::string> build_manifest(Platform platform,
             append_unique(features, "release_download");
             append_unique(features, "release_install_silent");
             append_unique(features, "release_install_attended");
+            // ADR-20260831-01 D5：runtime 事实动态声明（compile+runtime 双门），
+            // 非 P2P Windows build / 初始化失败不声明。
+            if (runtime.windows_p2p_ready) {
+                append_unique(features, "p2p_config");
+            }
             if (runtime.remote_desktop_vnc) {
                 append_unique(features, "remote_desktop_vnc");
             }

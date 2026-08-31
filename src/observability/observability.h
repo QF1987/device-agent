@@ -12,6 +12,8 @@
 
 #include "terminal_agent/v1/device.pb.h"
 
+#include "download/network_policy.h"
+
 namespace device_agent {
 namespace observability {
 
@@ -60,6 +62,11 @@ struct ObservabilitySnapshot {
 };
 
 using Collector = std::function<ObservabilitySnapshot()>;
+
+// proto 网络类型 → NetworkPolicy 网络类型（ADR-20260831-01 D4）：
+// WIFI/ETHERNET → WIFI（内部 LAN/可做种语义），CELLULAR → CELLULAR，
+// NET_UNKNOWN → NONE（fail closed）。供 Windows DeviceClient 窄回调映射。
+NetworkType network_type_from_proto(terminal_agent::v1::NetworkType type);
 
 ObservabilitySnapshot finalize_observation(RawObservation raw);
 void populate_heartbeat(const ObservabilitySnapshot& snapshot,

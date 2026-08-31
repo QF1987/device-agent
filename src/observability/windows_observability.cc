@@ -4,6 +4,7 @@
 #include <climits>
 #include <cwctype>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -253,6 +254,10 @@ void collect_network(RawObservation* raw) {
             raw->net_type = terminal_agent::v1::WIFI;
         } else if (adapter->IfType == IF_TYPE_ETHERNET_CSMACD) {
             raw->net_type = terminal_agent::v1::ETHERNET;
+        } else if (const auto mapped = network_type_from_if_type(adapter->IfType);
+                   mapped.has_value()) {
+            // ADR-20260831-01 B2：WWAN 蜂窝适配器 → proto CELLULAR。
+            raw->net_type = *mapped;
         } else {
             raw->net_type.reset();
             add_error(raw, "network.type", "active adapter type unsupported",
@@ -275,6 +280,28 @@ void collect_network(RawObservation* raw) {
 #endif
 
 }  // namespace
+
+#ifdef _WIN32
+std::optional<terminal_agent::v1::NetworkType> network_type_from_if_type(
+    std::uint32_t if_type) {
+    if (if_type == IF_TYPE_IEEE80211) {
+        return terminal_agent::v1::WIFI;
+    }
+    if (if_type == IF_TYPE_ETHERNET_CSMACD) {
+        return terminal_agent::v1::ETHERNET;
+    }
+    // ADR-20260831-01 B2：WWAN 蜂窝适配器归入 CELLULAR（此前落 unknown）。
+    if (if_type == IF_TYPE_WWANPP) {
+        return terminal_agent::v1::CELLULAR;
+    }
+#ifdef IF_TYPE_WWANPP2
+    if (if_type == IF_TYPE_WWANPP2) {
+        return terminal_agent::v1::CELLULAR;
+    }
+#endif
+    return std::nullopt;
+}
+#endif
 
 ObservabilitySnapshot collect_windows_observability() {
     RawObservation raw;

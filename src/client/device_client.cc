@@ -98,6 +98,29 @@ void DeviceClient::set_runtime_capability_provider(RuntimeCapabilityProvider pro
     runtime_capability_provider_ = std::move(provider);
 }
 
+void DeviceClient::set_network_type_observer(NetworkTypeObserver observer) {
+    network_type_observer_ = std::move(observer);
+}
+
+#ifdef _WIN32
+void DeviceClient::notify_network_type(
+    const observability::ObservabilitySnapshot& snapshot) {
+    if (!network_type_observer_) {
+        return;
+    }
+    // ADR-20260831-01 D4：仅在有效网络事实时通知；partial/缺失/未知不通知，
+    // NetworkPolicy 保持 NONE（上传 fail closed）。
+    if (snapshot.network_availability != observability::Availability::kAvailable) {
+        return;
+    }
+    if (!snapshot.values.net_type.has_value()) {
+        return;
+    }
+    network_type_observer_(
+        observability::network_type_from_proto(*snapshot.values.net_type));
+}
+#endif
+
 void DeviceClient::heartbeat_loop() {
     int retry_count = 0;
 
@@ -117,6 +140,7 @@ void DeviceClient::heartbeat_loop() {
 #ifdef _WIN32
         const auto snapshot = observability_sampler_->latest();
         if (snapshot.has_value()) {
+            notify_network_type(*snapshot);
             observability::populate_heartbeat(*snapshot, &req);
         }
 #else
@@ -176,6 +200,7 @@ void DeviceClient::status_report_loop() {
 #ifdef _WIN32
         const auto snapshot = observability_sampler_->latest();
         if (snapshot.has_value()) {
+            notify_network_type(*snapshot);
             const auto p2p_upload = p2p_upload_counters();
             observability::populate_status(
                 *snapshot, p2p_upload.total, p2p_upload.cellular, &status);

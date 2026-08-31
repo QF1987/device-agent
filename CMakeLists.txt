@@ -456,6 +456,29 @@ elseif(WIN32)
             advapi32
         )
 
+        # ADR-20260831-01 B2：Windows production P2P（混合 manager + WinHTTP
+        # fallback + runtime p2p_config 动态声明）。默认 OFF——既有 Windows
+        # build/package 不新增 libtorrent 依赖；ON 时 production exe 链接
+        # libtorrent/OpenSSL 并编译混合 manager（B3 kit closure 显式校验
+        # torrent-rasterbar.dll + libcrypto-3-x64.dll）。与 Phase A 测试 option
+        # DEVICE_AGENT_BUILD_WINDOWS_P2P 语义互不相干。
+        option(DEVICE_AGENT_ENABLE_WINDOWS_P2P
+            "Enable Windows production P2P hybrid download manager" OFF)
+        if(DEVICE_AGENT_ENABLE_WINDOWS_P2P)
+            find_package(OpenSSL REQUIRED)
+            find_package(LibtorrentRasterbar CONFIG REQUIRED)
+            target_sources(device-agent PRIVATE
+                src/download/p2p_download_manager.cc
+                src/download/windows_p2p_download_manager.cc
+            )
+            target_compile_definitions(device-agent PRIVATE
+                DEVICE_AGENT_ENABLE_WINDOWS_P2P)
+            target_link_libraries(device-agent PRIVATE
+                LibtorrentRasterbar::torrent-rasterbar
+                OpenSSL::Crypto
+            )
+        endif()
+
         add_executable(windows_observability_test
             src/observability/windows_observability_test.cc
             src/observability/observability.cc

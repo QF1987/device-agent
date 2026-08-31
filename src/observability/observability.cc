@@ -36,6 +36,21 @@ void set_if_present(const std::optional<T>& value,
 
 }  // namespace
 
+NetworkType network_type_from_proto(terminal_agent::v1::NetworkType type) {
+    // ADR-20260831-01 D4：WIFI/ETHERNET → 内部 WIFI（LAN/可做种语义），
+    // CELLULAR → CELLULAR，NET_UNKNOWN/未识别 → NONE（fail closed）。
+    switch (type) {
+        case terminal_agent::v1::WIFI:
+        case terminal_agent::v1::ETHERNET:
+            return NetworkType::WIFI;
+        case terminal_agent::v1::CELLULAR:
+            return NetworkType::CELLULAR;
+        case terminal_agent::v1::NET_UNKNOWN:
+        default:
+            return NetworkType::NONE;
+    }
+}
+
 ObservabilitySnapshot finalize_observation(RawObservation raw) {
     ObservabilitySnapshot out;
     out.inventory_availability = availability_for(

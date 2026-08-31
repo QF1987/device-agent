@@ -55,6 +55,11 @@
 #include "download/android_download_manager.h"
 #elif defined(_WIN32)
 #include "download/windows_download_manager.h"
+#ifdef DEVICE_AGENT_ENABLE_WINDOWS_P2P
+#include "config/p2p_config_store.h"
+#include "download/network_policy.h"
+#include "download/windows_p2p_download_manager.h"
+#endif
 #else
 #include "download/p2p_download_manager.h"
 #endif
@@ -452,6 +457,14 @@ int run_agent(int argc, char* argv[]) {
             return client->report_release_status(status);
         });
 
+#ifdef _WIN32
+#ifdef DEVICE_AGENT_ENABLE_WINDOWS_P2P
+    // runtime p2p_config 动态声明的 ready 事实（在 Windows 分支完成 wiring 后置位；
+    // remote desktop 段的合并 provider 按引用读取）。
+    auto p2p_runtime_ready = std::make_shared<std::atomic<bool>>(false);
+#endif
+#endif
+
     // 根据平台选择正确的 Executor（放在配置校验前，确保日志能输出）
 #ifdef __ANDROID__
     handler.set_executor(std::make_shared<device_agent::AndroidExecutor>());
@@ -474,8 +487,35 @@ int run_agent(int argc, char* argv[]) {
             return 1;
         }
         handler.set_download_directory(download_dir);
+#ifdef DEVICE_AGENT_ENABLE_WINDOWS_P2P
+        // ADR-20260831-01 B2：Windows production 混合 manager——P2P 主路 +
+        // WinHTTP 直达/回退（WindowsDownloadManager 复用）。网络事实经
+        // DeviceClient 窄回调驱动 NetworkPolicy，首个有效样本前 NONE 上传
+        // fail closed；P2PConfigStore 全局默认值（backend p2p_config 下发
+        // 后 apply 覆盖）。
+        auto p2p_network_policy = std::make_shared<device_agent::NetworkPolicy>();
+        auto p2p_http_adapter = std::make_shared<device_agent::WindowsHttpFallbackAdapter>();
+        device_agent::P2PConfigStore::set_global(
+            std::make_shared<device_agent::P2PConfigStore>());
+        auto p2p_hybrid = std::make_shared<device_agent::WindowsP2PDownloadManager>(
+            p2p_network_policy,
+            device_agent::P2PDownloadManager::Callbacks{},
+            nullptr,       // http_manager：默认 WindowsDownloadManager
+            p2p_http_adapter);
+        handler.set_download_manager(p2p_hybrid);
+        client->set_network_type_observer(
+            [p2p_network_policy](device_agent::NetworkType type) {
+                p2p_network_policy->on_network_changed(type);
+            });
+        // runtime p2p_config 动态声明：manager/config/network/fallback 初始化
+        // 全部完成后置 ready（compile 门由 CMake option 承担）；VNC 合并的
+        // provider 在 remote desktop 段统一设置（引用捕获，见下）。
+        p2p_runtime_ready->store(true);
+        LOG_INFO("Using WindowsExecutor + WindowsP2PDownloadManager (hybrid) download_dir=" + download_dir);
+#else
         handler.set_download_manager(std::make_shared<device_agent::WindowsDownloadManager>());
         LOG_INFO("Using WindowsExecutor + WindowsDownloadManager download_dir=" + download_dir);
+#endif
     }
 #else
     handler.set_executor(std::make_shared<device_agent::LinuxExecutor>());
@@ -498,14 +538,28 @@ int run_agent(int argc, char* argv[]) {
             LOG_ERROR("Remote desktop failed to start: " + rd_err);
         } else {
             LOG_INFO("Remote desktop runtime started");
+#ifndef DEVICE_AGENT_ENABLE_WINDOWS_P2P
             client->set_runtime_capability_provider(
                 [runtime = remote_desktop_runtime.get()]() {
                     device_agent::capability::RuntimeCapabilities capabilities;
                     capabilities.remote_desktop_vnc = runtime != nullptr && runtime->running();
                     return capabilities;
                 });
+#endif
         }
     }
+#ifdef DEVICE_AGENT_ENABLE_WINDOWS_P2P
+    // P2P build：VNC 与 p2p_config 就绪事实合并声明，互不覆盖（引用捕获
+    // remote_desktop_runtime，按心跳时点读取 VNC 运行态）。
+    client->set_runtime_capability_provider(
+        [&remote_desktop_runtime, p2p_runtime_ready]() {
+            device_agent::capability::RuntimeCapabilities capabilities;
+            capabilities.windows_p2p_ready = p2p_runtime_ready->load();
+            capabilities.remote_desktop_vnc =
+                remote_desktop_runtime != nullptr && remote_desktop_runtime->running();
+            return capabilities;
+        });
+#endif
 #endif
 
     // ============================================================

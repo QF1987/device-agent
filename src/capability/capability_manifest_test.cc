@@ -48,6 +48,21 @@ int main() {
     windows_vnc.emplace_back("remote_desktop_vnc");
     assert_manifest(Platform::kWindows, windows_vnc, RuntimeCapabilities{true});
 
+    // ADR-20260831-01 D5：Windows runtime p2p_config 动态声明——
+    // 仅 P2P-enabled build 且初始化完整（windows_p2p_ready=true）时声明。
+    auto windows_p2p = windows;
+    windows_p2p.emplace_back("p2p_config");
+    assert_manifest(Platform::kWindows, windows_p2p, RuntimeCapabilities{false, true});
+
+    // VNC 与 P2P runtime 事实合并，互不覆盖。
+    auto windows_vnc_p2p = windows;
+    windows_vnc_p2p.emplace_back("p2p_config");
+    windows_vnc_p2p.emplace_back("remote_desktop_vnc");
+    assert_manifest(Platform::kWindows, windows_vnc_p2p, RuntimeCapabilities{true, true});
+
+    // 非 P2P-ready：不声明（既有矩阵不变）。
+    assert_manifest(Platform::kWindows, windows, RuntimeCapabilities{false, false});
+
     assert_manifest(Platform::kAndroid, {
         "capability_manifest_v1", "heartbeat_basic", "status_report", "command_reboot",
         "release_download", "p2p_config", "command_app_upgrade",

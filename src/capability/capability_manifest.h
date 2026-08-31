@@ -17,6 +17,10 @@ enum class Platform {
 
 struct RuntimeCapabilities {
     bool remote_desktop_vnc = false;
+    // ADR-20260831-01 D5：仅 Windows P2P production build（option=ON）且
+    // manager/config/network/fallback 初始化完整时为 true；非 P2P build /
+    // 初始化失败保持 false → manifest 不声明 p2p_config。
+    bool windows_p2p_ready = false;
 };
 
 Platform current_platform();
