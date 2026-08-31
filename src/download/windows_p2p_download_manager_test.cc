@@ -321,6 +321,7 @@ int main() {
     const std::string torrent_path = dir + "\\fixture.torrent";
     write_seedless_torrent(torrent_path);
 
+    std::fprintf(stderr, "[TEST] 1 http-only\n");
     // 1. HTTP-only 路由：无 P2P source → 直达 http manager，telemetry 透传。
     {
         FakeHttpManager http;
@@ -347,6 +348,7 @@ int main() {
         assert(http.calls.load() == 1);
     }
 
+    std::fprintf(stderr, "[TEST] 2 policy-disabled\n");
     // 2. policy disabled → HTTP 路由。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -372,6 +374,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 3 min-size\n");
     // 3. min_file_size 门槛 → HTTP 路由。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -398,6 +401,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 4 cellular-denied\n");
     // 4. cellular denied → HTTP 路由。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -426,6 +430,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 5 p2p-fail-fallback\n");
     // 5. P2P 失败（invalid magnet 快败）→ 回退 HTTP 恰好一次 → 成功。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -454,6 +459,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 6 no-fallback\n");
     // 6. P2P 失败且无 http url → 不回退，透传 P2P 失败。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -478,6 +484,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 7 metadata-fallback\n");
     // 7. metadata 经适配失败 → hybrid 回退一次成功（torrent_url=http）。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -503,6 +510,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 8 cancel-race\n");
     // 8. cancel race：P2P 路由下载中取消 → 恰好一次取消失败，不启动回退。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -536,6 +544,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 9 single-active\n");
     // 9. 单 active：进行中第二个请求立即失败。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -574,6 +583,7 @@ int main() {
         P2PConfigStore::set_global(nullptr);
     }
 
+    std::fprintf(stderr, "[TEST] 10 default-adapter\n");
     // 10. 默认适配（POSIX fail-closed / Windows 真实 WDM）：无注入时直达路由。
     {
         auto cfg = std::make_shared<P2PConfigStore>();
@@ -647,6 +657,7 @@ int main() {
     }
 #endif
 
+    std::fprintf(stderr, "[TEST] 12 adapter-latch\n");
     // 12. adapter latch/发布原子性回归（RV-20260831-WIN-P2P-B1-01）。
     //     (a) cancel 先于 run：latch 生效，job factory 不被调用（不启动）。
     //     (b) cancel 恰落在发布边界之后（gate 保证已发布、job 未启动）：
@@ -769,6 +780,91 @@ int main() {
             const bool ok = adapter.fallback()("http://127.0.0.1:9/x", "out", err);
             assert(ok);
             adapter.set_job_factory_for_test(nullptr);
+        }
+    }
+
+    std::fprintf(stderr, "[TEST] 13 handshake\n");
+    // 13. HandshakeJob start/cancel handshake 回归（RV-20260831-WIN-P2P-B1-01
+    //     · execute 内窗口，平台中立可跑 macOS/Windows）。
+    //     (a) execute 入口前已取消 → start_download 不被调用；
+    //     (b) cancel 与启动重叠（start_download 期间到达）→ 发布临界区补发
+    //         cancel_download（必达）→ 终态 cancelled 失败；
+    //     (c) 下载中 cancel（发布后）→ cancel_download 直达 → 终态 cancelled。
+    {
+        using device_agent::WindowsHttpFallbackAdapter;
+        struct ProbeJob : WindowsHttpFallbackAdapter::HandshakeJob {
+            std::atomic<int> start_calls{0};
+            std::atomic<int> cancel_calls{0};
+            std::atomic<bool> started{false};
+            std::atomic<bool> release_start{false};
+            std::atomic<bool> wait_entered{false};
+            std::atomic<bool> release_wait{false};
+
+            void start_download() override {
+                started.store(true);
+                while (!release_start.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+                ++start_calls;
+            }
+            void wait_download() override {
+                wait_entered.store(true);
+                while (!release_wait.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+            }
+            void cancel_download() override { ++cancel_calls; }
+        };
+
+        // (a) 入口前取消：不启动。
+        {
+            ProbeJob job;
+            std::string err;
+            job.request_cancel();
+            assert(!job.execute(err));
+            assert(err.find("cancelled") != std::string::npos);
+            assert(job.start_calls.load() == 0);
+            assert(job.cancel_calls.load() == 0);
+        }
+
+        // (b) cancel 与启动重叠：发布后补发必达。
+        {
+            ProbeJob job;
+            std::string err;
+            std::thread runner([&] { job.execute(err); });
+            while (!job.started.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            job.request_cancel();  // start_download 期间到达（未发布）
+            job.release_start.store(true);  // 放行启动 → 发布临界区补发
+            while (job.cancel_calls.load() == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            job.release_wait.store(true);
+            runner.join();
+            assert(job.start_calls.load() == 1);
+            assert(job.cancel_calls.load() == 1);  // 发布后必达且仅一次
+        }
+
+        // (c) 下载中取消：request_cancel 直达。
+        {
+            ProbeJob job;
+            std::string err;
+            std::thread runner([&] { job.execute(err); });
+            while (!job.started.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            job.release_start.store(true);  // 放行启动 → wait_download
+            while (!job.wait_entered.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            job.request_cancel();
+            while (job.cancel_calls.load() == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            job.release_wait.store(true);
+            runner.join();
+            assert(job.cancel_calls.load() == 1);
         }
     }
 

@@ -45,6 +45,37 @@ public:
         virtual void request_cancel() = 0;
     };
 
+    // start/cancel handshake 基类（RV-20260831-WIN-P2P-B1-01 · execute 内窗口）：
+    // 子类只实现三个平台操作——start_download() 发布底层 worker（异步立即返回）、
+    // wait_download() 阻塞至完成、cancel_download() 中止底层下载。
+    // 线性化保证（全程由 mu_ + cancelled_/published_/cancel_sent_ 状态机驱动）：
+    //   - cancel 先于 execute 到达 → execute 入口即失败，start_download 不被调用；
+    //   - cancel 与启动重叠（落在入口检查之后、发布之前）→ 发布临界区观察到
+    //     cancelled_ 并补发 cancel_download，此时 worker 已在运行，必达；
+    //   - cancel 与下载重叠（发布后）→ request_cancel 直接 cancel_download。
+    // cancel_download 至多调用一次；取消后的终态统一为 cancelled 失败。
+    class HandshakeJob : public RunJob {
+    public:
+        bool execute(std::string& error) final;
+        void request_cancel() final;
+
+    protected:
+        virtual void start_download() = 0;
+        virtual void wait_download() = 0;
+        virtual void cancel_download() = 0;
+
+        bool wait_ok_ = false;      // wait_download() 写入、execute 读取
+        std::string wait_err_;
+
+    private:
+        bool wait_and_finish(std::string& error);
+
+        mutable std::mutex mu_;
+        bool cancelled_ = false;
+        bool published_ = false;
+        bool cancel_sent_ = false;
+    };
+
     WindowsHttpFallbackAdapter() = default;
     ~WindowsHttpFallbackAdapter() = default;
 

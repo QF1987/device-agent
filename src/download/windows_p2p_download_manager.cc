@@ -31,6 +31,62 @@ bool is_http_url(const std::string& value) {
 
 // ─── WindowsHttpFallbackAdapter ──────────────────────────────
 
+// start/cancel handshake 公共实现（RV-20260831-WIN-P2P-B1-01 · execute 内窗口）。
+bool WindowsHttpFallbackAdapter::HandshakeJob::execute(std::string& error) {
+    constexpr const char* kCancelled = "windows http fallback cancelled";
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (cancelled_) {
+            error = kCancelled;
+            return false;  // 不启动：start_download 不被调用
+        }
+    }
+    start_download();  // 平台发布底层 worker（异步立即返回）
+    bool deliver = false;
+    {
+        // 发布临界区：worker 已在运行。若 cancel 与启动重叠（此前到达、
+        // 未及送达），此刻补发必达。
+        std::lock_guard<std::mutex> lock(mu_);
+        published_ = true;
+        if (cancelled_ && !cancel_sent_) {
+            cancel_sent_ = true;
+            deliver = true;
+        }
+    }
+    if (deliver) {
+        cancel_download();  // 锁外执行：join/中止不纳入 mu_ 等待闭环
+    }
+    return wait_and_finish(error);
+}
+
+bool WindowsHttpFallbackAdapter::HandshakeJob::wait_and_finish(std::string& error) {
+    wait_download();
+    std::lock_guard<std::mutex> lock(mu_);
+    if (cancelled_) {
+        error = "windows http fallback cancelled";
+        return false;
+    }
+    error = wait_err_;
+    return wait_ok_;
+}
+
+void WindowsHttpFallbackAdapter::HandshakeJob::request_cancel() {
+    bool deliver = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        cancelled_ = true;
+        // 未发布时不调 cancel_download（底层 worker 可能尚未启动，其取消
+        // 标志会被自身 download() 重置）；发布后由发布临界区补发必达。
+        if (published_ && !cancel_sent_) {
+            cancel_sent_ = true;
+            deliver = true;
+        }
+    }
+    if (deliver) {
+        cancel_download();  // 锁外执行：join/中止不纳入 mu_ 等待闭环
+    }
+}
+
 P2PDownloadManager::HttpFallback WindowsHttpFallbackAdapter::fallback() {
     // 绑定 this：适配器由 hybrid 持有 shared_ptr，生命周期覆盖全部请求。
     return [this](const std::string& url, const std::string& output_path,
@@ -83,13 +139,12 @@ WindowsHttpFallbackAdapter::create_job(const std::string& url,
     }
 #endif
 #ifdef _WIN32
-    struct WdmRunJob : RunJob {
-        // job 级取消标志：request_cancel 先于 execute 到达时，
-        // execute 立即失败且不产生任何网络 I/O（WDM.download 会清自己的
-        // cancel 标志，故不能只依赖 WDM）。
-        std::atomic<bool> job_cancelled_{false};
+    struct WdmRunJob : HandshakeJob {
         WindowsDownloadManager wdm;
         DownloadRequest req;
+        std::mutex done_mu;
+        std::condition_variable done_cv;
+        bool done = false;
 
         explicit WdmRunJob(const std::string& url,
                            const std::string& output_path) {
@@ -103,36 +158,27 @@ WindowsHttpFallbackAdapter::create_job(const std::string& url,
             req.url = url;
         }
 
-        bool execute(std::string& error) override {
-            if (job_cancelled_.load()) {
-                error = "windows http fallback cancelled";
-                return false;
-            }
-            std::mutex done_mu;
-            std::condition_variable done_cv;
-            bool done = false;
-            bool ok = false;
-            std::string child_error;
+        void start_download() override {
+            std::lock_guard<std::mutex> lock(done_mu);
+            done = false;
             wdm.download(req, nullptr,
                          [&](bool success, const std::string& err,
                              const DownloadCompletionTelemetry&) {
                              std::lock_guard<std::mutex> lock(done_mu);
                              done = true;
-                             ok = success;
-                             child_error = err;
+                             wait_ok_ = success;
+                             wait_err_ = err;
                              done_cv.notify_all();
                          });
-            {
-                std::unique_lock<std::mutex> lock(done_mu);
-                done_cv.wait(lock, [&] { return done; });
-            }
-            error = child_error;
-            return ok;
         }
 
-        void request_cancel() override {
-            job_cancelled_.store(true);
-            wdm.cancel();
+        void wait_download() override {
+            std::unique_lock<std::mutex> lock(done_mu);
+            done_cv.wait(lock, [&] { return done; });
+        }
+
+        void cancel_download() override {
+            wdm.cancel();  // worker 已发布（start/download 之后），必达
         }
     };
     return std::unique_ptr<RunJob>(new WdmRunJob(url, output_path));
