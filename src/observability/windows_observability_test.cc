@@ -10,6 +10,8 @@
 #include "enrollment/enrollment_manager.h"
 #include "version/build_info.h"
 #ifdef _WIN32
+#include <winsock2.h>
+#include <iphlpapi.h>
 #include "observability/windows_observability.h"
 #endif
 
@@ -160,15 +162,14 @@ int main() {
 #ifdef _WIN32
     // ADR-20260831-01 B2：IANA IfType → proto NetworkType 映射
     // （WWAN → CELLULAR 为新增；未知 → nullopt）。
-    using WO = device_agent::observability;
-    assert(WO::network_type_from_if_type(IF_TYPE_IEEE80211) ==
+    assert(device_agent::observability::network_type_from_if_type(IF_TYPE_IEEE80211) ==
            std::optional<terminal_agent::v1::NetworkType>(terminal_agent::v1::WIFI));
-    assert(WO::network_type_from_if_type(IF_TYPE_ETHERNET_CSMACD) ==
+    assert(device_agent::observability::network_type_from_if_type(IF_TYPE_ETHERNET_CSMACD) ==
            std::optional<terminal_agent::v1::NetworkType>(terminal_agent::v1::ETHERNET));
-    assert(WO::network_type_from_if_type(IF_TYPE_WWANPP) ==
+    assert(device_agent::observability::network_type_from_if_type(IF_TYPE_WWANPP) ==
            std::optional<terminal_agent::v1::NetworkType>(terminal_agent::v1::CELLULAR));
-    assert(!WO::network_type_from_if_type(IF_TYPE_SOFTWARE_LOOPBACK).has_value());
-    assert(!WO::network_type_from_if_type(0xDEAD).has_value());
+    assert(!device_agent::observability::network_type_from_if_type(IF_TYPE_SOFTWARE_LOOPBACK).has_value());
+    assert(!device_agent::observability::network_type_from_if_type(0xDEAD).has_value());
 #endif
 
     // ADR-20260831-01 D4：proto 网络类型 → NetworkPolicy 映射
