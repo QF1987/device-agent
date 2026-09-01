@@ -152,24 +152,54 @@ bool wait_for(const std::function<bool()>& predicate, int timeout_ms) {
     return predicate();
 }
 
+// 跨平台最小 socket wrapper（RV-20260901-WIN-P2P-B5-03）：Windows 用
+// SOCKET/closesocket/int 长度，POSIX 保持 int/close/socklen_t。测试只绑定
+// loopback 短生命周期 socket，无需异步语义。
+#ifdef _WIN32
+struct TestWinSockInit {
+    WSADATA wsa{};
+    bool ok = false;
+    TestWinSockInit() { ok = WSAStartup(MAKEWORD(2, 2), &wsa) == 0; }
+    ~TestWinSockInit() {
+        if (ok) {
+            ::WSACleanup();
+        }
+    }
+};
+
+using test_socket_t = SOCKET;
+constexpr test_socket_t kInvalidTestSocket = INVALID_SOCKET;
+
+inline void test_close_socket(test_socket_t fd) { ::closesocket(fd); }
+#else
+using test_socket_t = int;
+constexpr test_socket_t kInvalidTestSocket = -1;
+
+inline void test_close_socket(test_socket_t fd) { ::close(fd); }
+#endif
+
 std::uint16_t pick_free_port() {
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) return 0;
+    test_socket_t fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == kInvalidTestSocket) return 0;
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;
     if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd);
+        test_close_socket(fd);
         return 0;
     }
-    socklen_t len = sizeof(addr);
-    if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
-        ::close(fd);
+#ifdef _WIN32
+    int addr_len = static_cast<int>(sizeof(addr));
+#else
+    socklen_t addr_len = sizeof(addr);
+#endif
+    if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+        test_close_socket(fd);
         return 0;
     }
     const std::uint16_t port = ntohs(addr.sin_port);
-    ::close(fd);
+    test_close_socket(fd);
     return port;
 }
 
@@ -207,6 +237,10 @@ std::unique_ptr<device_agent::P2PSeedingOwner> make_started_owner(
 }  // namespace
 
 int main() {
+#ifdef _WIN32
+    TestWinSockInit wsa_init;
+    assert_true(wsa_init.ok);
+#endif
     using device_agent::NetworkType;
     using device_agent::P2PSeedCandidate;
     using device_agent::P2PSeedingOwner;
@@ -300,7 +334,8 @@ int main() {
     // ---------- T5 init failure（端口占用） + after-fail Admit + 幂等 Stop --
     {
         const std::uint16_t occupied = pick_free_port();
-        int holder_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+        test_socket_t holder_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+        assert_true(holder_fd != kInvalidTestSocket);
         sockaddr_in holder_addr{};
         holder_addr.sin_family = AF_INET;
         holder_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -330,7 +365,7 @@ int main() {
         }, 3000));
         owner.Stop();
         owner.Stop();  // 幂等
-        ::close(holder_fd);
+        test_close_socket(holder_fd);
     }
 
     // ---------- T6 真实 loopback 上传：ratio stop + upload/cellular bucket --
@@ -375,7 +410,7 @@ int main() {
         }, 20000);
         assert_true(ratio_stopped);
 
-        const device_agent::P2PUploadCounters counters = 
+        const device_agent::P2PUploadCounters counters =
             device_agent::p2p_upload_counters();
         assert_true(counters.total >= 64 * 1024);  // 上传 delta 已进进程级计数
         assert_true(counters.cellular == 0);       // WIFI 期间不进蜂窝桶
@@ -459,7 +494,9 @@ int main() {
         owner.reset();  // 析构后再 Stop 幂等路径
     }
 
-    // ---------- T8 listener 并发 + remove 后回调安全 ------------------------
+    // ---------- T8 listener 并发派发 smoke（changer 先 join 再析构； ----------
+    // remove/析构与 in-flight 回调的确定性覆盖见 network_policy_test 屏障
+    // 用例与本文件 T10）
     {
         auto network = std::make_shared<device_agent::NetworkPolicy>();
         P2PSeedingOwner::Config config;
@@ -494,6 +531,44 @@ int main() {
         owner.reset();  // remove_listener
 
         // remove 后继续回调：不得崩溃/悬挂。
+        for (int n = 0; n < 50; ++n) {
+            network->on_network_changed(
+                n % 2 == 0 ? NetworkType::WIFI : NetworkType::NONE);
+        }
+    }
+
+    // ---------- T10 remove/析构 vs in-flight 回调（屏障语义，RV-...-B5-02）--
+    // 派发线程仍在批次内时直接 Stop + 析构 owner：NetworkPolicy::remove_listener
+    // 的生命周期屏障必须等待批次完成，此后派发线程继续回调不得进入已析构
+    // owner（TSAN 下任何交错违例均可检出；屏障保证对任意时序成立）。
+    {
+        auto network = std::make_shared<device_agent::NetworkPolicy>();
+        P2PSeedingOwner::Config config;
+        config.listen_interfaces = "127.0.0.1:0";
+        const auto provider_policy = test_policy();
+        config.policy_provider = [provider_policy] { return provider_policy; };
+        auto owner = std::make_unique<P2PSeedingOwner>(config, network);
+        std::string error;
+        assert_true(owner->Start(error));
+
+        auto t = make_torrent(data_dir, "barrier.bin", 16 * 1024, 0xCC);
+        owner->Admit(make_candidate(t, data_dir));
+        assert_true(wait_for([&] {
+            return owner->counters_for_test().active_seeds == 1;
+        }, 5000));
+
+        std::thread changer([&network] {
+            for (int n = 0; n < 300; ++n) {
+                network->on_network_changed(
+                    n % 2 == 0 ? NetworkType::WIFI : NetworkType::CELLULAR);
+            }
+        });
+        // 不 join，直接销毁：dtor 的 remove_listener 与 changer 的批次竞争。
+        owner->Stop();
+        owner.reset();
+        changer.join();
+
+        // remove/析构完成后继续派发：不得崩溃（回调不再进入 owner）。
         for (int n = 0; n < 50; ++n) {
             network->on_network_changed(
                 n % 2 == 0 ? NetworkType::WIFI : NetworkType::NONE);
