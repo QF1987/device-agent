@@ -284,7 +284,7 @@ extern "C" const char* device_agent_libtorrent_version() {
 
     add_executable(p2p_download_manager_test
         src/download/p2p_download_manager_test.cc
-        src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+        src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
         src/download/network_policy.cc
         src/config/p2p_config_store.cc
         src/logger/logger.cc

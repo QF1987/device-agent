@@ -1199,37 +1199,68 @@ void P2PDownloadManager::download(const DownloadRequest& req,
         return;
     }
 
-    bool expected = false;
-    if (!downloading_.compare_exchange_strong(expected, true)) {
+    // ── B5-05 线性化协议：admission ──────────────────────────────
+    // fast reject（advisory，权威检查在下方 mu_ 临界区内）。
+    if (downloading_.load()) {
         if (on_complete) {
             on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
         }
         return;
     }
-
-    cancel_requested_.store(false);
+    // 上一个自然结束的 worker 在锁外 join（worker 运行期会取 mu_，禁止
+    // 持锁 join）。
     join_worker();
-    set_state_downloading();
 
     {
-        std::lock_guard<std::mutex> lock(mu_);
+        // 单一 lifecycle 临界区：ticket 分配 + downloading_ 置位 + worker
+        // 发布原子完成。「已准入但未发布」状态对外不可见——cancel 与本
+        // 临界区互斥（RV-20260901-WIN-P2P-B5-05 窗口①）。
+        std::unique_lock<std::mutex> lock(mu_);
+        if (downloading_.load()) {
+            lock.unlock();
+            if (on_complete) {
+                on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
+            }
+            return;
+        }
+        ++admission_counter_;
+        const std::uint64_t generation = admission_counter_;
+        downloading_.store(true);
+        set_state_downloading();
+#ifdef DEVICE_AGENT_TESTING
+        // gate A 确定性窗口：ticket 已分配、worker 未发布、mu_ 在手——
+        // 并发 cancel() 只能阻塞到本临界区结束（不得先返回再放行请求）。
+        if (admission_gate_for_test_) {
+            admission_gate_for_test_();
+        }
+#endif
         ensure_session_locked();
-        // ADR-20260901-01 D7：准入即递增 generation，worker 携带准入代。
         worker_ = std::thread(&P2PDownloadManager::run_download, this, req,
                               std::move(on_progress), std::move(on_complete),
-                              ++download_generation_);
+                              generation);
     }
 }
 
 void P2PDownloadManager::cancel() {
-    // D7：取消即递增 generation——stale worker 不得 handoff、不得再启动
-    // HTTP fallback；已进入 owner 的历史 seeds 不受影响（独立 seed epoch）。
-    ++download_generation_;
-    cancel_requested_.store(true);
-    set_state_stopping();
-    join_worker();
+    // ── B5-05 线性化协议：invalidation ───────────────────────────
+    // 失效水位与 admission ticket 同锁互斥：cancel 临界区之后的新准入
+    // ticket 必然大于水位（合法继续），之前的准入必然 stale。victim
+    // worker 移出锁外 join——cancel 返回 ⇒ 被失效请求必然已终止，且不会
+    // 覆盖其后新准入的 worker_（RV-20260901-WIN-P2P-B5-05）。已进入
+    // owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
+    std::thread victim;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
+        set_state_stopping();
+        if (worker_.joinable()) {
+            victim = std::move(worker_);
+        }
+    }
+    if (victim.joinable()) {
+        victim.join();
+    }
     downloading_.store(false);
-    cancel_requested_.store(false);
     set_state_idle();
 }
 
@@ -1273,6 +1304,10 @@ void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
 
 void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
     handoff_gate_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate) {
+    admission_gate_for_test_ = std::move(gate);
 }
 #endif
 
@@ -1399,24 +1434,12 @@ bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
     if (!seeding_owner_) {
         return false;
     }
-#ifdef DEVICE_AGENT_TESTING
-    if (handoff_gate_for_test_) {
-        // 确定性交错入口：gate 内可 cancel()（递增 generation），放行后
-        // 下方 stale 检查必须拦截移交（见 set_handoff_gate_for_test）。
-        handoff_gate_for_test_();
-    }
-#endif
-    // D7：cancel()/新准入已递增 generation 时本次成功属于 stale 代，不得
-    // 移交；release terminal 已随代处理，与 seeding 无关。
-    if (generation != download_generation_.load()) {
-        LOG_WARN("P2PDownloadManager: stale generation; seed handoff dropped");
-        return false;
-    }
     auto torrent = handle.torrent_file();
     if (!torrent) {
         LOG_WARN("P2PDownloadManager: missing torrent metadata; seed handoff dropped");
         return false;
     }
+    // candidate 昂贵构造在 commit 临界区外（B5-05 允许）。
     P2PSeedCandidate candidate;
     // handle.torrent_file() 返回 const；candidate/add_torrent_params 需要
     // 非 const 元数据。仅复制 KB 级 torrent 元数据，数据文件零复制（D3）。
@@ -1429,9 +1452,30 @@ bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
         candidate.ttl = seeding_policy_.ttl;
         candidate.ratio_limit = seeding_policy_.ratio_limit;
     }
-    // 非阻塞移交：接受/去重/淘汰/拒绝都只进 owner telemetry；移交不反转
-    // 已发出的 release success，也不触发第二次 completion（D2/D7/D9）。
-    seeding_owner_->Admit(std::move(candidate));
+#ifdef DEVICE_AGENT_TESTING
+    if (handoff_gate_for_test_) {
+        // B5-05 gate B 确定性窗口：candidate 已构造、最终 commit（validity
+        // 校验 + Admit）未发生。窗口内 cancel() 的失效递增与下方 commit 同
+        // 锁互斥——cancel 赢则 commit 判 stale 丢弃；commit 赢则线性化明确
+        // 早于 cancel，seed 保留。
+        handoff_gate_for_test_();
+    }
+#endif
+    {
+        // ── B5-05 handoff commit 临界区 ──
+        // 最终 validity 校验 + Admit 与 cancel 的失效递增同锁互斥：commit
+        // 之后才发生的 cancel 不影响已提交 candidate（seed 保留）；commit
+        // 之前发生的 cancel 必然使本代 ≤ 水位而被丢弃。Admit 非阻塞
+        // （有界队列入队），持锁调用无死锁（owner 不取 manager 锁）。
+        std::lock_guard<std::mutex> lock(mu_);
+        if (generation <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+            LOG_WARN("P2PDownloadManager: stale generation; seed handoff dropped");
+            return false;
+        }
+        // 非阻塞移交：接受/去重/淘汰/拒绝都只进 owner telemetry；移交不
+        // 反转已发出的 release success，也不触发第二次 completion（D2/D7/D9）。
+        seeding_owner_->Admit(std::move(candidate));
+    }
     LOG_INFO("P2PDownloadManager: seed handoff submitted to owner");
     return true;
 }
@@ -1443,8 +1487,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                                       std::uint64_t generation) {
     // ADR-20260901-01 D7：cancel()/新准入会递增 generation；stale worker
     // 不得 handoff、不得再启动 HTTP fallback。
+    // B5-05：stale ⟺ 本代 ticket ≤ cancel 失效水位（cancel_epoch_ 原子镜像，
+    // 无锁轮询；水位只在 lifecycle mutex 内前移）。
     const auto generation_stale = [this, generation]() {
-        return generation != download_generation_.load();
+        return generation <= cancel_epoch_.load(std::memory_order_seq_cst);
     };
     bool success = false;
     std::string error;
@@ -1608,7 +1654,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 auto last_progress_at = std::chrono::steady_clock::now();
                 int64_t last_reported_done = -1;
 
-                while (!cancel_requested_.load()) {
+                while (!generation_stale()) {
                     const auto now = std::chrono::steady_clock::now();
                     if (now - last_peer_info_post >= peer_info_interval) {
                         handle.post_peer_info();
@@ -1734,7 +1780,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
                 }
 
-                if (cancel_requested_.load()) {
+                if (generation_stale()) {
                     error = "download cancelled";
                 }
 
@@ -1840,7 +1886,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                                              download_save_path);
                     }
 #endif
-                    while (!seeding_owner_ && !cancel_requested_.load()) {
+                    while (!seeding_owner_ && !generation_stale()) {
                         const auto now = std::chrono::steady_clock::now();
                         if (now - last_peer_info_post >= peer_info_interval) {
                             handle.post_peer_info();

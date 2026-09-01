@@ -1003,5 +1003,204 @@ int main() {
         owner->Stop();
     }
 
+    // ============ B5-05 gate A：admission/publication 窗口（确定性双向）============
+    // G1a（cancel 赢）：ticket 已分配、worker 未发布（mu_ 在手）时 cancel ——
+    // cancel 必然阻塞到临界区结束，随后 victim 被 join、请求被失效终止；
+    // 不存在「cancel 先返回、请求随后继续」。
+    {
+        std::fprintf(stderr, "[TEST] G1a admission window: cancel wins\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                nullptr, nullptr, owner);
+
+        std::mutex gate_mu;
+        std::condition_variable gate_cv;
+        bool gate_entered = false;
+        bool gate_release = false;
+        manager.set_admission_gate_for_test([&] {
+            std::unique_lock<std::mutex> lock(gate_mu);
+            gate_entered = true;
+            gate_cv.notify_all();
+            // admission gate 在 main 线程的 download() 内执行（持 mu_）；
+            // release 由 watcher 线程在负向断言后置位。
+            gate_cv.wait_for(lock, std::chrono::seconds(30),
+                             [&] { return gate_release; });
+        });
+
+        device_agent::DownloadRequest req;
+        req.torrent_url = make_tracked_torrent(dir, "g1a.bin", 64 * 1024,
+                                               0x91, tracker.port());
+        assert_true(!req.torrent_url.empty());
+        req.dest_path = dir + "/dl";
+        test_mkdir(req.dest_path);
+        req.file_size = 64 * 1024;
+        auto seeder = make_bt_seeder(req.torrent_url, dir);
+        assert_true(seeder != nullptr);
+
+        // canceller 与 watcher 必须先于 download() 启动：admission gate 在
+        // main 线程内阻塞，download() 在放行前不会返回。
+        std::atomic<bool> cancel_started{false};
+        std::atomic<bool> cancel_done{false};
+        std::atomic<bool> blocked_confirmed{false};
+        std::thread canceller([&] {
+            {
+                std::unique_lock<std::mutex> lock(gate_mu);
+                gate_cv.wait_for(lock, std::chrono::seconds(10),
+                                 [&] { return gate_entered; });
+            }
+            cancel_started.store(true);
+            manager.cancel();
+            cancel_done.store(true);
+        });
+        std::thread watcher([&] {
+            // 等 canceller 已进入 cancel()（ticket 已分配、mu_ 被 main 持有）
+            for (int i = 0; i < 100 && !cancel_started.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            // 负向确定性：窗口未放行时 cancel 不得返回。
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            blocked_confirmed.store(!cancel_done.load());
+            // 放行 → admission 临界区结束（worker 发布）→ cancel 获锁失效
+            // 并锁外 join victim。
+            {
+                std::lock_guard<std::mutex> lock(gate_mu);
+                gate_release = true;
+                gate_cv.notify_all();
+            }
+        });
+
+        CompletionCapture capture;
+        manager.download(req, nullptr,
+            [&capture](bool ok, const std::string& err,
+                       const device_agent::DownloadCompletionTelemetry& t) {
+                capture.store(ok, err, &t);
+            });
+        assert_true(gate_entered);  // ticket 已分配、worker 未发布
+
+        canceller.join();
+        watcher.join();
+        assert_true(cancel_started.load());
+        assert_true(blocked_confirmed.load());  // 窗口内 cancel 未返回
+        assert_true(cancel_done.load());        // 放行后 cancel 正常返回
+        assert_true(s2_wait_for([&] { return !manager.is_downloading(); }, 5000));
+
+        // 请求被失效终止：completion 恰一次（失败终态），owner 零接纳。
+        bool ok = false;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert_true(!ok);
+        assert_true(owner->counters_for_test().admitted == 0);
+        assert_true(owner->counters_for_test().active_seeds == 0);
+
+        seeder.reset();
+        tracker.stop();
+        owner->Stop();
+    }
+
+    // G1b（publication 赢）：窗口立即放行 → 请求正常完成并 handoff；此后
+    // cancel 为无害 no-op，seed 保留（cancel 不删历史 seeds，D7）。
+    {
+        std::fprintf(stderr, "[TEST] G1b admission window: publication wins\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                nullptr, nullptr, owner);
+        std::atomic<int> gate_entries{0};
+        manager.set_admission_gate_for_test([&] { gate_entries.fetch_add(1); });
+
+        device_agent::DownloadRequest req;
+        req.torrent_url = make_tracked_torrent(dir, "g1b.bin", 64 * 1024,
+                                               0x92, tracker.port());
+        assert_true(!req.torrent_url.empty());
+        req.dest_path = dir + "/dl";
+        test_mkdir(req.dest_path);
+        req.file_size = 64 * 1024;
+        auto seeder = make_bt_seeder(req.torrent_url, dir);
+        assert_true(seeder != nullptr);
+
+        CompletionCapture capture;
+        manager.download(req, nullptr,
+            [&capture](bool ok, const std::string& err,
+                       const device_agent::DownloadCompletionTelemetry& t) {
+                capture.store(ok, err, &t);
+            });
+        bool ok = false;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert_true(ok);
+        assert_true(s2_wait_for([&] {
+            return owner->counters_for_test().active_seeds == 1;
+        }, 5000));
+
+        manager.cancel();  // 完成后的 cancel：无 in-flight 请求，不得影响 seed
+        assert_true(!manager.is_downloading());
+        assert_true(owner->counters_for_test().active_seeds == 1);
+        assert_true(gate_entries.load() == 1);
+
+        seeder.reset();
+        tracker.stop();
+        owner->Stop();
+    }
+
+    // ============ B5-05 gate B：handoff commit 窗口（确定性双向）============
+    // G2b（commit 赢）：candidate 已构造、commit 窗口立即放行 → Admit 的
+    // 线性化明确早于随后的 cancel —— seed 保留、completion 不反转。
+    // （G2a「cancel 赢」= 既有 S2-3：窗口内 cancel，commit 判 stale 丢弃。）
+    {
+        std::fprintf(stderr, "[TEST] G2b handoff commit window: commit wins\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                nullptr, nullptr, owner);
+        manager.set_handoff_gate_for_test([] {});  // 立即放行：commit 先行
+
+        device_agent::DownloadRequest req;
+        req.torrent_url = make_tracked_torrent(dir, "g2b.bin", 64 * 1024,
+                                               0x93, tracker.port());
+        assert_true(!req.torrent_url.empty());
+        req.dest_path = dir + "/dl";
+        test_mkdir(req.dest_path);
+        req.file_size = 64 * 1024;
+        auto seeder = make_bt_seeder(req.torrent_url, dir);
+        assert_true(seeder != nullptr);
+
+        CompletionCapture capture;
+        manager.download(req, nullptr,
+            [&capture](bool ok, const std::string& err,
+                       const device_agent::DownloadCompletionTelemetry& t) {
+                capture.store(ok, err, &t);
+            });
+        bool ok = false;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert_true(ok);
+        assert_true(s2_wait_for([&] {
+            return owner->counters_for_test().active_seeds == 1;
+        }, 5000));
+
+        // commit（Admit）已线性化完成；随后的 cancel 不得删除该历史 seed。
+        manager.cancel();
+        assert_true(!manager.is_downloading());
+        assert_true(owner->counters_for_test().active_seeds == 1);
+        assert_true(owner->counters_for_test().evicted_capacity == 0);
+
+        seeder.reset();
+        tracker.stop();
+        owner->Stop();
+    }
+
     return 0;
 }

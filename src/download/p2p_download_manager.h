@@ -122,10 +122,14 @@ public:
     std::vector<int> active_upload_limits_for_test() const;
     // 注入 HTTP fallback（必须在 download() 之前调用；仅测试构建暴露）。
     void set_http_fallback_for_test(HttpFallback fallback);
-    // B5-S2 确定性 gate：在 handoff 的 generation 检查前调用（可为空函数）。
-    // 用于构造「completion 已发、cancel 递增 generation、handoff 未判定」
-    // 的交错，证明 stale worker 不得 handoff。
+    // B5-05 gate B（确定性）：handoff commit（最终 validity 校验 + Admit）
+    // 之前的窗口入口——窗口内 cancel() 与 commit 同锁互斥，双向证明
+    // cancel 赢则丢弃 / commit 赢则线性化早于 cancel。
     void set_handoff_gate_for_test(std::function<void()> gate);
+    // B5-05 gate A（确定性）：admission 临界区内（ticket 已分配、worker 未
+    // 发布、mu_ 在手）的窗口入口——并发 cancel() 必然阻塞到临界区结束，
+    // 不存在「cancel 先返回、请求随后继续」。
+    void set_admission_gate_for_test(std::function<void()> gate);
 #endif
 
 private:
@@ -166,17 +170,26 @@ private:
     // P2P 上传分桶采样的上次样本(torrent all_time_upload);仅 worker 线程读写
     std::int64_t last_upload_sample_{0};
     std::atomic<bool> downloading_{false};
-    std::atomic<bool> cancel_requested_{false};
-    // ADR-20260901-01 D7：download generation。download() 准入与 cancel()
-    // 递增；worker 携带准入时的代，stale 代不得 handoff、不得启动 HTTP
-    // fallback。owner 侧使用独立 seed epoch，互不影响。
-    std::atomic<std::uint64_t> download_generation_{0};
+    // ADR-20260901-01 B5-05 单一线性化协议（lifecycle mutex = mu_）：
+    //   - admission（ticket 分配 + downloading_ 置位 + worker 发布）在同一个
+    //     mu_ 临界区内完成，「已准入未发布」状态对外不可见；
+    //   - cancel 在同一 mu_ 下取失效水位 cancel_epoch_ = admission_counter_
+    //     并移出 victim worker 锁外 join——返回 ⇒ 已准入请求必然已失效并终
+    //     止，不存在「cancel 已返回但请求继续」；
+    //   - handoff 的最终 validity 校验 + Admit commit 同样在 mu_ 下与失效
+    //     互斥（candidate 昂贵构造在临界区外）；
+    //   - worker 侧以 cancel_epoch_ 原子镜像做无锁 stale 轮询。
+    std::atomic<std::uint64_t> cancel_epoch_{0};
+    std::uint64_t admission_counter_{0};  // mu_ 保护
     HttpFallback http_fallback_;
     Callbacks callbacks_;
     P2PSeedingStateMachine state_machine_;
     std::shared_ptr<P2PSeedingOwner> seeding_owner_;
 #ifdef DEVICE_AGENT_TESTING
     std::function<void()> handoff_gate_for_test_;
+    // B5-05 gate A：admission 临界区内（ticket 已分配、worker 未发布）的
+    // 确定性窗口入口。窗口内持 mu_，并发 cancel() 必然阻塞到临界区结束。
+    std::function<void()> admission_gate_for_test_;
 #endif
 };
 
