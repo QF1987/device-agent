@@ -46,7 +46,7 @@ cmake -S . -B build -DDEVICE_AGENT_BUILD_WINDOWS_AGENT=ON `
   -DDEVICE_AGENT_ENABLE_WINDOWS_P2P=ON `
   -DDEVICE_AGENT_RELEASE_BUILD=ON -DDEVICE_AGENT_VERSION=1.2.3
 
-.\make-kit.ps1 -AgentDir C:uild\device-agent\Release `
+.\make-kit.ps1 -AgentDir C:\build\device-agent\Release `
   -AgentVersion 1.2.3 -P2P -OutZip C:\out\device-agent-kit-p2p.zip
 ```
 
