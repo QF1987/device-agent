@@ -36,6 +36,41 @@ cmake -S . -B build -DDEVICE_AGENT_BUILD_WINDOWS_AGENT=ON `
 
 发现 bundled redist 但缺 hash、hash 不匹配或安装失败时，脚本以 prerequisite exit code `8` 退出，不继续安装 Agent。成功码接受 `0`、已存在更新版本 `1638` 和需要重启 `3010`；`3010` 会记录警告，随后继续尝试安装和启动服务。
 
+
+## P2P-enabled 套件（ADR-20260831-01 B3）
+
+`DEVICE_AGENT_ENABLE_WINDOWS_P2P=ON` 构建产物打 P2P kit 时加 `-P2P` 开关：
+
+```powershell
+cmake -S . -B build -DDEVICE_AGENT_BUILD_WINDOWS_AGENT=ON `
+  -DDEVICE_AGENT_ENABLE_WINDOWS_P2P=ON `
+  -DDEVICE_AGENT_RELEASE_BUILD=ON -DDEVICE_AGENT_VERSION=1.2.3
+
+.\make-kit.ps1 -AgentDir C:uild\device-agent\Release `
+  -AgentVersion 1.2.3 -P2P -OutZip C:\out\device-agent-kit-p2p.zip
+```
+
+`-P2P` 显式校验并失败（fail closed）：
+
+- loader 依赖闭包：`AgentDir` 必须已含 `torrent-rasterbar.dll` 与
+  `libcrypto-3-x64.dll`（libtorrent/OpenSSL 传递依赖；VC++ Runtime 由
+  既有 prerequisites/redist 链路覆盖，不打包 Boost DLL）；
+- Release CRT 约束：`AgentDir` 出现任何 Debug CRT DLL
+  （`msvcp140d/vcruntime140d/vcruntime140_1d/ucrtbased`）即拒绝打包；
+- `DEVICE_AGENT_MANIFEST.txt` 记录 `windows_p2p=enabled`；非 P2P kit 记录
+  `windows_p2p=disabled`。`SHA256SUMS.txt` 继续覆盖全部 payload。
+
+非 P2P build（option 缺省 OFF）不带 `-P2P` 打包即可，manifest 记录
+`windows_p2p=disabled`，不要求、也不应包含 libtorrent/OpenSSL DLL。
+
+校验逻辑在 `make-kit-lib.psm1`（纯函数），离线确定性测试见
+`tests/windows-bootstrap/make-kit-lib.Tests.ps1`（宿主 pwsh 或 Windows
+PowerShell 5.1+ 均可运行，无网络依赖）：
+
+```powershell
+pwsh -NoProfile -File tests\windows-bootstrap\make-kit-lib.Tests.ps1
+```
+
 ## 安全边界
 
 - 在线 URL 不允许只填 URL 不填 SHA-256。
