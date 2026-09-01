@@ -619,6 +619,33 @@ elseif(WIN32)
             LibtorrentRasterbar::torrent-rasterbar
             ws2_32
         )
+
+        # ADR-20260901-01 B5-S1：独立 seeding owner 离线测试（Windows 原生
+        # gate 复用；owner 不链接前台 p2p_download_manager.cc）。
+        add_executable(p2p_seeding_owner_test
+            src/download/p2p_seeding_owner_test.cc
+            src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_seeding_owner_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_seeding_owner_test PRIVATE
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(p2p_seeding_owner_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(p2p_seeding_owner_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            LibtorrentRasterbar::torrent-rasterbar
+            ws2_32
+        )
     endif()
 
 # ─── Desktop (Linux/macOS): build as standalone executable ─
@@ -808,6 +835,31 @@ else()
             DEVICE_AGENT_TESTING
         )
         target_link_libraries(windows_p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+
+        # ADR-20260901-01 B5-S1：独立 seeding owner（seed-only session）离线
+        # 测试。owner 不链接前台 p2p_download_manager.cc（live_policy 直接读
+        # P2PConfigStore；前台注入 seam 属 B5-S2）。
+        add_executable(p2p_seeding_owner_test
+            src/download/p2p_seeding_owner_test.cc
+            src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_seeding_owner_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_seeding_owner_test PRIVATE
+            DEVICE_AGENT_TESTING
+        )
+        target_compile_options(p2p_seeding_owner_test PRIVATE
+            $<$<CONFIG:Release>:-UNDEBUG>
+        )
+        target_link_libraries(p2p_seeding_owner_test PRIVATE
             Threads::Threads
             OpenSSL::Crypto
             PkgConfig::LIBTORRENT_RASTERBAR
