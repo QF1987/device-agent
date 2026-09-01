@@ -1,4 +1,5 @@
 #include "download/p2p_download_manager.h"
+#include "download/p2p_seeding_owner.h"
 #include "download/p2p_upload_counters.h"
 
 #include "config/p2p_config_store.h"
@@ -1117,14 +1118,23 @@ P2PDownloadManager::P2PDownloadManager(
         Callbacks callbacks,
         P2PSeedingPolicy seeding_policy,
         std::shared_ptr<NetworkPolicy> network_policy,
-        HttpFallback http_fallback)
+        HttpFallback http_fallback,
+        std::shared_ptr<P2PSeedingOwner> seeding_owner)
     : network_policy_(std::move(network_policy)),
       seeding_policy_(seeding_policy),
       http_fallback_(std::move(http_fallback)),
       callbacks_(std::move(callbacks)),
-      state_machine_(seeding_policy) {
+      state_machine_(seeding_policy),
+      seeding_owner_(std::move(seeding_owner)) {
     if (network_policy_) {
         network_policy_->add_listener(this);
+    }
+    // ADR-20260901-01 B5-S2：owner 由注入方（Windows hybrid 生产构造 / 测试）
+    // 创建并 Start，生命周期独立于本 manager（D7）；未运行时 handoff 静默
+    // 降级为「不做种」（owner 侧 rejected 计数），绝不回退 inline seed（D9）。
+    if (seeding_owner_) {
+        LOG_INFO("P2PDownloadManager: seeding owner injected; inline seeding "
+                 "disabled for this manager");
     }
 }
 
@@ -1133,14 +1143,13 @@ P2PDownloadManager::~P2PDownloadManager() {
         network_policy_->remove_listener(this);
     }
     cancel();
-    lt::session_proxy proxy;
     {
         std::lock_guard<std::mutex> lock(mu_);
         active_handles_.clear();
-        if (session_) {
-            proxy = session_->abort();
-            session_.reset();
-        }
+        // RV-20260901-WIN-P2P-B5-01：~session() 同步收尾（通知 tracker
+        // stopped + join io 线程），不再使用跨 session 析构持有的
+        // session_proxy——libtorrent 2.0.x 该顺序确定性崩溃（B5-S0 probe）。
+        session_.reset();
     }
 }
 
@@ -1205,12 +1214,17 @@ void P2PDownloadManager::download(const DownloadRequest& req,
     {
         std::lock_guard<std::mutex> lock(mu_);
         ensure_session_locked();
+        // ADR-20260901-01 D7：准入即递增 generation，worker 携带准入代。
         worker_ = std::thread(&P2PDownloadManager::run_download, this, req,
-                              std::move(on_progress), std::move(on_complete));
+                              std::move(on_progress), std::move(on_complete),
+                              ++download_generation_);
     }
 }
 
 void P2PDownloadManager::cancel() {
+    // D7：取消即递增 generation——stale worker 不得 handoff、不得再启动
+    // HTTP fallback；已进入 owner 的历史 seeds 不受影响（独立 seed epoch）。
+    ++download_generation_;
     cancel_requested_.store(true);
     set_state_stopping();
     join_worker();
@@ -1255,6 +1269,10 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
 
 void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
     http_fallback_ = std::move(fallback);
+}
+
+void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
+    handoff_gate_for_test_ = std::move(gate);
 }
 #endif
 
@@ -1372,9 +1390,62 @@ void P2PDownloadManager::remove_active_handle_locked(const lt::torrent_handle& h
         active_handles_.end());
 }
 
+// handoff 仅在 Windows 生产（DEVICE_AGENT_ENABLE_WINDOWS_P2P）或测试构建
+// 编译：Android/Linux/macOS 生产不含 owner 代码路径（ADR-20260901-01）。
+#if defined(DEVICE_AGENT_ENABLE_WINDOWS_P2P) || defined(DEVICE_AGENT_TESTING)
+bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
+                                              const lt::torrent_handle& handle,
+                                              const std::string& save_path) {
+    if (!seeding_owner_) {
+        return false;
+    }
+#ifdef DEVICE_AGENT_TESTING
+    if (handoff_gate_for_test_) {
+        // 确定性交错入口：gate 内可 cancel()（递增 generation），放行后
+        // 下方 stale 检查必须拦截移交（见 set_handoff_gate_for_test）。
+        handoff_gate_for_test_();
+    }
+#endif
+    // D7：cancel()/新准入已递增 generation 时本次成功属于 stale 代，不得
+    // 移交；release terminal 已随代处理，与 seeding 无关。
+    if (generation != download_generation_.load()) {
+        LOG_WARN("P2PDownloadManager: stale generation; seed handoff dropped");
+        return false;
+    }
+    auto torrent = handle.torrent_file();
+    if (!torrent) {
+        LOG_WARN("P2PDownloadManager: missing torrent metadata; seed handoff dropped");
+        return false;
+    }
+    P2PSeedCandidate candidate;
+    // handle.torrent_file() 返回 const；candidate/add_torrent_params 需要
+    // 非 const 元数据。仅复制 KB 级 torrent 元数据，数据文件零复制（D3）。
+    candidate.torrent = std::make_shared<lt::torrent_info>(*torrent);
+    candidate.save_path = save_path;
+    candidate.admitted_at = std::chrono::steady_clock::now();
+    {
+        // TTL/ratio 取 admission snapshot（D6：运行中配置变化不追溯生命周期）。
+        std::lock_guard<std::mutex> lock(mu_);
+        candidate.ttl = seeding_policy_.ttl;
+        candidate.ratio_limit = seeding_policy_.ratio_limit;
+    }
+    // 非阻塞移交：接受/去重/淘汰/拒绝都只进 owner telemetry；移交不反转
+    // 已发出的 release success，也不触发第二次 completion（D2/D7/D9）。
+    seeding_owner_->Admit(std::move(candidate));
+    LOG_INFO("P2PDownloadManager: seed handoff submitted to owner");
+    return true;
+}
+#endif  // owner gate
+
 void P2PDownloadManager::run_download(DownloadRequest req,
                                       ProgressCallback on_progress,
-                                      CompleteCallback on_complete) {
+                                      CompleteCallback on_complete,
+                                      std::uint64_t generation) {
+    // ADR-20260901-01 D7：cancel()/新准入会递增 generation；stale worker
+    // 不得 handoff、不得再启动 HTTP fallback。
+    const auto generation_stale = [this, generation]() {
+        return generation != download_generation_.load();
+    };
     bool success = false;
     std::string error;
     bool complete_sent = false;
@@ -1482,6 +1553,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
             lt::torrent_handle handle;
             lt::session* session = nullptr;
+            const std::string download_save_path = params.save_path;
             {
                 std::lock_guard<std::mutex> lock(mu_);
                 ensure_session_locked();
@@ -1612,7 +1684,8 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         req.file_size > 0 ? std::min<int64_t>(5 * 1024 * 1024, req.file_size / 10) : 5 * 1024 * 1024;
                     if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
                             progress.downloaded_bytes < slow_start_threshold &&
-                            std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout) {
+                            std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout &&
+                            !generation_stale()) {
                         LOG_WARN("P2PDownloadManager: peer/web seed slow start; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
@@ -1632,7 +1705,8 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         last_reported_done = progress.downloaded_bytes;
                         last_progress_at = std::chrono::steady_clock::now();
                     } else if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
-                               std::chrono::steady_clock::now() - last_progress_at >= stall_timeout) {
+                               std::chrono::steady_clock::now() - last_progress_at >= stall_timeout &&
+                               !generation_stale()) {
                         LOG_WARN("P2PDownloadManager: peer/web seed stalled after recovery window; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
@@ -1694,7 +1768,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         if (!verify_sha256_with_retry(downloaded_path,
                                                       req.expected_sha256,
                                                       verify_error)) {
-                            if (!fallback_web_seed_url.empty()) {
+                            if (!fallback_web_seed_url.empty() && !generation_stale()) {
                                 LOG_WARN("P2PDownloadManager: sha256 verify failed; falling back to direct HTTP download");
                                 std::string fallback_error;
                                 if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
@@ -1752,7 +1826,21 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
                     complete_sent = true;
 
-                    while (!cancel_requested_.load()) {
+                    // ADR-20260901-01 B5-S2：注入 owner 时成功终态即移交
+                    // candidate（cache flush/SHA/generation 已全部通过），
+                    // worker 立即退出释放 admission——任务 A 成功后任务 B
+                    // 不再被 `already active` 阻塞。stale 代不做种；owner
+                    // 注入后绝不回退 inline seeding（D9）。未注入 owner 的
+                    // 平台（Android/Linux/macOS）保留 inline seeding loop
+                    // （循环条件首项，注入时整体跳过）。handoff 代码仅在
+                    // Windows 生产 / 测试构建编译（见函数尾部 gate）。
+#if defined(DEVICE_AGENT_ENABLE_WINDOWS_P2P) || defined(DEVICE_AGENT_TESTING)
+                    if (seeding_owner_) {
+                        try_handoff_to_owner(generation, handle,
+                                             download_save_path);
+                    }
+#endif
+                    while (!seeding_owner_ && !cancel_requested_.load()) {
                         const auto now = std::chrono::steady_clock::now();
                         if (now - last_peer_info_post >= peer_info_interval) {
                             handle.post_peer_info();

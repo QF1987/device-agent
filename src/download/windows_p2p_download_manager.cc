@@ -7,6 +7,7 @@
 #include "download/windows_p2p_download_manager.h"
 
 #include "config/p2p_config_store.h"
+#include "download/p2p_seeding_owner.h"
 #include "logger/logger.h"
 
 #ifdef _WIN32
@@ -17,6 +18,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <utility>
 #include <vector>
 
@@ -25,6 +27,31 @@ namespace {
 
 bool is_http_url(const std::string& value) {
     return value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0;
+}
+
+// B5-S2：Windows 生产的默认历史做种 owner（ADR-20260901-01 D5）。
+// listen 默认 0.0.0.0:6892——避开前台 session 的 libtorrent 默认端口段
+// （6881 + retry≤10）；可用 P2P_SEED_LISTEN_INTERFACES 覆写。Start 失败
+// 只告警：前台 P2P 下载与 WinHTTP fallback 不受影响，历史不做种（D9）。
+std::shared_ptr<P2PSeedingOwner> create_production_seeding_owner(
+    const std::shared_ptr<NetworkPolicy>& network_policy) {
+#ifdef _WIN32
+    const char* env = std::getenv("P2P_SEED_LISTEN_INTERFACES");
+    P2PSeedingOwner::Config config;
+    config.listen_interfaces =
+        (env != nullptr && *env != '\0') ? std::string(env)
+                                         : std::string("0.0.0.0:6892");
+    auto owner = std::make_shared<P2PSeedingOwner>(config, network_policy);
+    std::string error;
+    if (!owner->Start(error)) {
+        LOG_WARN("WindowsP2PDownloadManager: seeding owner start failed: " +
+                 error);
+    }
+    return owner;
+#else
+    (void)network_policy;
+    return nullptr;
+#endif
 }
 
 }  // namespace
@@ -239,15 +266,22 @@ WindowsP2PDownloadManager::WindowsP2PDownloadManager(
         std::shared_ptr<NetworkPolicy> network_policy,
         P2PDownloadManager::Callbacks p2p_callbacks,
         std::shared_ptr<IDownloadManager> http_manager,
-        std::shared_ptr<WindowsHttpFallbackAdapter> http_adapter)
+        std::shared_ptr<WindowsHttpFallbackAdapter> http_adapter,
+        std::shared_ptr<P2PSeedingOwner> seeding_owner)
     : network_policy_(std::move(network_policy)),
       http_adapter_(http_adapter != nullptr ? std::move(http_adapter)
                                             : std::make_shared<WindowsHttpFallbackAdapter>()),
       http_manager_(std::move(http_manager)),
+      // B5-S2：注入优先；未注入且为 Windows 生产时自动创建默认 owner
+      //（listen 0.0.0.0:6892，P2P_SEED_LISTEN_INTERFACES 可覆写）。
+      seeding_owner_(seeding_owner != nullptr
+                         ? std::move(seeding_owner)
+                         : create_production_seeding_owner(network_policy_)),
       p2p_(std::move(p2p_callbacks),
            P2PSeedingPolicy::alpha_defaults(),
            network_policy_,
-           http_adapter_->fallback()) {
+           http_adapter_->fallback(),
+           seeding_owner_) {
 #ifdef _WIN32
     if (!http_manager_) {
         http_manager_ = std::make_shared<WindowsDownloadManager>();

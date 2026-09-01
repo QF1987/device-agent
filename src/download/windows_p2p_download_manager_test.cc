@@ -10,6 +10,7 @@
 
 #include "config/p2p_config_store.h"
 #include "download/network_policy.h"
+#include "download/p2p_s2_test_helpers.h"
 
 #include <atomic>
 #include <cassert>
@@ -866,6 +867,78 @@ int main() {
             runner.join();
             assert(job.cancel_calls.load() == 1);
         }
+    }
+
+    std::fprintf(stderr, "[TEST] 14 s2 owner handoff end-to-end\n");
+    // 14. B5-S2 端到端：注入已启动 owner（tracker+seeder 发现），A 完成即
+    // handoff（owner 持 seed、外层 admission 释放）；B 随后走 P2P 完成而
+    // 不是 `already active` → HTTP fallback（http.calls 不增）；外层
+    // terminal-once；owner cap=2 时 C 淘汰最老 seed。
+    {
+        using namespace p2p_s2_test;
+        auto cfg = std::make_shared<P2PConfigStore>();
+        std::string cfg_err;
+        assert_true(cfg->apply(R"({"p2p_enabled":true,"min_file_size_mb_for_p2p":0})", &cfg_err));
+        P2PConfigStore::set_global(cfg);
+
+        const std::string s2_dir = make_test_dir("s2-e2e");
+        test_mkdir(s2_dir);
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+
+        FakeHttpManager http;
+        WindowsP2PDownloadManager manager(
+            nullptr, {},
+            std::shared_ptr<device_agent::IDownloadManager>(&http, [](device_agent::IDownloadManager*) {}),
+            nullptr,
+            owner);
+
+        const char* names[3] = {"s2e_a.bin", "s2e_b.bin", "s2e_c.bin"};
+        for (int i = 0; i < 3; ++i) {
+            DownloadRequest req;
+            req.torrent_url = make_tracked_torrent(s2_dir, names[i], 64 * 1024,
+                                                   static_cast<unsigned char>(0x81 + i),
+                                                   tracker.port());
+            assert_true(!req.torrent_url.empty());
+            req.dest_path = s2_dir + "/dl";
+            test_mkdir(req.dest_path);
+            req.file_size = 64 * 1024;
+            auto seeder = make_bt_seeder(req.torrent_url, s2_dir);
+            assert_true(seeder != nullptr);
+
+            CompletionCapture capture;
+            manager.download(req, nullptr,
+                             [&](bool ok, const std::string& err,
+                                 const device_agent::DownloadCompletionTelemetry& t) {
+                                 capture.store(ok, err, &t);
+                             });
+            bool ok = false;
+            std::string err;
+            int completion_path = -1;
+            assert_true(capture.wait_and_get(&ok, &err, &completion_path));
+            assert(ok);
+            // B/C 不得因 single-active 拒绝后落到 HTTP fallback。
+            assert(http.calls.load() == 0);
+            assert(completion_path == 1 /* P2P_PRIMARY */);
+            assert_true(s2_wait_for([&] { return !manager.is_downloading(); },
+                                    5000));
+            assert_true(s2_wait_for([&] {
+                const auto counters = owner->counters_for_test();
+                if (counters.admitted != i + 1) return false;
+                if (i == 2) {
+                    return counters.active_seeds == 2 &&
+                           counters.evicted_capacity == 1;
+                }
+                return counters.active_seeds == i + 1;
+            }, 5000));
+            seeder.reset();
+        }
+        tracker.stop();
+        owner->Stop();
+        P2PConfigStore::set_global(nullptr);
     }
 
     return 0;

@@ -1,13 +1,18 @@
 #include "download/p2p_download_manager.h"
+#include "download/p2p_s2_test_helpers.h"
 #include "config/p2p_config_store.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -16,7 +21,12 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <process.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #endif
 
@@ -79,9 +89,9 @@ bool file_readable(const std::string& path) {
 
 // 断言只检查结果；调用本身必须始终执行（RV-20260831-WIN-P2P-A-02：
 // 防 NDEBUG 下有副作用/出参的调用被整体裁掉，测试静默退化为空检查）。
-void assert_true(bool value) {
-    assert(value);
-}
+// 本测试构建在 Release 下以 -UNDEBUG/UNDEBUG 保持断言开启；宏形式保留
+// 调用点行号，便于失败定位。
+#define assert_true(value) do { assert(value); } while (0)
 
 // worker 回调 → 主线程的结果快照（RV-20260831-WIN-P2P-A-03：
 // mutex + condition_variable 同步，不用普通 bool 跨线程轮询）。
@@ -193,6 +203,7 @@ bool sha256_file_for_test(const std::string& path, std::string& out_hex, std::st
 }
 
 int main() {
+    using namespace p2p_s2_test;
     using device_agent::DownloadRequest;
     using device_agent::NetworkType;
     using device_agent::P2PDownloadState;
@@ -759,6 +770,237 @@ int main() {
         assert(!probe_ok);
         assert(probe_err.find("no p2p download source") != std::string::npos);
         assert(!fresh_manager.is_downloading());
+    }
+
+    // ==================== B5-S2 owner handoff 确定性回归 ====================
+#ifdef _WIN32
+    static S2WinSockInit s2_wsa;
+    assert(s2_wsa.ok);
+#endif
+
+    // S2-1：A 成功后 handoff 释放 admission，B/C 顺序进入（不出现
+    // `already active`），C 触发 FIFO capacity eviction；telemetry 不变。
+    {
+        std::fprintf(stderr, "[TEST] S2-1 handoff releases admission (A/B/C)\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                nullptr, nullptr, owner);
+
+        const char* names[3] = {"s2_a.bin", "s2_b.bin", "s2_c.bin"};
+        const unsigned char fills[3] = {0xA1, 0xB2, 0xC3};
+        for (int i = 0; i < 3; ++i) {
+            device_agent::DownloadRequest req;
+            req.torrent_url = make_tracked_torrent(dir, names[i], 64 * 1024,
+                                                   fills[i], tracker.port());
+            assert_true(!req.torrent_url.empty());
+            req.dest_path = dir + "/dl";
+            test_mkdir(req.dest_path);
+            req.file_size = 64 * 1024;
+            auto seeder = make_bt_seeder(req.torrent_url, dir);
+            assert_true(seeder != nullptr);
+
+            std::atomic<int> completion_count{0};
+            CompletionCapture capture;
+            manager.download(req, nullptr,
+                [&](bool ok, const std::string& err,
+                    const device_agent::DownloadCompletionTelemetry& t) {
+                    completion_count.fetch_add(1);
+                    capture.store(ok, err, &t);
+                });
+            bool ok = false;
+            std::string err;
+            int completion_path = -1;
+            assert_true(capture.wait_and_get(&ok, &err, &completion_path));
+            assert_true(ok);
+            assert_true(err.find("already active") == std::string::npos);
+            // terminal-once：handoff 之后不得出现第二次 completion（D2/D7）
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            assert_true(completion_count.load() == 1);
+            // release telemetry 在 handoff 后不变：真实 BT peer 传输，
+            // completion_path 仍为 P2P_PRIMARY。
+            assert_true(completion_path ==
+                        static_cast<int>(device_agent::CompletionPathTelemetry::P2PPrimary));
+            // admission 释放：completion 后 worker 立即退出（不进 inline loop）
+            assert_true(s2_wait_for([&] { return !manager.is_downloading(); },
+                                    5000));
+            // owner 接纳 seed（Admit 入队后由 owner tick 处理，轮询等待）；
+            // B/C 之后 A 仍在（FIFO 淘汰只发生在满额）。
+            assert_true(s2_wait_for([&] {
+                const auto counters = owner->counters_for_test();
+                if (counters.admitted != i + 1) return false;
+                if (i == 2) {
+                    return counters.active_seeds == 2 &&
+                           counters.evicted_capacity == 1;
+                }
+                return counters.active_seeds == i + 1;
+            }, 5000));
+            seeder.reset();  // 本轮 seeder 退出，不干扰下一轮
+        }
+        tracker.stop();
+        owner->Stop();
+    }
+
+    // S2-2：B cancel 不删除 A 的 seed、不触发 HTTP fallback、terminal 恰一次。
+    {
+        std::fprintf(stderr, "[TEST] S2-2 cancel keeps seeds, no fallback\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        int fallback_calls = 0;
+        device_agent::P2PDownloadManager manager(
+            {}, s2_manager_policy(), nullptr,
+            [&fallback_calls](const std::string&, const std::string&,
+                              std::string&) {
+                ++fallback_calls;
+                return false;
+            },
+            owner);
+
+        // A：小文件先完成并 handoff。
+        device_agent::DownloadRequest req_a;
+        req_a.torrent_url = make_tracked_torrent(dir, "s2c_a.bin", 64 * 1024,
+                                                 0x71, tracker.port());
+        assert_true(!req_a.torrent_url.empty());
+        req_a.dest_path = dir + "/dl";
+        test_mkdir(req_a.dest_path);
+        req_a.file_size = 64 * 1024;
+        auto seeder_a = make_bt_seeder(req_a.torrent_url, dir);
+        assert_true(seeder_a != nullptr);
+        CompletionCapture cap_a;
+        manager.download(req_a, nullptr,
+            [&cap_a](bool ok, const std::string& err,
+                     const device_agent::DownloadCompletionTelemetry& t) {
+                cap_a.store(ok, err, &t);
+            });
+        bool ok_a = false;
+        std::string err_a;
+        assert_true(cap_a.wait_and_get(&ok_a, &err_a));
+        assert_true(ok_a);
+        assert_true(s2_wait_for([&] {
+            return owner->counters_for_test().active_seeds == 1;
+        }, 5000));
+
+        // B：大文件，等进入下载后 cancel。
+        device_agent::DownloadRequest req_b;
+        req_b.torrent_url = make_tracked_torrent(dir, "s2c_b.bin",
+                                                 4 * 1024 * 1024, 0x72,
+                                                 tracker.port());
+        assert_true(!req_b.torrent_url.empty());
+        req_b.dest_path = dir + "/dl";
+        req_b.file_size = 4 * 1024 * 1024;
+        auto seeder_b = make_bt_seeder(req_b.torrent_url, dir);
+        assert_true(seeder_b != nullptr);
+        CompletionCapture cap_b;
+        manager.download(req_b, nullptr,
+            [&cap_b](bool ok, const std::string& err,
+                     const device_agent::DownloadCompletionTelemetry& t) {
+                cap_b.store(ok, err, &t);
+            });
+        assert_true(s2_wait_for([&] { return manager.is_downloading(); }, 5000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        manager.cancel();
+        assert_true(s2_wait_for([&] { return !manager.is_downloading(); }, 5000));
+
+        // terminal 恰好一次（成功或取消失败均计一次），fallback 零触发。
+        bool ok_b = false;
+        std::string err_b;
+        assert_true(cap_b.wait_and_get(&ok_b, &err_b));
+        assert_true(fallback_calls == 0);
+        // A 的 seed 不受 B cancel 影响（owner 独立 epoch）。
+        assert_true(s2_wait_for([&] {
+            const auto counters = owner->counters_for_test();
+            return counters.active_seeds >= 1 &&
+                   counters.evicted_capacity == 0;
+        }, 5000));
+        seeder_a.reset();
+        seeder_b.reset();
+        tracker.stop();
+        owner->Stop();
+    }
+
+    // S2-3：handoff gate 处 cancel（generation 递增）→ stale 移交被拦截，
+    // release completion 恰一次且不受影响。
+    {
+        std::fprintf(stderr, "[TEST] S2-3 stale generation blocks handoff\n");
+        const std::string dir = make_test_dir();
+        LoopbackTrackerServer tracker;
+        assert_true(tracker.start());
+
+        std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+        assert_true(owner != nullptr);
+        device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                nullptr, nullptr, owner);
+
+        std::mutex gate_mu;
+        std::condition_variable gate_cv;
+        bool gate_entered = false;
+        bool gate_open = false;
+        manager.set_handoff_gate_for_test([&] {
+            std::unique_lock<std::mutex> lock(gate_mu);
+            gate_entered = true;
+            gate_cv.notify_all();
+            gate_cv.wait_for(lock, std::chrono::seconds(30),
+                             [&] { return gate_open; });
+        });
+
+        device_agent::DownloadRequest req;
+        req.torrent_url = make_tracked_torrent(dir, "s2g_a.bin", 64 * 1024,
+                                               0x7D, tracker.port());
+        assert_true(!req.torrent_url.empty());
+        req.dest_path = dir + "/dl";
+        test_mkdir(req.dest_path);
+        req.file_size = 64 * 1024;
+        auto seeder = make_bt_seeder(req.torrent_url, dir);
+        assert_true(seeder != nullptr);
+        CompletionCapture capture;
+        manager.download(req, nullptr,
+            [&capture](bool ok, const std::string& err,
+                       const device_agent::DownloadCompletionTelemetry& t) {
+                capture.store(ok, err, &t);
+            });
+
+        {
+            std::unique_lock<std::mutex> lock(gate_mu);
+            gate_cv.wait_for(lock, std::chrono::seconds(10),
+                             [&] { return gate_entered; });
+        }
+        assert_true(gate_entered);
+
+        std::atomic<bool> cancel_started{false};
+        std::thread canceller([&] {
+            cancel_started.store(true);
+            manager.cancel();  // 首语句递增 generation，随后 join 阻塞在 gate
+        });
+        for (int i = 0; i < 100 && !cancel_started.load(); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        assert_true(cancel_started.load());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        {
+            std::lock_guard<std::mutex> lock(gate_mu);
+            gate_open = true;
+            gate_cv.notify_all();
+        }
+        canceller.join();
+
+        bool ok = false;
+        std::string err;
+        assert_true(capture.wait_and_get(&ok, &err));
+        assert_true(ok);  // release completion 恰一次且成功（不反转）
+        assert_true(owner->counters_for_test().admitted == 0);  // stale 拦截
+        assert_true(owner->counters_for_test().active_seeds == 0);
+        assert_true(!manager.is_downloading());
+        seeder.reset();
+        tracker.stop();
+        owner->Stop();
     }
 
     return 0;

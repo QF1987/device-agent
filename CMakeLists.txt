@@ -469,6 +469,7 @@ elseif(WIN32)
             find_package(LibtorrentRasterbar CONFIG REQUIRED)
             target_sources(device-agent PRIVATE
                 src/download/p2p_download_manager.cc
+                src/download/p2p_seeding_owner.cc
                 src/download/windows_p2p_download_manager.cc
             )
             target_compile_definitions(device-agent PRIVATE
@@ -545,7 +546,7 @@ elseif(WIN32)
 
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
-            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
@@ -597,7 +598,7 @@ elseif(WIN32)
             src/download/windows_p2p_download_manager_test.cc
             src/download/windows_p2p_download_manager.cc
             src/download/windows_download_manager.cc
-            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
@@ -801,7 +802,7 @@ else()
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
-            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
@@ -823,7 +824,7 @@ else()
         add_executable(windows_p2p_download_manager_test
             src/download/windows_p2p_download_manager_test.cc
             src/download/windows_p2p_download_manager.cc
-            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc

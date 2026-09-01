@@ -18,6 +18,8 @@
 
 namespace device_agent {
 
+class P2PSeedingOwner;
+
 enum class P2PDownloadState {
     Idle,
     Downloading,
@@ -90,11 +92,18 @@ public:
                                             const std::string& output_path,
                                             std::string& error)>;
 
+    // seeding_owner：ADR-20260901-01 B5-S2 additive 可选 seam。仅 Windows
+    // P2P hybrid 生产构造并注入；Android/Linux/macOS 保持 nullptr 走既有
+    // inline seeding。注入后下载成功不再进入 inline seeding loop（ADR D9
+    // 禁止回退成占 admission 的 inline seed），改为 cache flush/SHA/generation
+    // 检查后把不可变 candidate 非阻塞移交给 owner。owner 生命周期独立于本
+    // manager（由 hybrid/测试持有与停止）。
     explicit P2PDownloadManager(
         Callbacks callbacks = {},
         P2PSeedingPolicy seeding_policy = P2PSeedingPolicy::alpha_defaults(),
         std::shared_ptr<NetworkPolicy> network_policy = nullptr,
-        HttpFallback http_fallback = nullptr);
+        HttpFallback http_fallback = nullptr,
+        std::shared_ptr<P2PSeedingOwner> seeding_owner = nullptr);
     ~P2PDownloadManager() override;
 
     P2PDownloadManager(const P2PDownloadManager&) = delete;
@@ -113,12 +122,17 @@ public:
     std::vector<int> active_upload_limits_for_test() const;
     // 注入 HTTP fallback（必须在 download() 之前调用；仅测试构建暴露）。
     void set_http_fallback_for_test(HttpFallback fallback);
+    // B5-S2 确定性 gate：在 handoff 的 generation 检查前调用（可为空函数）。
+    // 用于构造「completion 已发、cancel 递增 generation、handoff 未判定」
+    // 的交错，证明 stale worker 不得 handoff。
+    void set_handoff_gate_for_test(std::function<void()> gate);
 #endif
 
 private:
     void run_download(DownloadRequest req,
                       ProgressCallback on_progress,
-                      CompleteCallback on_complete);
+                      CompleteCallback on_complete,
+                      std::uint64_t generation);
     void join_worker();
     // HTTP fallback 分发：优先注入实现，否则平台默认实现。
     bool download_via_http_fallback(const std::string& url,
@@ -134,6 +148,12 @@ private:
     // 蜂窝守门采样:按增量分桶累积到进程级计数(ADR-20260612-01 D2);仅 worker 线程调用
     void sample_upload(std::int64_t all_time_upload);
     void refresh_policy_from_config();
+    // ADR-20260901-01 B5-S2：成功终态后移交 candidate 给 seeding owner。
+    // 仅 worker 线程调用；返回 false（stale generation / 无 metadata）时
+    // 不做种也不反转已发出的 release success（D2/D7/D9）。
+    bool try_handoff_to_owner(std::uint64_t generation,
+                              const lt::torrent_handle& handle,
+                              const std::string& save_path);
 
     mutable std::mutex mu_;
     mutable std::mutex state_mu_;
@@ -147,9 +167,17 @@ private:
     std::int64_t last_upload_sample_{0};
     std::atomic<bool> downloading_{false};
     std::atomic<bool> cancel_requested_{false};
+    // ADR-20260901-01 D7：download generation。download() 准入与 cancel()
+    // 递增；worker 携带准入时的代，stale 代不得 handoff、不得启动 HTTP
+    // fallback。owner 侧使用独立 seed epoch，互不影响。
+    std::atomic<std::uint64_t> download_generation_{0};
     HttpFallback http_fallback_;
     Callbacks callbacks_;
     P2PSeedingStateMachine state_machine_;
+    std::shared_ptr<P2PSeedingOwner> seeding_owner_;
+#ifdef DEVICE_AGENT_TESTING
+    std::function<void()> handoff_gate_for_test_;
+#endif
 };
 
 #ifdef DEVICE_AGENT_TESTING

@@ -31,6 +31,8 @@
 
 namespace device_agent {
 
+class P2PSeedingOwner;
+
 // 可取消的同步 HTTP fallback 适配：P2PDownloadManager 内部的
 // metadata/stall/SHA fallback 经由它落到 Windows 生产 WinHTTP 实现。
 // 核心控制流（latch 检查 + active 发布原子性）平台中立，便于离线确定性
@@ -128,11 +130,16 @@ public:
     //   其它平台默认 nullptr → 直达路由 fail-closed）；测试注入 fake。
     // http_adapter：注入 P2PDownloadManager 的可取消 fallback 适配
     //   （空则创建默认适配；Windows 生产默认落到 WinHTTP）。
+    // seeding_owner：ADR-20260901-01 B5-S2 历史做种 owner。Windows 生产
+    //   （_WIN32）默认自动创建并 Start（listen 取 P2P_SEED_LISTEN_INTERFACES，
+    //   默认 0.0.0.0:6892）；其它平台/测试默认 nullptr（inner 保留 inline
+    //   seeding），可显式注入替代。Start 失败仅告警，前台下载不受影响（D9）。
     explicit WindowsP2PDownloadManager(
         std::shared_ptr<NetworkPolicy> network_policy = nullptr,
         P2PDownloadManager::Callbacks p2p_callbacks = {},
         std::shared_ptr<IDownloadManager> http_manager = nullptr,
-        std::shared_ptr<WindowsHttpFallbackAdapter> http_adapter = nullptr);
+        std::shared_ptr<WindowsHttpFallbackAdapter> http_adapter = nullptr,
+        std::shared_ptr<P2PSeedingOwner> seeding_owner = nullptr);
     ~WindowsP2PDownloadManager() override;
 
     WindowsP2PDownloadManager(const WindowsP2PDownloadManager&) = delete;
@@ -156,6 +163,10 @@ private:
     std::shared_ptr<NetworkPolicy> network_policy_;
     std::shared_ptr<WindowsHttpFallbackAdapter> http_adapter_;
     std::shared_ptr<IDownloadManager> http_manager_;
+    // ADR-20260901-01 D7 shutdown 顺序：成员析构逆序——p2p_（前台 cancel/
+    // join + download session 收尾）先于 seeding_owner_（owner stop/join +
+    // seed session 收尾）；owner 生命周期独立、由本类与 inner 共享持有。
+    std::shared_ptr<P2PSeedingOwner> seeding_owner_;
     P2PDownloadManager p2p_;
 
     mutable std::mutex mu_;
