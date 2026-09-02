@@ -1139,6 +1139,15 @@ P2PDownloadManager::P2PDownloadManager(
 }
 
 P2PDownloadManager::~P2PDownloadManager() {
+#ifdef DEVICE_AGENT_TESTING
+    // 先 join 测试 peer 接入的重试线程（它们持有指向本对象 session 的
+    // handle），必须先于 session 销毁退出。
+    for (auto& t : test_connect_threads_) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+#endif
     if (network_policy_) {
         network_policy_->remove_listener(this);
     }
@@ -1156,6 +1165,15 @@ P2PDownloadManager::~P2PDownloadManager() {
 void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
+#ifdef DEVICE_AGENT_TESTING
+    {
+        // hook 读取与 setter 同锁；gate 本体锁外调用（可能阻塞测试线程）。
+        std::lock_guard<std::mutex> lock(mu_);
+        if (admission_attempt_for_test_) {
+            admission_attempt_for_test_();
+        }
+    }
+#endif
     refresh_policy_from_config();
     P2PSeedingPolicy policy;
     NetworkType current_network = NetworkType::WIFI;
@@ -1244,39 +1262,27 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 }
 
 void P2PDownloadManager::cancel() {
-    // ── B5-05 线性化协议：invalidation + drain ────────────────────
-    // 失效水位与 admission ticket 同锁互斥：cancel 临界区之后的新准入
-    // ticket 必然大于水位（合法继续），之前的准入必然 stale。victim
-    // worker 移出锁外 join，期间置 drain_in_progress_：
-    //   - admission 权威检查拒绝 drain 中的新准入（旧收尾不得覆盖新代）；
-    //   - 并发 cancel 在 lifecycle_cv_ 上等待 drain 完成——任意 cancel 返回
-    //     时其目标请求已终止；
-    //   - drain 后的清理按水位条件化（ticket > 水位的新准入不被覆盖）。
-    // 已进入 owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
-    // 任一 joinable worker 一律进入 drain——不得以 downloading_=false 推断
-    // 线程已退出：worker 写完该标志后、completion/idle/线程退出之前仍是
-    // joinable 收尾区间，drain 屏障必须覆盖它（B5-05 二次 verify 窗口①）。
+    // ── B5-05 线性化协议：invalidation + drain（与 join_worker 共用）──
+    // 失效水位与 admission ticket 同锁互斥；任一 joinable worker 一律进
+    // drain（drain 期间 admission 权威检查拒绝新准入）；并发 cancel 在
+    // lifecycle_cv_ 上等 drain 完成——任意 cancel 返回 ⇒ 目标线程已 join
+    // 终止。已进入 owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
     set_state_stopping();
     std::thread victim;
-    bool drain = false;
+    bool has_victim = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        // 失效水位与 admission ticket 同锁互斥：本临界区之后的准入 ticket
-        // 必然大于水位（合法继续），之前的准入必然 stale。
         cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
-        if (worker_.joinable()) {
-            victim = std::move(worker_);
-            drain_in_progress_ = true;
-            drain = true;
+#ifdef DEVICE_AGENT_TESTING
+        if (drain_started_for_test_) {
+            drain_started_for_test_();
         }
+#endif
+        has_victim = take_worker_for_drain_locked(victim);
     }
-    if (drain) {
-        // 锁外 join（worker 收尾路径会取 mu_）；drain 屏障使 admission
-        // 权威检查在此期间拒绝新准入。
-        victim.join();
+    if (has_victim) {
+        finish_worker_drain(victim);
     } else {
-        // 无 victim：并发 cancel 正在 drain（或无 in-flight）——等待其
-        // 完成，保证本 cancel 返回时目标线程已终止。
         std::unique_lock<std::mutex> lock(mu_);
 #ifdef DEVICE_AGENT_TESTING
         if (drain_wait_entered_for_test_) {
@@ -1284,26 +1290,54 @@ void P2PDownloadManager::cancel() {
         }
 #endif
         lifecycle_cv_.wait(lock, [&] { return !drain_in_progress_; });
-    }
-    {
-        // ── drain 解除 + 收尾清理：同一 mu_ 线性化边界（B5-05 二次窗口②）
-        // ── admission_counter_ 只在锁内读取；水位仍覆盖当前准入时才清理
-        // downloading_/state 并切 idle——新代（ticket > 水位）不被旧 cancel
-        // 覆盖，也不存在解锁后的 post-unlock idle 覆盖窗口。
-        std::lock_guard<std::mutex> lock(mu_);
-        drain_in_progress_ = false;
-        lifecycle_cv_.notify_all();
-#ifdef DEVICE_AGENT_TESTING
-        if (cancel_cleanup_gate_for_test_) {
-            cancel_cleanup_gate_for_test_();
-        }
-#endif
-        if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
-            downloading_.store(false);
-            set_state_idle();
-        }
+        // drain 完成后目标请求已终止；drainer 已按水位条件化清理，此处
+        // 无需重复（防御性清理由 drain 路径统一负责）。
     }
 }
+
+bool P2PDownloadManager::take_worker_for_drain_locked(std::thread& victim_out) {
+    if (!worker_.joinable()) {
+        return false;
+    }
+    victim_out = std::move(worker_);
+    drain_in_progress_ = true;
+    return true;
+}
+
+void P2PDownloadManager::finish_worker_drain(std::thread& victim) {
+    // 锁外 join：worker 收尾路径（completion/idle）会取 mu_。
+    if (victim.joinable()) {
+        victim.join();
+    }
+    // 同一 mu_ 边界：drain 解除 + 水位条件化清理 + idle。ticket > 水位的
+    // 新代（drain 解除后准入）不被本收尾覆盖。
+    std::lock_guard<std::mutex> lock(mu_);
+    drain_in_progress_ = false;
+    lifecycle_cv_.notify_all();
+#ifdef DEVICE_AGENT_TESTING
+    if (cancel_cleanup_gate_for_test_) {
+        // 确定性 cleanup gate（持 mu_）：阻塞期间新准入无法越过同锁边界；
+        // 放行后本收尾先于新准入完成（G4 断言）。
+        cancel_cleanup_gate_for_test_();
+    }
+#endif
+    if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+        downloading_.store(false);
+        set_state_idle();
+    }
+}
+
+#ifdef DEVICE_AGENT_TESTING
+void P2PDownloadManager::set_drain_started_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
+    drain_started_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_admission_attempt_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
+    admission_attempt_for_test_ = std::move(gate);
+}
+#endif
 
 bool P2PDownloadManager::is_downloading() const {
     return downloading_.load();
@@ -1344,23 +1378,28 @@ void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
 }
 
 void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
     handoff_gate_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
     admission_gate_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_test_peer_endpoints_for_test(
         std::vector<lt::tcp::endpoint> endpoints) {
+    std::lock_guard<std::mutex> lock(mu_);
     test_peer_endpoints_ = std::move(endpoints);
 }
 
 void P2PDownloadManager::set_drain_wait_entered_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
     drain_wait_entered_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_cancel_cleanup_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
     cancel_cleanup_gate_for_test_ = std::move(gate);
 }
 
@@ -1371,6 +1410,7 @@ int P2PDownloadManager::listen_port_for_test() const {
 }
 
 void P2PDownloadManager::set_exit_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(mu_);
     exit_gate_for_test_ = std::move(gate);
 }
 #endif
@@ -1427,15 +1467,23 @@ void P2PDownloadManager::refresh_policy_from_config() {
 }
 
 void P2PDownloadManager::join_worker() {
-    std::thread worker;
+    // B5-05：download() 准入前的旧 worker 回收走与 cancel 相同的 drain
+    // 协议——任何从共享 worker_ 移出 joinable worker 的路径都先发布
+    // drain，锁外 join，再在同一 mu_ 边界解除并条件化清理；并发 cancel
+    // 因此不会因 worker_ 为空而提前返回。
+    std::thread victim;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        if (!worker_.joinable()) {
+        if (!take_worker_for_drain_locked(victim)) {
             return;
         }
-        worker = std::move(worker_);
+#ifdef DEVICE_AGENT_TESTING
+        if (drain_started_for_test_) {
+            drain_started_for_test_();
+        }
+#endif
     }
-    worker.join();
+    finish_worker_drain(victim);
 }
 
 bool P2PDownloadManager::download_via_http_fallback(const std::string& url,
@@ -1517,12 +1565,20 @@ bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
         candidate.ratio_limit = seeding_policy_.ratio_limit;
     }
 #ifdef DEVICE_AGENT_TESTING
-    if (handoff_gate_for_test_) {
-        // B5-05 gate B 确定性窗口：candidate 已构造、最终 commit（validity
-        // 校验 + Admit）未发生。窗口内 cancel() 的失效递增与下方 commit 同
-        // 锁互斥——cancel 赢则 commit 判 stale 丢弃；commit 赢则线性化明确
-        // 早于 cancel，seed 保留。
-        handoff_gate_for_test_();
+    {
+        // hook 读取与 setter 同锁；gate 本体锁外调用。B5-05 gate B 确定性
+        // 窗口：candidate 已构造、最终 commit（validity 校验 + Admit）未
+        // 发生。窗口内 cancel() 的失效递增与下方 commit 同锁互斥——cancel
+        // 赢则 commit 判 stale 丢弃；commit 赢则线性化明确早于 cancel，
+        // seed 保留。
+        std::function<void()> handoff_gate;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            handoff_gate = handoff_gate_for_test_;
+        }
+        if (handoff_gate) {
+            handoff_gate();
+        }
     }
 #endif
     {
@@ -1676,21 +1732,6 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
-#ifdef DEVICE_AGENT_TESTING
-                    // 确定性 peer 接入（测试基建）：add 后外连注入的
-                    // endpoint（download 角色 incoming=off，peer 必须由
-                    // manager 外连；seeder 端 incoming=on 已就绪）。少量重试
-                    // 覆盖慢速环境（TSAN/CI）下对端 accept 的就绪窗口。
-                    for (int attempt = 0; attempt < 5; ++attempt) {
-                        for (const auto& endpoint : test_peer_endpoints_) {
-                            handle.connect_peer(endpoint);
-                        }
-                        if (attempt + 1 < 5) {
-                            std::this_thread::sleep_for(
-                                std::chrono::milliseconds(200));
-                        }
-                    }
-#endif
                     // 初始 throttle 与 on_network_changed 共用同一
                     // seeding_allowed_on_network 判定（RV-20260831-WIN-P2P-A-04）：
                     // 同一把锁内取 network type + seeding policy 快照，锁外调
@@ -1709,6 +1750,48 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             !seeding_allowed_on_network(network_type, policy),
                             policy);
                     }
+#ifdef DEVICE_AGENT_TESTING
+                    // 确定性 peer 接入（测试基建）：handle 注册后由分离线程
+                    // 外连注入的 endpoint（download 角色 incoming=off，peer
+                    // 必须由 manager 外连；seeder 端 incoming=on 已就绪）。
+                    // 重试覆盖对端 accept 就绪窗口；worker 不被阻塞，alert
+                    // 处理与 completion 时序不受影响。未注入 endpoint 的
+                    // 测试零开销。
+                    std::vector<lt::tcp::endpoint> test_endpoints;
+                    {
+                        std::lock_guard<std::mutex> lock(mu_);
+                        test_endpoints = test_peer_endpoints_;
+                    }
+                    if (!test_endpoints.empty()) {
+                        auto connect_handle = handle;
+                        auto endpoints_copy = std::move(test_endpoints);
+                        // 停止标志由 worker 生命周期持有：worker 退出下载
+                        // 循环（cancel/完成/失败）即置位，重试线程随之退出。
+                        auto stop_flag = std::make_shared<std::atomic<bool>>(false);
+                        test_connect_stop_ = stop_flag;
+                        test_connect_threads_.emplace_back(
+                            [connect_handle, endpoints_copy, stop_flag] {
+                            try {
+                                for (int attempt = 0; attempt < 25; ++attempt) {
+                                    if (!connect_handle.is_valid() ||
+                                            stop_flag->load()) {
+                                        return;
+                                    }
+                                    for (const auto& endpoint : endpoints_copy) {
+                                        connect_handle.connect_peer(endpoint);
+                                    }
+                                    if (connect_handle.status().num_peers > 0) {
+                                        return;
+                                    }
+                                    std::this_thread::sleep_for(
+                                        std::chrono::milliseconds(400));
+                                }
+                            } catch (...) {
+                                // 测试基建线程：异常吞掉，不许 terminate。
+                            }
+                        });
+                    }
+#endif
                 }
             }
             if (error.empty() && env_int_or_default("P2P_PEER_WAIT_SECONDS", 0) > 0) {
@@ -2025,11 +2108,19 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
     downloading_.store(false);
 #ifdef DEVICE_AGENT_TESTING
-    if (exit_gate_for_test_) {
-        // B5-05 drain gate：worker 已写 downloading_=false、但 completion/
-        // idle/线程退出尚未完成的 joinable 收尾区间——新准入由 drain 拒绝、
-        // 并发 cancel 在 drain 上等待（G3 断言该区间被屏障覆盖）。
-        exit_gate_for_test_();
+    {
+        // hook 读取与 setter 同锁；gate 本体锁外调用——B5-05 drain gate：
+        // worker 已写 downloading_=false、但 completion/idle/线程退出尚未
+        // 完成的 joinable 收尾区间——新准入由 drain 拒绝、并发 cancel 在
+        // drain 上等待（G3/G5 断言该区间被屏障覆盖）。
+        std::function<void()> exit_gate;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            exit_gate = exit_gate_for_test_;
+        }
+        if (exit_gate) {
+            exit_gate();
+        }
     }
 #endif
     const auto final_counters = peer_counter_totals(peer_counter_ledger);

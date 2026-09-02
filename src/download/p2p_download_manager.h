@@ -141,6 +141,13 @@ public:
     // 水位条件化清理 + idle，持 mu_）入口——新准入在此期间无法越过
     // （同锁互斥），证明不存在 post-unlock idle 覆盖。
     void set_cancel_cleanup_gate_for_test(std::function<void()> gate);
+    // B5-05 drain 提取到达信号（确定性）：cancel/join_worker 从共享
+    // worker_ 提取 joinable victim 并发布 drain 时调用（持 mu_）——证明
+    // victim 已被某一路径认领，新准入只能面对 drain。
+    void set_drain_started_for_test(std::function<void()> gate);
+    // B5-05 admission-attempt 到达信号（确定性）：download() 入口调用——
+    // 配合 cleanup gate 证明新准入被同锁拒绝而非未到达。
+    void set_admission_attempt_for_test(std::function<void()> gate);
     // 测试用：manager session 的实际 listen 端口（未创建 session 返回 0）。
     int listen_port_for_test() const;
     // 测试用确定性 peer 接入：worker 在 add_torrent 成功后对这些 endpoint
@@ -154,6 +161,14 @@ private:
                       CompleteCallback on_complete,
                       std::uint64_t generation);
     void join_worker();
+    // B5-05 唯一 drain/join 路径（消除 worker ownership 旁路）：
+    //   - take_worker_for_drain_locked：mu_ 内从共享 worker_ 提取 joinable
+    //     worker 并发布 drain；返回是否提取到（未提取 ⇒ 无 in-flight）。
+    //   - finish_worker_drain：锁外 join victim，随后在同一 mu_ 边界解除
+    //     drain 并按水位条件化清理 downloading_/state（ticket > 水位的新代
+    //     不被覆盖）。cancel 与 download()->join_worker 共用本路径。
+    bool take_worker_for_drain_locked(std::thread& victim_out);
+    void finish_worker_drain(std::thread& victim);
     // HTTP fallback 分发：优先注入实现，否则平台默认实现。
     bool download_via_http_fallback(const std::string& url,
                                     const std::string& output_path,
@@ -214,7 +229,14 @@ private:
     std::function<void()> exit_gate_for_test_;
     std::function<void()> drain_wait_entered_for_test_;
     std::function<void()> cancel_cleanup_gate_for_test_;
+    std::function<void()> drain_started_for_test_;
+    std::function<void()> admission_attempt_for_test_;
     std::vector<lt::tcp::endpoint> test_peer_endpoints_;
+    // 测试 peer 接入的重试线程：manager 析构时先 join（见 ~P2PDownloadManager），
+    // 避免 detached 线程在 session 销毁后调用 handle。
+    std::vector<std::thread> test_connect_threads_;
+    // worker 生命周期持有的重试停止标志（TESTING）。
+    std::shared_ptr<std::atomic<bool>> test_connect_stop_;
 #endif
 };
 
