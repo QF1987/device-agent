@@ -151,6 +151,12 @@ public:
     void cancel() override;
     bool is_downloading() const override;
 
+#ifdef DEVICE_AGENT_TESTING
+    // 测试确定性 peer 接入：转发给 inner P2PDownloadManager（B5-S2）。
+    void set_p2p_test_peer_endpoints_for_test(
+        std::vector<lt::tcp::endpoint> endpoints);
+#endif
+
 private:
     void join_worker();
     bool should_use_p2p(const DownloadRequest& req) const;

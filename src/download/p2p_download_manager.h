@@ -130,6 +130,15 @@ public:
     // 发布、mu_ 在手）的窗口入口——并发 cancel() 必然阻塞到临界区结束，
     // 不存在「cancel 先返回、请求随后继续」。
     void set_admission_gate_for_test(std::function<void()> gate);
+    // B5-05 drain gate（确定性）：worker 终态收尾（downloading_=false 与
+    // idle 之前）的窗口入口——窗口内新准入与第二个 cancel 均不得越过
+    // drain；放行后顺序、终态与新代状态不被旧收尾覆盖。
+    void set_exit_gate_for_test(std::function<void()> gate);
+    // 测试用：manager session 的实际 listen 端口（未创建 session 返回 0）。
+    int listen_port_for_test() const;
+    // 测试用确定性 peer 接入：worker 在 add_torrent 成功后对这些 endpoint
+    // connect_peer（download 角色 incoming=off，peer 必须由 manager 外连）。
+    void set_test_peer_endpoints_for_test(std::vector<lt::tcp::endpoint> endpoints);
 #endif
 
 private:
@@ -181,6 +190,11 @@ private:
     //   - worker 侧以 cancel_epoch_ 原子镜像做无锁 stale 轮询。
     std::atomic<std::uint64_t> cancel_epoch_{0};
     std::uint64_t admission_counter_{0};  // mu_ 保护
+    // B5-05 drain 协议：cancel 锁外 join victim 期间置位；参与 admission
+    // 权威检查（drain 期间拒绝新准入），第二个 cancel 在 lifecycle_cv_ 上
+    // 等待 drain 完成——旧收尾不可能清除其后新准入的 downloading/state。
+    bool drain_in_progress_{false};  // mu_ 保护
+    std::condition_variable lifecycle_cv_;
     HttpFallback http_fallback_;
     Callbacks callbacks_;
     P2PSeedingStateMachine state_machine_;
@@ -190,6 +204,8 @@ private:
     // B5-05 gate A：admission 临界区内（ticket 已分配、worker 未发布）的
     // 确定性窗口入口。窗口内持 mu_，并发 cancel() 必然阻塞到临界区结束。
     std::function<void()> admission_gate_for_test_;
+    std::function<void()> exit_gate_for_test_;
+    std::vector<lt::tcp::endpoint> test_peer_endpoints_;
 #endif
 };
 

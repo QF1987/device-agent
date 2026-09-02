@@ -1216,7 +1216,9 @@ void P2PDownloadManager::download(const DownloadRequest& req,
         // 发布原子完成。「已准入但未发布」状态对外不可见——cancel 与本
         // 临界区互斥（RV-20260901-WIN-P2P-B5-05 窗口①）。
         std::unique_lock<std::mutex> lock(mu_);
-        if (downloading_.load()) {
+        // drain 期间同样拒绝准入：旧 victim 的收尾尚未完成，此时准入会被
+        // 旧收尾的 downloading_/state 清除所覆盖（B5-05 drain 协议）。
+        if (downloading_.load() || drain_in_progress_) {
             lock.unlock();
             if (on_complete) {
                 on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
@@ -1242,26 +1244,54 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 }
 
 void P2PDownloadManager::cancel() {
-    // ── B5-05 线性化协议：invalidation ───────────────────────────
+    // ── B5-05 线性化协议：invalidation + drain ────────────────────
     // 失效水位与 admission ticket 同锁互斥：cancel 临界区之后的新准入
     // ticket 必然大于水位（合法继续），之前的准入必然 stale。victim
-    // worker 移出锁外 join——cancel 返回 ⇒ 被失效请求必然已终止，且不会
-    // 覆盖其后新准入的 worker_（RV-20260901-WIN-P2P-B5-05）。已进入
-    // owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
+    // worker 移出锁外 join，期间置 drain_in_progress_：
+    //   - admission 权威检查拒绝 drain 中的新准入（旧收尾不得覆盖新代）；
+    //   - 并发 cancel 在 lifecycle_cv_ 上等待 drain 完成——任意 cancel 返回
+    //     时其目标请求已终止；
+    //   - drain 后的清理按水位条件化（ticket > 水位的新准入不被覆盖）。
+    // 已进入 owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
+    set_state_stopping();
     std::thread victim;
+    bool drain = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
         cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
-        set_state_stopping();
         if (worker_.joinable()) {
             victim = std::move(worker_);
+            // 收尾（downloading_=false/idle）未完成 ⇒ 需要 drain 屏障：
+            // drain 期间 admission 权威检查拒绝新准入。
+            drain = downloading_.load();
+            if (drain) {
+                drain_in_progress_ = true;
+            }
         }
     }
+    // victim 一律锁外 join（drain=true：等旧收尾完成；false：worker 已自然
+    // 结束，立即返回）。无 victim：并发 cancel 正在 drain（或无 in-flight）
+    // ——等待其完成，保证本 cancel 返回时目标请求已终止。
     if (victim.joinable()) {
         victim.join();
+    } else {
+        std::unique_lock<std::mutex> lock(mu_);
+        lifecycle_cv_.wait(lock, [&] { return !drain_in_progress_; });
     }
-    downloading_.store(false);
-    set_state_idle();
+    {
+        // 收尾清理按水位条件化：drain 期间准入被拒绝（drain 参与 admission
+        // 权威检查），条件恒真；「worker 已自然结束、无 drain」路径上可能
+        // 有新准入（ticket > 水位），不得覆盖其 downloading_ 状态。
+        std::lock_guard<std::mutex> lock(mu_);
+        drain_in_progress_ = false;
+        lifecycle_cv_.notify_all();
+        if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+            downloading_.store(false);
+        }
+    }
+    if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+        set_state_idle();
+    }
 }
 
 bool P2PDownloadManager::is_downloading() const {
@@ -1308,6 +1338,21 @@ void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
 
 void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate) {
     admission_gate_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_test_peer_endpoints_for_test(
+        std::vector<lt::tcp::endpoint> endpoints) {
+    test_peer_endpoints_ = std::move(endpoints);
+}
+
+int P2PDownloadManager::listen_port_for_test() const {
+    // session_handle 接口线程安全（内部 post 到 session 线程）。
+    std::lock_guard<std::mutex> lock(mu_);
+    return session_ ? static_cast<int>(session_->listen_port()) : 0;
+}
+
+void P2PDownloadManager::set_exit_gate_for_test(std::function<void()> gate) {
+    exit_gate_for_test_ = std::move(gate);
 }
 #endif
 
@@ -1612,6 +1657,14 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
+#ifdef DEVICE_AGENT_TESTING
+                    // 确定性 peer 接入（测试基建）：add 后立即外连注入的
+                    // endpoint（download 角色 incoming=off，peer 必须由
+                    // manager 外连；seeder 端 incoming=on 已就绪）。
+                    for (const auto& endpoint : test_peer_endpoints_) {
+                        handle.connect_peer(endpoint);
+                    }
+#endif
                     // 初始 throttle 与 on_network_changed 共用同一
                     // seeding_allowed_on_network 判定（RV-20260831-WIN-P2P-A-04）：
                     // 同一把锁内取 network type + seeding policy 快照，锁外调
@@ -1944,6 +1997,14 @@ void P2PDownloadManager::run_download(DownloadRequest req,
         error = "unknown p2p download error";
     }
 
+#ifdef DEVICE_AGENT_TESTING
+    if (exit_gate_for_test_) {
+        // B5-05 drain gate：终态收尾（downloading_=false / idle）之前的
+        // 确定性窗口——旧 worker 在此阻塞时，新准入与并发 cancel 均不得
+        // 越过 drain（见 admission 检查与 cancel 等待路径）。
+        exit_gate_for_test_();
+    }
+#endif
     downloading_.store(false);
     const auto final_counters = peer_counter_totals(peer_counter_ledger);
     const int64_t final_web_seed_bytes =

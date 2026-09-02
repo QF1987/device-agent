@@ -308,6 +308,12 @@ private:
 }  // namespace
 
 int main() {
+    // S2 传输场景：manager session 监听 loopback（port 由 seeder 直连目标使用）。
+#ifdef _WIN32
+    ::_putenv("P2P_LISTEN_INTERFACES=127.0.0.1:0");
+#else
+    ::setenv("P2P_LISTEN_INTERFACES", "127.0.0.1:0", 1);
+#endif
     using device_agent::DownloadRequest;
     using device_agent::NetworkPolicy;
     using device_agent::NetworkType;
@@ -870,7 +876,7 @@ int main() {
     }
 
     std::fprintf(stderr, "[TEST] 14 s2 owner handoff end-to-end\n");
-    // 14. B5-S2 端到端：注入已启动 owner（tracker+seeder 发现），A 完成即
+    // 14. B5-S2 端到端：注入已启动 owner（seeder connect_peer 直连），A 完成即
     // handoff（owner 持 seed、外层 admission 释放）；B 随后走 P2P 完成而
     // 不是 `already active` → HTTP fallback（http.calls 不增）；外层
     // terminal-once；owner cap=2 时 C 淘汰最老 seed。
@@ -883,8 +889,6 @@ int main() {
 
         const std::string s2_dir = make_test_dir("s2-e2e");
         test_mkdir(s2_dir);
-        LoopbackTrackerServer tracker;
-        assert_true(tracker.start());
 
         std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
         assert_true(owner != nullptr);
@@ -899,15 +903,21 @@ int main() {
         const char* names[3] = {"s2e_a.bin", "s2e_b.bin", "s2e_c.bin"};
         for (int i = 0; i < 3; ++i) {
             DownloadRequest req;
-            req.torrent_url = make_tracked_torrent(s2_dir, names[i], 64 * 1024,
-                                                   static_cast<unsigned char>(0x81 + i),
-                                                   tracker.port());
+            req.torrent_url = make_plain_torrent(s2_dir, names[i], 64 * 1024,
+                                                 static_cast<unsigned char>(0x81 + i));
             assert_true(!req.torrent_url.empty());
             req.dest_path = s2_dir + "/dl";
             test_mkdir(req.dest_path);
             req.file_size = 64 * 1024;
             auto seeder = make_bt_seeder(req.torrent_url, s2_dir);
             assert_true(seeder != nullptr);
+            assert_true(s2_wait_for([&] {
+                return seeder->listen_port() > 0;
+            }, 5000));
+            manager.set_p2p_test_peer_endpoints_for_test(
+                {lt::tcp::endpoint(lt::make_address("127.0.0.1"),
+                                   static_cast<std::uint16_t>(
+                                       seeder->listen_port()))});
 
             CompletionCapture capture;
             manager.download(req, nullptr,
@@ -936,7 +946,6 @@ int main() {
             }, 5000));
             seeder.reset();
         }
-        tracker.stop();
         owner->Stop();
         P2PConfigStore::set_global(nullptr);
     }

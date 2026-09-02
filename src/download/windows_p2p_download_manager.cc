@@ -293,6 +293,13 @@ WindowsP2PDownloadManager::~WindowsP2PDownloadManager() {
     cancel();
 }
 
+#ifdef DEVICE_AGENT_TESTING
+void WindowsP2PDownloadManager::set_p2p_test_peer_endpoints_for_test(
+        std::vector<lt::tcp::endpoint> endpoints) {
+    p2p_.set_test_peer_endpoints_for_test(std::move(endpoints));
+}
+#endif
+
 bool WindowsP2PDownloadManager::should_use_p2p(const DownloadRequest& req) const {
     if (req.magnet_uri.empty() && req.torrent_url.empty()) {
         return false;
