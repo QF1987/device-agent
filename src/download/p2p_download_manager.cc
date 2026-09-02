@@ -1166,12 +1166,11 @@ void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
 #ifdef DEVICE_AGENT_TESTING
-    {
-        // hook 读取与 setter 同锁；gate 本体锁外调用（可能阻塞测试线程）。
-        std::lock_guard<std::mutex> lock(mu_);
-        if (admission_attempt_for_test_) {
-            admission_attempt_for_test_();
-        }
+    // admission-arrived seam：在任何 mu_ 获取之前锁外调用（hook_mu_ 同步
+    // 拷贝）——cleanup gate 持有 lifecycle mu_ 期间该信号仍可发出，证明
+    // 新 download 已发起并将面对 mu_ 边界（G4 断言）。
+    if (auto attempt_gate = copy_hook_for_test(admission_attempt_for_test_)) {
+        attempt_gate();
     }
 #endif
     refresh_policy_from_config();
@@ -1250,8 +1249,8 @@ void P2PDownloadManager::download(const DownloadRequest& req,
 #ifdef DEVICE_AGENT_TESTING
         // gate A 确定性窗口：ticket 已分配、worker 未发布、mu_ 在手——
         // 并发 cancel() 只能阻塞到本临界区结束（不得先返回再放行请求）。
-        if (admission_gate_for_test_) {
-            admission_gate_for_test_();
+        if (auto admission_gate = copy_hook_for_test(admission_gate_for_test_)) {
+            admission_gate();
         }
 #endif
         ensure_session_locked();
@@ -1274,8 +1273,8 @@ void P2PDownloadManager::cancel() {
         std::lock_guard<std::mutex> lock(mu_);
         cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
 #ifdef DEVICE_AGENT_TESTING
-        if (drain_started_for_test_) {
-            drain_started_for_test_();
+        if (auto drain_started_gate = copy_hook_for_test(drain_started_for_test_)) {
+            drain_started_gate();
         }
 #endif
         has_victim = take_worker_for_drain_locked(victim);
@@ -1285,8 +1284,8 @@ void P2PDownloadManager::cancel() {
     } else {
         std::unique_lock<std::mutex> lock(mu_);
 #ifdef DEVICE_AGENT_TESTING
-        if (drain_wait_entered_for_test_) {
-            drain_wait_entered_for_test_();
+        if (auto wait_entered_gate = copy_hook_for_test(drain_wait_entered_for_test_)) {
+            wait_entered_gate();
         }
 #endif
         lifecycle_cv_.wait(lock, [&] { return !drain_in_progress_; });
@@ -1315,10 +1314,10 @@ void P2PDownloadManager::finish_worker_drain(std::thread& victim) {
     drain_in_progress_ = false;
     lifecycle_cv_.notify_all();
 #ifdef DEVICE_AGENT_TESTING
-    if (cancel_cleanup_gate_for_test_) {
+    if (auto cleanup_gate = copy_hook_for_test(cancel_cleanup_gate_for_test_)) {
         // 确定性 cleanup gate（持 mu_）：阻塞期间新准入无法越过同锁边界；
         // 放行后本收尾先于新准入完成（G4 断言）。
-        cancel_cleanup_gate_for_test_();
+        cleanup_gate();
     }
 #endif
     if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
@@ -1328,13 +1327,19 @@ void P2PDownloadManager::finish_worker_drain(std::thread& victim) {
 }
 
 #ifdef DEVICE_AGENT_TESTING
+std::function<void()> P2PDownloadManager::copy_hook_for_test(
+        const std::function<void()>& hook) const {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    return hook;
+}
+
 void P2PDownloadManager::set_drain_started_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     drain_started_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_admission_attempt_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     admission_attempt_for_test_ = std::move(gate);
 }
 #endif
@@ -1378,12 +1383,12 @@ void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
 }
 
 void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     handoff_gate_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     admission_gate_for_test_ = std::move(gate);
 }
 
@@ -1394,12 +1399,12 @@ void P2PDownloadManager::set_test_peer_endpoints_for_test(
 }
 
 void P2PDownloadManager::set_drain_wait_entered_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     drain_wait_entered_for_test_ = std::move(gate);
 }
 
 void P2PDownloadManager::set_cancel_cleanup_gate_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     cancel_cleanup_gate_for_test_ = std::move(gate);
 }
 
@@ -1410,7 +1415,7 @@ int P2PDownloadManager::listen_port_for_test() const {
 }
 
 void P2PDownloadManager::set_exit_gate_for_test(std::function<void()> gate) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<std::mutex> lock(hook_mu_);
     exit_gate_for_test_ = std::move(gate);
 }
 #endif
@@ -1478,8 +1483,8 @@ void P2PDownloadManager::join_worker() {
             return;
         }
 #ifdef DEVICE_AGENT_TESTING
-        if (drain_started_for_test_) {
-            drain_started_for_test_();
+        if (auto drain_started_gate = copy_hook_for_test(drain_started_for_test_)) {
+            drain_started_gate();
         }
 #endif
     }
@@ -1566,17 +1571,12 @@ bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
     }
 #ifdef DEVICE_AGENT_TESTING
     {
-        // hook 读取与 setter 同锁；gate 本体锁外调用。B5-05 gate B 确定性
-        // 窗口：candidate 已构造、最终 commit（validity 校验 + Admit）未
-        // 发生。窗口内 cancel() 的失效递增与下方 commit 同锁互斥——cancel
-        // 赢则 commit 判 stale 丢弃；commit 赢则线性化明确早于 cancel，
-        // seed 保留。
-        std::function<void()> handoff_gate;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            handoff_gate = handoff_gate_for_test_;
-        }
-        if (handoff_gate) {
+        // hook 读取与 setter 同步于 hook_mu_（独立于 lifecycle mu_）；gate
+        // 本体锁外调用。B5-05 gate B 确定性窗口：candidate 已构造、最终
+        // commit（validity 校验 + Admit）未发生。窗口内 cancel() 的失效
+        // 递增与下方 commit 同锁互斥——cancel 赢则 commit 判 stale 丢弃；
+        // commit 赢则线性化明确早于 cancel，seed 保留。
+        if (auto handoff_gate = copy_hook_for_test(handoff_gate_for_test_)) {
             handoff_gate();
         }
     }
@@ -2109,16 +2109,12 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     downloading_.store(false);
 #ifdef DEVICE_AGENT_TESTING
     {
-        // hook 读取与 setter 同锁；gate 本体锁外调用——B5-05 drain gate：
-        // worker 已写 downloading_=false、但 completion/idle/线程退出尚未
-        // 完成的 joinable 收尾区间——新准入由 drain 拒绝、并发 cancel 在
-        // drain 上等待（G3/G5 断言该区间被屏障覆盖）。
-        std::function<void()> exit_gate;
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            exit_gate = exit_gate_for_test_;
-        }
-        if (exit_gate) {
+        // hook 读取与 setter 同步于 hook_mu_（独立于 lifecycle mu_）；gate
+        // 本体锁外调用——B5-05 drain gate：worker 已写 downloading_=false、
+        // 但 completion/idle/线程退出尚未完成的 joinable 收尾区间——新准入
+        // 由 drain 拒绝、并发 cancel 在 drain 上等待（G3/G5 断言该区间被
+        // 屏障覆盖）。
+        if (auto exit_gate = copy_hook_for_test(exit_gate_for_test_)) {
             exit_gate();
         }
     }

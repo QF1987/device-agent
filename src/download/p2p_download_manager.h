@@ -145,8 +145,10 @@ public:
     // worker_ 提取 joinable victim 并发布 drain 时调用（持 mu_）——证明
     // victim 已被某一路径认领，新准入只能面对 drain。
     void set_drain_started_for_test(std::function<void()> gate);
-    // B5-05 admission-attempt 到达信号（确定性）：download() 入口调用——
-    // 配合 cleanup gate 证明新准入被同锁拒绝而非未到达。
+    // B5-05 admission-attempt 到达信号（确定性）：download() 入口、任何
+    // mu_ 获取之前锁外调用（hook_mu_ 同步拷贝）——cleanup gate 持有
+    // lifecycle mu_ 期间信号仍可发出，证明新 download 已发起并将面对
+    // mu_ 边界（G4）；不得以线程 started flag + sleep 冒充到达。
     void set_admission_attempt_for_test(std::function<void()> gate);
     // 测试用：manager session 的实际 listen 端口（未创建 session 返回 0）。
     int listen_port_for_test() const;
@@ -169,6 +171,14 @@ private:
     //     不被覆盖）。cancel 与 download()->join_worker 共用本路径。
     bool take_worker_for_drain_locked(std::thread& victim_out);
     void finish_worker_drain(std::thread& victim);
+#ifdef DEVICE_AGENT_TESTING
+    // hook_mu_ 下安全拷贝 testing gate：所有 *_for_test_ hook 的 setter 与
+    // 读取点统一以 hook_mu_ 同步（独立于 lifecycle mu_），拷贝后按各 gate
+    // 的锁语义调用——锁外 gate（admission_attempt/handoff/exit）锁外调用；
+    // 持锁 gate（admission/drain_started/drain_wait_entered/cancel_cleanup）
+    // 保持在 mu_ 临界区内调用（其阻塞窗口即被测窗口）。
+    std::function<void()> copy_hook_for_test(const std::function<void()>& hook) const;
+#endif
     // HTTP fallback 分发：优先注入实现，否则平台默认实现。
     bool download_via_http_fallback(const std::string& url,
                                     const std::string& output_path,
@@ -222,6 +232,10 @@ private:
     P2PSeedingStateMachine state_machine_;
     std::shared_ptr<P2PSeedingOwner> seeding_owner_;
 #ifdef DEVICE_AGENT_TESTING
+    // TESTING hook 专用锁：与 lifecycle mu_ 完全独立——cleanup gate 持有
+    // mu_ 期间 admission-arrived seam 的读取/调用不受阻（TSAN 同步不依赖
+    // 正被持有的 mu_）。锁序恒为 mu_ → hook_mu_（反向不存在）。
+    mutable std::mutex hook_mu_;
     std::function<void()> handoff_gate_for_test_;
     // B5-05 gate A：admission 临界区内（ticket 已分配、worker 未发布）的
     // 确定性窗口入口。窗口内持 mu_，并发 cancel() 必然阻塞到临界区结束。
