@@ -946,14 +946,14 @@ int main() {
 
             std::mutex gate_mu;
             std::condition_variable gate_cv;
-            bool gate_entered = false;
-            bool gate_release = false;
+            std::atomic<bool> gate_entered{false};
+            std::atomic<bool> gate_release{false};
             manager.set_handoff_gate_for_test([&] {
                 std::unique_lock<std::mutex> lock(gate_mu);
                 gate_entered = true;
                 gate_cv.notify_all();
                 gate_cv.wait_for(lock, std::chrono::seconds(30),
-                                 [&] { return gate_release; });
+                                 [&] { return gate_release.load(); });
             });
 
             device_agent::DownloadRequest req;
@@ -982,9 +982,9 @@ int main() {
             {
                 std::unique_lock<std::mutex> lock(gate_mu);
                 gate_cv.wait_for(lock, std::chrono::seconds(10),
-                                 [&] { return gate_entered; });
+                                 [&] { return gate_entered.load(); });
             }
-            assert_true(gate_entered);
+            assert_true(gate_entered.load());
 
             std::atomic<bool> cancel_started{false};
             std::thread canceller([&] {
@@ -1027,8 +1027,8 @@ int main() {
 
             std::mutex gate_mu;
             std::condition_variable gate_cv;
-            bool gate_entered = false;
-            bool gate_release = false;
+            std::atomic<bool> gate_entered{false};
+            std::atomic<bool> gate_release{false};
             manager.set_admission_gate_for_test([&] {
                 std::unique_lock<std::mutex> lock(gate_mu);
                 gate_entered = true;
@@ -1036,7 +1036,7 @@ int main() {
                 // admission gate 在 main 线程的 download() 内执行（持 mu_）；
                 // release 由 watcher 线程在负向断言后置位。
                 gate_cv.wait_for(lock, std::chrono::seconds(30),
-                                 [&] { return gate_release; });
+                                 [&] { return gate_release.load(); });
             });
 
             device_agent::DownloadRequest req;
@@ -1056,7 +1056,7 @@ int main() {
                 {
                     std::unique_lock<std::mutex> lock(gate_mu);
                     gate_cv.wait_for(lock, std::chrono::seconds(10),
-                                     [&] { return gate_entered; });
+                                     [&] { return gate_entered.load(); });
                 }
                 cancel_started.store(true);
                 manager.cancel();
@@ -1082,7 +1082,7 @@ int main() {
                            const device_agent::DownloadCompletionTelemetry& t) {
                     capture.store(ok, err, &t);
                 });
-            assert_true(gate_entered);  // ticket 已分配、worker 未发布
+            assert_true(gate_entered.load());  // ticket 已分配、worker 未发布
 
             canceller.join();
             watcher.join();
@@ -1203,10 +1203,12 @@ int main() {
         }
 
         std::fprintf(stderr, "[TEST] G3 drain window: new admission and second cancel wait\n");
-        // B5-05 drain 窗口（verify 残留竞争，确定性双向）：旧 victim 阻塞在
-        // 终态收尾（downloading_=false/idle 之前）时，新 download 与第二个
-        // cancel 均不得越过 drain；放行后收尾顺序完成，新代准入的
-        // downloading/completion 不被旧收尾覆盖。
+        // B5-05 drain 窗口（二次 verify 残留竞争，确定性双向）：exit gate
+        // 位于 worker 已写 downloading_=false、但 idle/线程退出未完成的
+        // joinable 收尾区间——新 download 必须仍被 drain 拒绝（此时
+        // downloading_ 已为 false，拒绝只能来自 drain 检查），第二个
+        // cancel 确定进入等待且放行前不返回；放行后收尾顺序完成，新代
+        // 准入的 downloading/completion 不被旧收尾覆盖。
         {
             const std::string dir = make_test_dir();
             std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
@@ -1216,14 +1218,14 @@ int main() {
 
             std::mutex gate_mu;
             std::condition_variable gate_cv;
-            bool gate_entered = false;
-            bool gate_release = false;
+            std::atomic<bool> gate_entered{false};
+            std::atomic<bool> gate_release{false};
             manager.set_exit_gate_for_test([&] {
                 std::unique_lock<std::mutex> lock(gate_mu);
                 gate_entered = true;
                 gate_cv.notify_all();
                 gate_cv.wait_for(lock, std::chrono::seconds(30),
-                                 [&] { return gate_release; });
+                                 [&] { return gate_release.load(); });
             });
 
             device_agent::DownloadRequest req_a;
@@ -1257,9 +1259,9 @@ int main() {
             {
                 std::unique_lock<std::mutex> lock(gate_mu);
                 gate_cv.wait_for(lock, std::chrono::seconds(10),
-                                 [&] { return gate_entered; });
+                                 [&] { return gate_entered.load(); });
             }
-            assert_true(gate_entered);
+            assert_true(gate_entered.load());
             assert_true(s2_wait_for([&] {
                 return owner->counters_for_test().active_seeds == 1;
             }, 5000));
@@ -1269,6 +1271,10 @@ int main() {
             std::atomic<bool> c1_done{false};
             std::atomic<bool> c2_started{false};
             std::atomic<bool> c2_done{false};
+            std::atomic<bool> c2_wait_entered{false};
+            manager.set_drain_wait_entered_for_test([&] {
+                c2_wait_entered.store(true);
+            });
             std::thread canceller1([&] {
                 c1_started.store(true);
                 manager.cancel();
@@ -1284,7 +1290,9 @@ int main() {
             }
             assert_true(c1_started.load() && c2_started.load());
 
-            // 负向 1：drain 期间新准入被拒绝（不得越过 drain）。
+            // 负向 1：drain 期间新准入被拒绝（不得越过 drain）。此时
+            // downloading_ 已被 worker 收尾写为 false——拒绝只能来自
+            // drain_in_progress_ 检查，证明 joinable 收尾区间被屏障覆盖。
             device_agent::DownloadRequest req_b;
             req_b.torrent_url = req_a.torrent_url;
             req_b.dest_path = req_a.dest_path;
@@ -1301,8 +1309,9 @@ int main() {
             assert_true(!ok_b);
             assert_true(err_b.find("already active") != std::string::npos);
 
-            // 负向 2：第二个 cancel 不得在 drain 期间返回（放行只由本线程
-            // 控制，drain 不可能结束）。
+            // 负向 2：第二个 cancel 确定进入 drain 等待（到达信号），且在
+            // 放行前不返回（放行只由本线程控制，drain 不可能提前结束）。
+            assert_true(s2_wait_for([&] { return c2_wait_entered.load(); }, 5000));
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
             assert_true(!c1_done.load() && !c2_done.load());
 
@@ -1362,6 +1371,115 @@ int main() {
 
             seeder_a.reset();
             seeder_c.reset();
+            manager.set_drain_wait_entered_for_test(nullptr);
+            owner->Stop();
+        }
+
+        std::fprintf(stderr, "[TEST] G4 cancel cleanup vs new admission\n");
+        // B5-05 二次窗口②（确定性）：cancel 最终清理（drain 解除 + 水位
+        // 条件化 downloading_/idle 清理，持 mu_）与新准入同锁互斥——cleanup
+        // gate 阻塞期间新准入无法越过（mu_ 互斥）；放行后 cleanup 先于新
+        // 准入完成（同一线性化边界），新代的 downloading 飞行态与
+        // terminal-once 不被旧 cancel 的 post-unlock idle 覆盖。
+        {
+            const std::string dir = make_test_dir();
+            std::shared_ptr<device_agent::P2PSeedingOwner> owner = make_s2_owner();
+            assert_true(owner != nullptr);
+            device_agent::P2PDownloadManager manager({}, s2_manager_policy(),
+                                                    nullptr, nullptr, owner);
+
+            std::mutex gate_mu;
+            std::condition_variable gate_cv;
+            std::atomic<bool> gate_entered{false};
+            std::atomic<bool> gate_release{false};
+            manager.set_cancel_cleanup_gate_for_test([&] {
+                std::unique_lock<std::mutex> lock(gate_mu);
+                gate_entered = true;
+                gate_cv.notify_all();
+                gate_cv.wait_for(lock, std::chrono::seconds(30),
+                                 [&] { return gate_release.load(); });
+            });
+
+            device_agent::DownloadRequest req_a;
+            req_a.torrent_url = make_plain_torrent(dir, "g4_a.bin", 64 * 1024,
+                                                   0xE1);
+            assert_true(!req_a.torrent_url.empty());
+            req_a.dest_path = dir + "/dl";
+            test_mkdir(req_a.dest_path);
+            req_a.file_size = 64 * 1024;
+
+            // cancel1：victim 进入 drain（A worker 在 stale 检查处退出），
+            // 随后阻塞在 cleanup gate（持 mu_）。
+            std::atomic<bool> c1_started{false};
+            std::atomic<bool> c1_done{false};
+            std::thread canceller([&] {
+                c1_started.store(true);
+                manager.cancel();
+                c1_done.store(true);
+            });
+            for (int i = 0; i < 100 && !c1_started.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            assert_true(c1_started.load());
+            assert_true(s2_wait_for([&] { return gate_entered.load(); }, 5000));
+            assert_true(gate_entered.load());  // cancel1 已在最终清理临界区内（持 mu_）
+
+            // gate 未放行：新准入无法越过 cleanup（同锁互斥）。
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            assert_true(!c1_done.load());
+
+            device_agent::DownloadRequest req_b;
+            req_b.torrent_url = make_plain_torrent(dir, "g4_b.bin", 64 * 1024,
+                                                   0xE2);
+            assert_true(!req_b.torrent_url.empty());
+            req_b.dest_path = dir + "/dl";
+            req_b.file_size = 64 * 1024;
+            auto seeder_b = make_bt_seeder(req_b.torrent_url, dir);
+            assert_true(seeder_b != nullptr);
+            assert_true(s2_wait_for([&] {
+                return seeder_b->listen_port() > 0;
+            }, 5000));
+            manager.set_test_peer_endpoints_for_test(
+                {lt::tcp::endpoint(lt::make_address("127.0.0.1"),
+                                   static_cast<std::uint16_t>(
+                                       seeder_b->listen_port()))});
+            std::atomic<int> completion_b_count{0};
+            CompletionCapture cap_b;
+            manager.download(req_b, nullptr,
+                [&](bool ok, const std::string& err,
+                    const device_agent::DownloadCompletionTelemetry& t) {
+                    completion_b_count.fetch_add(1);
+                    cap_b.store(ok, err, &t);
+                });
+
+            // 放行 cleanup → cancel1 完成清理（含条件化 idle，先于新代）→
+            // 新准入 B 获锁进入（ticket > 水位，状态不被旧收尾覆盖）。
+            {
+                std::lock_guard<std::mutex> lock(gate_mu);
+                gate_release = true;
+                gate_cv.notify_all();
+            }
+            canceller.join();
+            assert_true(c1_done.load());
+            // gate lambda 捕获块局部 gate_mu/gate_cv——manager 存活期更长，
+            // 卸载 hook 以免 dtor 路径再次调用已销毁的同步原语。
+            manager.set_cancel_cleanup_gate_for_test(nullptr);
+            assert_true(s2_wait_for([&] { return manager.is_downloading(); }, 5000));
+            // 旧 cancel 的收尾不会在新代飞行期间把它切 idle。
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            assert_true(manager.is_downloading());
+            assert_true(s2_wait_for([&] {
+                return owner->counters_for_test().active_seeds == 1;
+            }, 5000));
+            bool ok_b = false;
+            std::string err_b;
+            assert_true(cap_b.wait_and_get(&ok_b, &err_b));
+            assert_true(ok_b);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            assert_true(completion_b_count.load() == 1);  // terminal-once
+            assert_true(!manager.is_downloading());
+
+            seeder_b.reset();
             owner->Stop();
         }
 

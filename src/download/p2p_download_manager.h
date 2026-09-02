@@ -134,6 +134,13 @@ public:
     // idle 之前）的窗口入口——窗口内新准入与第二个 cancel 均不得越过
     // drain；放行后顺序、终态与新代状态不被旧收尾覆盖。
     void set_exit_gate_for_test(std::function<void()> gate);
+    // B5-05 drain 等待到达信号（确定性）：cancel 无 victim 时进入
+    // lifecycle_cv_ 等待前调用（持 mu_）——证明等待者已确定进入等待。
+    void set_drain_wait_entered_for_test(std::function<void()> gate);
+    // B5-05 cleanup gate（确定性）：cancel 最终清理临界区（drain 解除 +
+    // 水位条件化清理 + idle，持 mu_）入口——新准入在此期间无法越过
+    // （同锁互斥），证明不存在 post-unlock idle 覆盖。
+    void set_cancel_cleanup_gate_for_test(std::function<void()> gate);
     // 测试用：manager session 的实际 listen 端口（未创建 session 返回 0）。
     int listen_port_for_test() const;
     // 测试用确定性 peer 接入：worker 在 add_torrent 成功后对这些 endpoint
@@ -205,6 +212,8 @@ private:
     // 确定性窗口入口。窗口内持 mu_，并发 cancel() 必然阻塞到临界区结束。
     std::function<void()> admission_gate_for_test_;
     std::function<void()> exit_gate_for_test_;
+    std::function<void()> drain_wait_entered_for_test_;
+    std::function<void()> cancel_cleanup_gate_for_test_;
     std::vector<lt::tcp::endpoint> test_peer_endpoints_;
 #endif
 };

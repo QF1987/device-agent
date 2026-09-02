@@ -1253,44 +1253,55 @@ void P2PDownloadManager::cancel() {
     //     时其目标请求已终止；
     //   - drain 后的清理按水位条件化（ticket > 水位的新准入不被覆盖）。
     // 已进入 owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
+    // 任一 joinable worker 一律进入 drain——不得以 downloading_=false 推断
+    // 线程已退出：worker 写完该标志后、completion/idle/线程退出之前仍是
+    // joinable 收尾区间，drain 屏障必须覆盖它（B5-05 二次 verify 窗口①）。
     set_state_stopping();
     std::thread victim;
     bool drain = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
+        // 失效水位与 admission ticket 同锁互斥：本临界区之后的准入 ticket
+        // 必然大于水位（合法继续），之前的准入必然 stale。
         cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
         if (worker_.joinable()) {
             victim = std::move(worker_);
-            // 收尾（downloading_=false/idle）未完成 ⇒ 需要 drain 屏障：
-            // drain 期间 admission 权威检查拒绝新准入。
-            drain = downloading_.load();
-            if (drain) {
-                drain_in_progress_ = true;
-            }
+            drain_in_progress_ = true;
+            drain = true;
         }
     }
-    // victim 一律锁外 join（drain=true：等旧收尾完成；false：worker 已自然
-    // 结束，立即返回）。无 victim：并发 cancel 正在 drain（或无 in-flight）
-    // ——等待其完成，保证本 cancel 返回时目标请求已终止。
-    if (victim.joinable()) {
+    if (drain) {
+        // 锁外 join（worker 收尾路径会取 mu_）；drain 屏障使 admission
+        // 权威检查在此期间拒绝新准入。
         victim.join();
     } else {
+        // 无 victim：并发 cancel 正在 drain（或无 in-flight）——等待其
+        // 完成，保证本 cancel 返回时目标线程已终止。
         std::unique_lock<std::mutex> lock(mu_);
+#ifdef DEVICE_AGENT_TESTING
+        if (drain_wait_entered_for_test_) {
+            drain_wait_entered_for_test_();
+        }
+#endif
         lifecycle_cv_.wait(lock, [&] { return !drain_in_progress_; });
     }
     {
-        // 收尾清理按水位条件化：drain 期间准入被拒绝（drain 参与 admission
-        // 权威检查），条件恒真；「worker 已自然结束、无 drain」路径上可能
-        // 有新准入（ticket > 水位），不得覆盖其 downloading_ 状态。
+        // ── drain 解除 + 收尾清理：同一 mu_ 线性化边界（B5-05 二次窗口②）
+        // ── admission_counter_ 只在锁内读取；水位仍覆盖当前准入时才清理
+        // downloading_/state 并切 idle——新代（ticket > 水位）不被旧 cancel
+        // 覆盖，也不存在解锁后的 post-unlock idle 覆盖窗口。
         std::lock_guard<std::mutex> lock(mu_);
         drain_in_progress_ = false;
         lifecycle_cv_.notify_all();
+#ifdef DEVICE_AGENT_TESTING
+        if (cancel_cleanup_gate_for_test_) {
+            cancel_cleanup_gate_for_test_();
+        }
+#endif
         if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
             downloading_.store(false);
+            set_state_idle();
         }
-    }
-    if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
-        set_state_idle();
     }
 }
 
@@ -1343,6 +1354,14 @@ void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate)
 void P2PDownloadManager::set_test_peer_endpoints_for_test(
         std::vector<lt::tcp::endpoint> endpoints) {
     test_peer_endpoints_ = std::move(endpoints);
+}
+
+void P2PDownloadManager::set_drain_wait_entered_for_test(std::function<void()> gate) {
+    drain_wait_entered_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_cancel_cleanup_gate_for_test(std::function<void()> gate) {
+    cancel_cleanup_gate_for_test_ = std::move(gate);
 }
 
 int P2PDownloadManager::listen_port_for_test() const {
@@ -1658,11 +1677,18 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     error = "failed to add torrent: " + ec.message();
                 } else {
 #ifdef DEVICE_AGENT_TESTING
-                    // 确定性 peer 接入（测试基建）：add 后立即外连注入的
+                    // 确定性 peer 接入（测试基建）：add 后外连注入的
                     // endpoint（download 角色 incoming=off，peer 必须由
-                    // manager 外连；seeder 端 incoming=on 已就绪）。
-                    for (const auto& endpoint : test_peer_endpoints_) {
-                        handle.connect_peer(endpoint);
+                    // manager 外连；seeder 端 incoming=on 已就绪）。少量重试
+                    // 覆盖慢速环境（TSAN/CI）下对端 accept 的就绪窗口。
+                    for (int attempt = 0; attempt < 5; ++attempt) {
+                        for (const auto& endpoint : test_peer_endpoints_) {
+                            handle.connect_peer(endpoint);
+                        }
+                        if (attempt + 1 < 5) {
+                            std::this_thread::sleep_for(
+                                std::chrono::milliseconds(200));
+                        }
                     }
 #endif
                     // 初始 throttle 与 on_network_changed 共用同一
@@ -1997,15 +2023,15 @@ void P2PDownloadManager::run_download(DownloadRequest req,
         error = "unknown p2p download error";
     }
 
+    downloading_.store(false);
 #ifdef DEVICE_AGENT_TESTING
     if (exit_gate_for_test_) {
-        // B5-05 drain gate：终态收尾（downloading_=false / idle）之前的
-        // 确定性窗口——旧 worker 在此阻塞时，新准入与并发 cancel 均不得
-        // 越过 drain（见 admission 检查与 cancel 等待路径）。
+        // B5-05 drain gate：worker 已写 downloading_=false、但 completion/
+        // idle/线程退出尚未完成的 joinable 收尾区间——新准入由 drain 拒绝、
+        // 并发 cancel 在 drain 上等待（G3 断言该区间被屏障覆盖）。
         exit_gate_for_test_();
     }
 #endif
-    downloading_.store(false);
     const auto final_counters = peer_counter_totals(peer_counter_ledger);
     const int64_t final_web_seed_bytes =
         std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);
