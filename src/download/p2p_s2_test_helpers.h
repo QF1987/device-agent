@@ -130,7 +130,10 @@ inline std::unique_ptr<lt::session> make_bt_seeder(
     pack.set_bool(lt::settings_pack::enable_outgoing_utp, false);
     pack.set_bool(lt::settings_pack::enable_incoming_tcp, true);
     pack.set_bool(lt::settings_pack::enable_incoming_utp, false);
-    pack.set_str(lt::settings_pack::listen_interfaces, "0.0.0.0:0");
+    // 0.0.0.0 通配在 Windows libtorrent 2.0.11 上不建立 listen socket
+    // （无 listen_succeeded alert，B5-S3 原生构建实测），peer 外连注入的
+    // endpoint 也恒为 127.0.0.1——与 owner/manager 一致显式绑定 loopback。
+    pack.set_str(lt::settings_pack::listen_interfaces, "127.0.0.1:0");
     lt::session_params params;
     params.settings = pack;
     auto session = std::make_unique<lt::session>(std::move(params));

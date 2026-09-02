@@ -8,7 +8,6 @@
 #include <libtorrent/alert.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/error_code.hpp>
-#include <libtorrent/hex.hpp>
 #include <libtorrent/ip_filter.hpp>
 #include <libtorrent/session.hpp>
 #include <libtorrent/session_params.hpp>
@@ -93,14 +92,22 @@ std::string make_seed_fingerprint() {
 }
 
 // info-hash 短前缀（8 hex），日志只用它，不记 URL/token/本地路径（D8）。
+// 不用 lt::aux::to_hex：aux 命名空间符号不从 Windows vcpkg libtorrent DLL
+// 导出（B5-S3 原生构建 LNK2019），bytes→hex 自实现平台无关。
 std::string short_log_id(const std::string& dedupe_key) {
     if (dedupe_key.size() <= 3) {
         return "unknown";
     }
+    static const char kHexDigits[] = "0123456789abcdef";
     const std::string raw = dedupe_key.substr(3);
-    return lt::aux::to_hex(
-               lt::span<const char>(raw.data(), raw.size()))
-        .substr(0, 8);
+    std::string hex;
+    hex.reserve(raw.size() * 2);
+    for (const char c : raw) {
+        const unsigned char byte = static_cast<unsigned char>(c);
+        hex.push_back(kHexDigits[byte >> 4]);
+        hex.push_back(kHexDigits[byte & 0x0F]);
+    }
+    return hex.substr(0, 8);
 }
 
 bool file_readable(const std::string& path) {
