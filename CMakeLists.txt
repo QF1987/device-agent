@@ -4,6 +4,20 @@ project(device-agent CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(DEVICE_AGENT_VERSION "0.0.0-dev" CACHE STRING
+    "DeviceAgent SemVer without a leading v")
+option(DEVICE_AGENT_RELEASE_BUILD
+    "Require an explicit non-development DeviceAgent version" OFF)
+if(NOT DEVICE_AGENT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$")
+    message(FATAL_ERROR
+        "DEVICE_AGENT_VERSION must be SemVer without a leading v; got '${DEVICE_AGENT_VERSION}'")
+endif()
+if(DEVICE_AGENT_RELEASE_BUILD AND DEVICE_AGENT_VERSION STREQUAL "0.0.0-dev")
+    message(FATAL_ERROR
+        "Release/test package builds must set -DDEVICE_AGENT_VERSION=<semver>")
+endif()
+add_compile_definitions(DEVICE_AGENT_VERSION="${DEVICE_AGENT_VERSION}")
+
 include(GNUInstallDirs)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -19,7 +33,10 @@ endfunction()
 set(COMMON_SOURCES
     src/main.cpp
     src/client/device_client.cc
+    src/capability/capability_manifest.cc
     src/client/network_info.cc
+    src/observability/observability.cc
+    src/observability/windows_observability.cc
     src/client/command_handler.cc
     src/config/config.cc
     src/enrollment/enrollment_manager.cc
@@ -44,7 +61,11 @@ endif()
 
 set(COMMON_HEADERS
     src/client/device_client.h
+    src/capability/capability_manifest.h
     src/client/network_info.h
+    src/observability/observability.h
+    src/observability/windows_observability.h
+    src/version/build_info.h
     src/client/command_handler.h
     src/config/config.h
     src/enrollment/enrollment_manager.h
@@ -65,6 +86,7 @@ if(WIN32)
 endif()
 
 set(REMOTE_DESKTOP_SOURCES
+    src/remotedesktop/screen_capturer.cc
     src/remotedesktop/rfb/rfb_protocol.cc
     src/remotedesktop/rfb/rfb_server.cc
     src/remotedesktop/tunnel/tunnel_protocol.cc
@@ -102,6 +124,11 @@ if(WIN32)
     target_compile_definitions(remote_desktop PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
     target_compile_options(remote_desktop PUBLIC /utf-8)
     target_link_libraries(remote_desktop PUBLIC user32 gdi32 dxgi d3d11)
+
+    add_executable(gdi_capture_probe
+        src/remotedesktop/platform/windows/gdi_capture_probe.cc
+    )
+    target_link_libraries(gdi_capture_probe PRIVATE remote_desktop)
 endif()
 
 if(NOT ANDROID AND NOT __ANDROID__)
@@ -109,6 +136,13 @@ if(NOT ANDROID AND NOT __ANDROID__)
         src/remotedesktop/rfb/rfb_protocol_test.cc
     )
     target_link_libraries(rfb_protocol_test PRIVATE remote_desktop)
+    if(MSVC)
+        target_compile_options(rfb_protocol_test PRIVATE
+            $<$<CONFIG:Release>:/UNDEBUG>)
+    else()
+        target_compile_options(rfb_protocol_test PRIVATE
+            $<$<CONFIG:Release>:-UNDEBUG>)
+    endif()
 endif()
 
 # ─── Android: build as JNI shared library ─────────────────
@@ -250,7 +284,7 @@ extern "C" const char* device_agent_libtorrent_version() {
 
     add_executable(p2p_download_manager_test
         src/download/p2p_download_manager_test.cc
-        src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+        src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
         src/download/network_policy.cc
         src/config/p2p_config_store.cc
         src/logger/logger.cc
@@ -418,6 +452,200 @@ elseif(WIN32)
             wtsapi32
             winhttp
             bcrypt
+            iphlpapi
+            advapi32
+        )
+
+        # ADR-20260831-01 B2：Windows production P2P（混合 manager + WinHTTP
+        # fallback + runtime p2p_config 动态声明）。默认 OFF——既有 Windows
+        # build/package 不新增 libtorrent 依赖；ON 时 production exe 链接
+        # libtorrent/OpenSSL 并编译混合 manager（B3 kit closure 显式校验
+        # torrent-rasterbar.dll + libcrypto-3-x64.dll）。与 Phase A 测试 option
+        # DEVICE_AGENT_BUILD_WINDOWS_P2P 语义互不相干。
+        option(DEVICE_AGENT_ENABLE_WINDOWS_P2P
+            "Enable Windows production P2P hybrid download manager" OFF)
+        if(DEVICE_AGENT_ENABLE_WINDOWS_P2P)
+            find_package(OpenSSL REQUIRED)
+            find_package(LibtorrentRasterbar CONFIG REQUIRED)
+            target_sources(device-agent PRIVATE
+                src/download/p2p_download_manager.cc
+                src/download/p2p_seeding_owner.cc
+                src/download/windows_p2p_download_manager.cc
+            )
+            target_compile_definitions(device-agent PRIVATE
+                DEVICE_AGENT_ENABLE_WINDOWS_P2P)
+            target_link_libraries(device-agent PRIVATE
+                LibtorrentRasterbar::torrent-rasterbar
+                OpenSSL::Crypto
+            )
+        endif()
+
+        add_executable(windows_observability_test
+            src/observability/windows_observability_test.cc
+            src/observability/observability.cc
+            src/observability/windows_observability.cc
+            src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/enrollment/enrollment_manager.cc
+            src/config/config.cc
+            src/logger/logger.cc
+            ${WINDOWS_PROTO_SRCS}
+        )
+        target_include_directories(windows_observability_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${GEN_WINDOWS_DIR}
+        )
+        target_compile_definitions(windows_observability_test PRIVATE
+            WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(windows_observability_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(windows_observability_test PRIVATE
+            Threads::Threads
+            protobuf::libprotobuf
+            gRPC::grpc++
+            ws2_32
+            iphlpapi
+            bcrypt
+            advapi32
+        )
+
+        add_executable(capability_manifest_test
+            src/capability/capability_manifest_test.cc
+            src/capability/capability_manifest.cc
+            ${WINDOWS_PROTO_SRCS}
+        )
+        target_include_directories(capability_manifest_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${GEN_WINDOWS_DIR}
+        )
+        target_compile_options(capability_manifest_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(capability_manifest_test PRIVATE
+            protobuf::libprotobuf
+            gRPC::grpc++
+        )
+    endif()
+
+    # Windows P2P Phase A：libtorrent P2PDownloadManager 原生编译 + 离线测试。
+    # 仅测试目标；不接入生产 device-agent（仍用 WindowsDownloadManager），
+    # 不改变 capability manifest（Windows 不声明 p2p_config）。
+    # 依赖 vcpkg x64-windows：vcpkg install libtorrent（传递 openssl/boost）。
+    # config package/target 名 = vcpkg libtorrent port / libtorrent 上游 CMake
+    # 实际导出（RV-20260831-WIN-P2P-A-01）：LibtorrentRasterbar /
+    # LibtorrentRasterbar::torrent-rasterbar；ABI 定义（TORRENT_LINKING_SHARED、
+    # TORRENT_USE_OPENSSL 等）由 imported target 传播，不做手工 ABI override。
+    option(DEVICE_AGENT_BUILD_WINDOWS_P2P
+        "Build Windows libtorrent P2P core + native offline tests (Phase A)" OFF)
+    if(DEVICE_AGENT_BUILD_WINDOWS_P2P)
+        find_package(OpenSSL REQUIRED)
+        find_package(LibtorrentRasterbar CONFIG REQUIRED)
+
+        add_executable(p2p_download_manager_test
+            src/download/p2p_download_manager_test.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(p2p_download_manager_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            LibtorrentRasterbar::torrent-rasterbar
+        )
+
+        add_executable(network_policy_test
+            src/download/network_policy_test.cc
+            src/download/network_policy.cc
+        )
+        target_include_directories(network_policy_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_options(network_policy_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+
+        add_executable(p2p_config_store_test
+            src/config/p2p_config_store_test.cc
+            src/config/p2p_config_store.cc
+        )
+        target_include_directories(p2p_config_store_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_options(p2p_config_store_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+
+        # Windows 混合 manager（ADR-20260831-01 B1）：核心路由平台中立，
+        # 生产 WinHTTP 适配经 windows_download_manager.cc 引入。
+        add_executable(windows_p2p_download_manager_test
+            src/download/windows_p2p_download_manager_test.cc
+            src/download/windows_p2p_download_manager.cc
+            src/download/windows_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(windows_p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(windows_p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(windows_p2p_download_manager_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(windows_p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            LibtorrentRasterbar::torrent-rasterbar
+            ws2_32
+        )
+
+        # ADR-20260901-01 B5-S1：独立 seeding owner 离线测试（Windows 原生
+        # gate 复用；owner 不链接前台 p2p_download_manager.cc）。
+        add_executable(p2p_seeding_owner_test
+            src/download/p2p_seeding_owner_test.cc
+            src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_seeding_owner_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_seeding_owner_test PRIVATE
+            DEVICE_AGENT_TESTING
+            WIN32_LEAN_AND_MEAN NOMINMAX
+        )
+        target_compile_options(p2p_seeding_owner_test PRIVATE
+            /utf-8
+            $<$<CONFIG:Release>:/UNDEBUG>
+        )
+        target_link_libraries(p2p_seeding_owner_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            LibtorrentRasterbar::torrent-rasterbar
+            ws2_32
         )
     endif()
 
@@ -465,6 +693,20 @@ else()
         z
     )
 
+    add_executable(capability_manifest_test
+        src/capability/capability_manifest_test.cc
+        src/capability/capability_manifest.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+    )
+    target_include_directories(capability_manifest_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    target_compile_options(capability_manifest_test PRIVATE
+        $<$<CONFIG:Release>:-UNDEBUG>
+    )
+    target_link_libraries(capability_manifest_test PRIVATE protobuf::libprotobuf)
+
     add_executable(network_info_test
         src/client/network_info_test.cc
         src/client/network_info.cc
@@ -475,6 +717,35 @@ else()
         ${GEN_DESKTOP_DIR}
     )
     target_link_libraries(network_info_test PRIVATE protobuf::libprotobuf)
+
+    add_executable(windows_observability_test
+        src/observability/windows_observability_test.cc
+        src/observability/observability.cc
+        src/observability/windows_observability.cc
+        src/download/p2p_upload_counters.cc
+        src/download/network_policy.cc
+        src/enrollment/enrollment_manager.cc
+        src/config/config.cc
+        src/logger/logger.cc
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/device.grpc.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.pb.cc"
+        "${GEN_DESKTOP_DIR}/terminal_agent/v1/service.grpc.pb.cc"
+    )
+    target_include_directories(windows_observability_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${GEN_DESKTOP_DIR}
+    )
+    # RV-20260901-WIN-P2P-B2-03：非 MSVC Release 也保留 assert（target-local），
+    # production device-agent flags 不变。
+    target_compile_options(windows_observability_test PRIVATE
+        $<$<CONFIG:Release>:-UNDEBUG>
+    )
+    target_link_libraries(windows_observability_test PRIVATE
+        Threads::Threads
+        protobuf::libprotobuf
+        gRPC::grpc++
+    )
 
     add_executable(p2p_upload_counters_test
         src/download/p2p_upload_counters_test.cc
@@ -531,7 +802,7 @@ else()
     if(UNIX AND NOT APPLE AND BUILD_P2P_DOCKER_TOOLS)
         add_executable(p2p_download_manager_test
             src/download/p2p_download_manager_test.cc
-            src/download/p2p_download_manager.cc src/download/p2p_upload_counters.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
             src/download/network_policy.cc
             src/config/p2p_config_store.cc
             src/logger/logger.cc
@@ -543,6 +814,53 @@ else()
             DEVICE_AGENT_TESTING
         )
         target_link_libraries(p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+
+        # Windows 混合 manager 核心路由为平台中立（ADR-20260831-01 B1），
+        # Linux 侧同样离线跑路由/回退/guard 逻辑（生产 WinHTTP 适配仅 _WIN32）。
+        add_executable(windows_p2p_download_manager_test
+            src/download/windows_p2p_download_manager_test.cc
+            src/download/windows_p2p_download_manager.cc
+            src/download/p2p_download_manager.cc src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(windows_p2p_download_manager_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(windows_p2p_download_manager_test PRIVATE
+            DEVICE_AGENT_TESTING
+        )
+        target_link_libraries(windows_p2p_download_manager_test PRIVATE
+            Threads::Threads
+            OpenSSL::Crypto
+            PkgConfig::LIBTORRENT_RASTERBAR
+        )
+
+        # ADR-20260901-01 B5-S1：独立 seeding owner（seed-only session）离线
+        # 测试。owner 不链接前台 p2p_download_manager.cc（live_policy 直接读
+        # P2PConfigStore；前台注入 seam 属 B5-S2）。
+        add_executable(p2p_seeding_owner_test
+            src/download/p2p_seeding_owner_test.cc
+            src/download/p2p_seeding_owner.cc src/download/p2p_upload_counters.cc
+            src/download/network_policy.cc
+            src/config/p2p_config_store.cc
+            src/logger/logger.cc
+        )
+        target_include_directories(p2p_seeding_owner_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(p2p_seeding_owner_test PRIVATE
+            DEVICE_AGENT_TESTING
+        )
+        target_compile_options(p2p_seeding_owner_test PRIVATE
+            $<$<CONFIG:Release>:-UNDEBUG>
+        )
+        target_link_libraries(p2p_seeding_owner_test PRIVATE
             Threads::Threads
             OpenSSL::Crypto
             PkgConfig::LIBTORRENT_RASTERBAR

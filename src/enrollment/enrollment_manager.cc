@@ -1,4 +1,5 @@
 #include "enrollment/enrollment_manager.h"
+#include "version/build_info.h"
 
 #include "logger/logger.h"
 #include "terminal_agent/v1/service.grpc.pb.h"
@@ -326,10 +327,7 @@ EnrollOnceResult enroll_once(const Config& config, const std::string& device_id,
     req.set_nonce(nonce);
     req.set_timestamp_unix_seconds(static_cast<long long>(unix_seconds));
     req.set_short_code(short_code);
-    req.set_hostname(hostname());
-    req.set_platform(platform_prefix());
-    req.set_os_arch(os_arch());
-    req.set_agent_version("device-agent");
+    populate_enrollment_identity(&req);
 
     terminal_agent::v1::EnrollResponse resp;
     grpc::ClientContext ctx;
@@ -498,6 +496,16 @@ std::string default_token_file() {
 #else
     return "/var/lib/device-agent/enrollment.json";
 #endif
+}
+
+void populate_enrollment_identity(terminal_agent::v1::EnrollRequest* request) {
+    if (request == nullptr) {
+        return;
+    }
+    request->set_hostname(hostname());
+    request->set_platform(platform_prefix());
+    request->set_os_arch(os_arch());
+    request->set_agent_version(agent_version());
 }
 
 bool load_local_credential(const std::string& path, LocalCredential* out) {

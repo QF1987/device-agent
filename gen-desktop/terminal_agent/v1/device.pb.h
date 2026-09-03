@@ -112,6 +112,14 @@ extern const ::google::protobuf::internal::ClassDataFull DeviceConfig_class_data
 #else
 extern const DeviceConfigGlobalsTypeInternal DeviceConfig_globals_;
 #endif  // PROTOBUF_MESSAGE_GLOBALS
+class DeviceInventory;
+struct DeviceInventoryGlobalsTypeInternal;
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+extern DeviceInventoryGlobalsTypeInternal DeviceInventory_globals_;
+extern const ::google::protobuf::internal::ClassDataFull DeviceInventory_class_data_;
+#else
+extern const DeviceInventoryGlobalsTypeInternal DeviceInventory_globals_;
+#endif  // PROTOBUF_MESSAGE_GLOBALS
 class DeviceMetrics;
 struct DeviceMetricsGlobalsTypeInternal;
 #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -464,7 +472,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReportResponse final : public
   [[nodiscard]] static const StatusReportResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<StatusReportResponse>(&StatusReportResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 8;
+  static constexpr int kIndexInFileMessages = 9;
   friend void swap(StatusReportResponse& a, StatusReportResponse& b) { a.Swap(&b); }
   inline void Swap(StatusReportResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -682,7 +690,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusResponse final : publi
   [[nodiscard]] static const ReleaseStatusResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<ReleaseStatusResponse>(&ReleaseStatusResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 16;
+  static constexpr int kIndexInFileMessages = 17;
   friend void swap(ReleaseStatusResponse& a, ReleaseStatusResponse& b) { a.Swap(&b); }
   inline void Swap(ReleaseStatusResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -900,7 +908,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED ReleaseStatusRequest final : public
   [[nodiscard]] static const ReleaseStatusRequest& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<ReleaseStatusRequest>(&ReleaseStatusRequest_globals_);
   }
-  static constexpr int kIndexInFileMessages = 15;
+  static constexpr int kIndexInFileMessages = 16;
   friend void swap(ReleaseStatusRequest& a, ReleaseStatusRequest& b) { a.Swap(&b); }
   inline void Swap(ReleaseStatusRequest* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1241,7 +1249,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED NetworkInfo final : public ::google
   [[nodiscard]] static const NetworkInfo& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<NetworkInfo>(&NetworkInfo_globals_);
   }
-  static constexpr int kIndexInFileMessages = 6;
+  static constexpr int kIndexInFileMessages = 7;
   friend void swap(NetworkInfo& a, NetworkInfo& b) { a.Swap(&b); }
   inline void Swap(NetworkInfo* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1764,7 +1772,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EventReportResponse final : public 
   [[nodiscard]] static const EventReportResponse& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<EventReportResponse>(&EventReportResponse_globals_);
   }
-  static constexpr int kIndexInFileMessages = 10;
+  static constexpr int kIndexInFileMessages = 11;
   friend void swap(EventReportResponse& a, EventReportResponse& b) { a.Swap(&b); }
   inline void Swap(EventReportResponse* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1982,7 +1990,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EventReport final : public ::google
   [[nodiscard]] static const EventReport& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<EventReport>(&EventReport_globals_);
   }
-  static constexpr int kIndexInFileMessages = 9;
+  static constexpr int kIndexInFileMessages = 10;
   friend void swap(EventReport& a, EventReport& b) { a.Swap(&b); }
   inline void Swap(EventReport* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -2268,7 +2276,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DownloadReadyCommand final : public
   [[nodiscard]] static const DownloadReadyCommand& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<DownloadReadyCommand>(&DownloadReadyCommand_globals_);
   }
-  static constexpr int kIndexInFileMessages = 11;
+  static constexpr int kIndexInFileMessages = 12;
   friend void swap(DownloadReadyCommand& a, DownloadReadyCommand& b) { a.Swap(&b); }
   inline void Swap(DownloadReadyCommand* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -2817,6 +2825,350 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceMetrics final : public ::goog
 };
 // -------------------------------------------------------------------
 
+class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceInventory final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:terminal_agent.v1.DeviceInventory) */ {
+ public:
+  inline DeviceInventory() : DeviceInventory(nullptr) {}
+  ~DeviceInventory() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(DeviceInventory* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(DeviceInventory));
+  }
+#endif
+
+  template <typename = void>
+  explicit constexpr DeviceInventory(::google::protobuf::internal::ConstantInitialized,
+                           const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+                               class_data);
+
+  inline DeviceInventory(const DeviceInventory& from) : DeviceInventory(nullptr, from) {}
+  inline DeviceInventory(DeviceInventory&& from) noexcept : DeviceInventory(nullptr, ::std::move(from)) {}
+  inline DeviceInventory& operator=(const DeviceInventory& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline DeviceInventory& operator=(DeviceInventory&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  [[nodiscard]] inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  [[nodiscard]] inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL
+  mutable_unknown_fields() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL
+  GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  [[nodiscard]] static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  [[nodiscard]] static const DeviceInventory& default_instance() {
+    return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<DeviceInventory>(&DeviceInventory_globals_);
+  }
+  static constexpr int kIndexInFileMessages = 5;
+  friend void swap(DeviceInventory& a, DeviceInventory& b) { a.Swap(&b); }
+  inline void Swap(DeviceInventory* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(DeviceInventory* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  [[nodiscard]] DeviceInventory* PROTOBUF_NONNULL
+  New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<DeviceInventory>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const DeviceInventory& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const DeviceInventory& from) { DeviceInventory::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  [[nodiscard]] bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  [[nodiscard]] static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  [[nodiscard]] static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  [[nodiscard]] ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] ::size_t ByteSizeLong() const final;
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] int GetCachedSize() const {
+    return _impl_._cached_size_.Get();
+  }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(DeviceInventory* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "terminal_agent.v1.DeviceInventory"; }
+
+  explicit DeviceInventory(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  DeviceInventory(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const DeviceInventory& from);
+  DeviceInventory(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, DeviceInventory&& from) noexcept
+      : DeviceInventory(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_(
+      const MessageLite& prototype,
+      const ::google::protobuf::internal::TcParseTableBase* PROTOBUF_NULLABLE tc_table = nullptr);
+
+  [[nodiscard]] ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kAgentVersionFieldNumber = 1,
+    kPlatformFieldNumber = 2,
+    kOsArchFieldNumber = 3,
+    kHostnameFieldNumber = 4,
+    kOsNameFieldNumber = 5,
+    kOsVersionFieldNumber = 6,
+    kCpuModelFieldNumber = 7,
+    kMemoryTotalBytesFieldNumber = 9,
+    kSystemDiskTotalBytesFieldNumber = 10,
+    kCpuLogicalCountFieldNumber = 8,
+  };
+  // string agent_version = 1;
+  void clear_agent_version() ;
+  [[nodiscard]] const ::std::string& agent_version() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_agent_version(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_agent_version();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_agent_version();
+  void set_allocated_agent_version(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_agent_version() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_agent_version(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_agent_version();
+
+  public:
+  // string platform = 2;
+  void clear_platform() ;
+  [[nodiscard]] const ::std::string& platform() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_platform(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_platform();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_platform();
+  void set_allocated_platform(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_platform() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_platform(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_platform();
+
+  public:
+  // string os_arch = 3;
+  void clear_os_arch() ;
+  [[nodiscard]] const ::std::string& os_arch() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_os_arch(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_os_arch();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_os_arch();
+  void set_allocated_os_arch(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_os_arch() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_os_arch(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_os_arch();
+
+  public:
+  // string hostname = 4;
+  void clear_hostname() ;
+  [[nodiscard]] const ::std::string& hostname() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_hostname(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_hostname();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_hostname();
+  void set_allocated_hostname(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_hostname() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_hostname(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_hostname();
+
+  public:
+  // string os_name = 5;
+  void clear_os_name() ;
+  [[nodiscard]] const ::std::string& os_name() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_os_name(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_os_name();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_os_name();
+  void set_allocated_os_name(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_os_name() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_os_name(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_os_name();
+
+  public:
+  // string os_version = 6;
+  void clear_os_version() ;
+  [[nodiscard]] const ::std::string& os_version() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_os_version(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_os_version();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_os_version();
+  void set_allocated_os_version(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_os_version() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_os_version(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_os_version();
+
+  public:
+  // string cpu_model = 7;
+  void clear_cpu_model() ;
+  [[nodiscard]] const ::std::string& cpu_model() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_cpu_model(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_cpu_model();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_cpu_model();
+  void set_allocated_cpu_model(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_cpu_model() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_cpu_model(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_cpu_model();
+
+  public:
+  // int64 memory_total_bytes = 9;
+  void clear_memory_total_bytes() ;
+  [[nodiscard]] ::int64_t memory_total_bytes() const;
+  void set_memory_total_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_memory_total_bytes() const;
+  void _internal_set_memory_total_bytes(::int64_t value);
+
+  public:
+  // int64 system_disk_total_bytes = 10;
+  void clear_system_disk_total_bytes() ;
+  [[nodiscard]] ::int64_t system_disk_total_bytes() const;
+  void set_system_disk_total_bytes(::int64_t value);
+
+  private:
+  ::int64_t _internal_system_disk_total_bytes() const;
+  void _internal_set_system_disk_total_bytes(::int64_t value);
+
+  public:
+  // int32 cpu_logical_count = 8;
+  void clear_cpu_logical_count() ;
+  [[nodiscard]] ::int32_t cpu_logical_count() const;
+  void set_cpu_logical_count(::int32_t value);
+
+  private:
+  ::int32_t _internal_cpu_logical_count() const;
+  void _internal_set_cpu_logical_count(::int32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:terminal_agent.v1.DeviceInventory)
+ private:
+  class _Internal;
+  using ParseTableT_ =
+      ::google::protobuf::internal::TcParseTable<4, 10,
+                          0, 112,
+                          2>;
+  static constexpr ParseTableT_ InternalGenerateParseTable_(
+      const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
+  friend class ::google::protobuf::internal::TcParser;
+  #ifndef PROTOBUF_MESSAGE_GLOBALS
+  static const ParseTableT_ _table_;
+  #endif
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  friend ::google::protobuf::internal::PrivateAccess;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                                    ::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const DeviceInventory& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::internal::ArenaStringPtr agent_version_;
+    ::google::protobuf::internal::ArenaStringPtr platform_;
+    ::google::protobuf::internal::ArenaStringPtr os_arch_;
+    ::google::protobuf::internal::ArenaStringPtr hostname_;
+    ::google::protobuf::internal::ArenaStringPtr os_name_;
+    ::google::protobuf::internal::ArenaStringPtr os_version_;
+    ::google::protobuf::internal::ArenaStringPtr cpu_model_;
+    ::int64_t memory_total_bytes_;
+    ::int64_t system_disk_total_bytes_;
+    ::int32_t cpu_logical_count_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_terminal_5fagent_2fv1_2fdevice_2eproto;
+};
+// -------------------------------------------------------------------
+
 class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceConfig final : public ::google::protobuf::Message
 /* @@protoc_insertion_point(class_definition:terminal_agent.v1.DeviceConfig) */ {
  public:
@@ -2873,7 +3225,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceConfig final : public ::googl
   [[nodiscard]] static const DeviceConfig& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<DeviceConfig>(&DeviceConfig_globals_);
   }
-  static constexpr int kIndexInFileMessages = 5;
+  static constexpr int kIndexInFileMessages = 6;
   friend void swap(DeviceConfig& a, DeviceConfig& b) { a.Swap(&b); }
   inline void Swap(DeviceConfig* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3255,14 +3607,14 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED DeviceCapability final : public ::g
   ::google::protobuf::RepeatedPtrField<::std::string>* PROTOBUF_NONNULL _internal_mutable_supported_features();
 
   public:
-  // string firmware_version = 1;
-  void clear_firmware_version() ;
-  [[nodiscard]] const ::std::string& firmware_version() const;
+  // string firmware_version = 1 [deprecated = true];
+  [[deprecated]]  void clear_firmware_version() ;
+  [[nodiscard]] [[deprecated]] const ::std::string& firmware_version() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_firmware_version(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_firmware_version();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_firmware_version();
-  void set_allocated_firmware_version(::std::string* PROTOBUF_NULLABLE value);
+  [[deprecated]] void set_firmware_version(Arg_&& arg, Args_... args);
+  [[deprecated]] ::std::string* PROTOBUF_NONNULL mutable_firmware_version();
+  [[deprecated]] [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_firmware_version();
+  [[deprecated]] void set_allocated_firmware_version(::std::string* PROTOBUF_NULLABLE value);
 
   private:
   const ::std::string& _internal_firmware_version() const;
@@ -3379,7 +3731,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommandStreamRequest final : public
   [[nodiscard]] static const CommandStreamRequest& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<CommandStreamRequest>(&CommandStreamRequest_globals_);
   }
-  static constexpr int kIndexInFileMessages = 13;
+  static constexpr int kIndexInFileMessages = 14;
   friend void swap(CommandStreamRequest& a, CommandStreamRequest& b) { a.Swap(&b); }
   inline void Swap(CommandStreamRequest* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3585,7 +3937,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommandResult final : public ::goog
   [[nodiscard]] static const CommandResult& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<CommandResult>(&CommandResult_globals_);
   }
-  static constexpr int kIndexInFileMessages = 14;
+  static constexpr int kIndexInFileMessages = 15;
   friend void swap(CommandResult& a, CommandResult& b) { a.Swap(&b); }
   inline void Swap(CommandResult* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3854,7 +4206,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Command final : public ::google::pr
   [[nodiscard]] static const Command& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Command>(&Command_globals_);
   }
-  static constexpr int kIndexInFileMessages = 12;
+  static constexpr int kIndexInFileMessages = 13;
   friend void swap(Command& a, Command& b) { a.Swap(&b); }
   inline void Swap(Command* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -4358,7 +4710,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
   [[nodiscard]] static const StatusReport& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<StatusReport>(&StatusReport_globals_);
   }
-  static constexpr int kIndexInFileMessages = 7;
+  static constexpr int kIndexInFileMessages = 8;
   friend void swap(StatusReport& a, StatusReport& b) { a.Swap(&b); }
   inline void Swap(StatusReport* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -4456,6 +4808,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
     kMetricsFieldNumber = 5,
     kConfigFieldNumber = 6,
     kNetworkInfoFieldNumber = 7,
+    kInventoryFieldNumber = 8,
     kTimestampFieldNumber = 2,
   };
   // string device_id = 1;
@@ -4488,14 +4841,14 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
   ::std::string* PROTOBUF_NONNULL _internal_mutable_status();
 
   public:
-  // string firmware_version = 4;
-  void clear_firmware_version() ;
-  [[nodiscard]] const ::std::string& firmware_version() const;
+  // string firmware_version = 4 [deprecated = true];
+  [[deprecated]]  void clear_firmware_version() ;
+  [[nodiscard]] [[deprecated]] const ::std::string& firmware_version() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_firmware_version(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_firmware_version();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_firmware_version();
-  void set_allocated_firmware_version(::std::string* PROTOBUF_NULLABLE value);
+  [[deprecated]] void set_firmware_version(Arg_&& arg, Args_... args);
+  [[deprecated]] ::std::string* PROTOBUF_NONNULL mutable_firmware_version();
+  [[deprecated]] [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_firmware_version();
+  [[deprecated]] void set_allocated_firmware_version(::std::string* PROTOBUF_NULLABLE value);
 
   private:
   const ::std::string& _internal_firmware_version() const;
@@ -4551,6 +4904,22 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
   ::terminal_agent::v1::NetworkInfo* PROTOBUF_NONNULL _internal_mutable_network_info();
 
   public:
+  // .terminal_agent.v1.DeviceInventory inventory = 8;
+  [[nodiscard]] bool has_inventory()
+      const;
+  void clear_inventory() ;
+  [[nodiscard]] const ::terminal_agent::v1::DeviceInventory& inventory() const;
+  [[nodiscard]] ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE release_inventory();
+  ::terminal_agent::v1::DeviceInventory* PROTOBUF_NONNULL mutable_inventory();
+  void set_allocated_inventory(::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE value);
+  void unsafe_arena_set_allocated_inventory(::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE value);
+  ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE unsafe_arena_release_inventory();
+
+  private:
+  const ::terminal_agent::v1::DeviceInventory& _internal_inventory() const;
+  ::terminal_agent::v1::DeviceInventory* PROTOBUF_NONNULL _internal_mutable_inventory();
+
+  public:
   // int64 timestamp = 2;
   void clear_timestamp() ;
   [[nodiscard]] ::int64_t timestamp() const;
@@ -4565,8 +4934,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<3, 7,
-                          3, 70,
+      ::google::protobuf::internal::TcParseTable<3, 8,
+                          4, 78,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -4600,6 +4969,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED StatusReport final : public ::googl
     ::terminal_agent::v1::DeviceMetrics* PROTOBUF_NULLABLE metrics_;
     ::terminal_agent::v1::DeviceConfig* PROTOBUF_NULLABLE config_;
     ::terminal_agent::v1::NetworkInfo* PROTOBUF_NULLABLE network_info_;
+    ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE inventory_;
     ::int64_t timestamp_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -5039,7 +5409,7 @@ inline void AuthContext::set_allocated_token(::std::string* PROTOBUF_NULLABLE va
 
 // DeviceCapability
 
-// string firmware_version = 1;
+// string firmware_version = 1 [deprecated = true];
 inline void DeviceCapability::clear_firmware_version() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.firmware_version_.ClearToEmpty();
@@ -5735,6 +6105,530 @@ inline void DeviceMetrics::_internal_set_p2p_upload_bytes_cellular(::int64_t val
 
 // -------------------------------------------------------------------
 
+// DeviceInventory
+
+// string agent_version = 1;
+inline void DeviceInventory::clear_agent_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.agent_version_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+}
+inline const ::std::string& DeviceInventory::agent_version() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.agent_version)
+  return _internal_agent_version();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_agent_version(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  _impl_.agent_version_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.agent_version)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_agent_version()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ::std::string* _s = _internal_mutable_agent_version();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.agent_version)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_agent_version() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.agent_version_.Get();
+}
+inline void DeviceInventory::_internal_set_agent_version(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.agent_version_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_agent_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.agent_version_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_agent_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.agent_version)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000001U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  auto* released = _impl_.agent_version_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.agent_version_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_agent_version(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  }
+  _impl_.agent_version_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.agent_version_.IsDefault()) {
+    _impl_.agent_version_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.agent_version)
+}
+
+// string platform = 2;
+inline void DeviceInventory::clear_platform() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.platform_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+}
+inline const ::std::string& DeviceInventory::platform() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.platform)
+  return _internal_platform();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_platform(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  _impl_.platform_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.platform)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_platform()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ::std::string* _s = _internal_mutable_platform();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.platform)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_platform() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.platform_.Get();
+}
+inline void DeviceInventory::_internal_set_platform(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.platform_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_platform() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.platform_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_platform() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.platform)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000002U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  auto* released = _impl_.platform_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.platform_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_platform(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  }
+  _impl_.platform_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.platform_.IsDefault()) {
+    _impl_.platform_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.platform)
+}
+
+// string os_arch = 3;
+inline void DeviceInventory::clear_os_arch() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_arch_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+}
+inline const ::std::string& DeviceInventory::os_arch() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.os_arch)
+  return _internal_os_arch();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_os_arch(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  _impl_.os_arch_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.os_arch)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_os_arch()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  ::std::string* _s = _internal_mutable_os_arch();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.os_arch)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_os_arch() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.os_arch_.Get();
+}
+inline void DeviceInventory::_internal_set_os_arch(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_arch_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_os_arch() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.os_arch_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_os_arch() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.os_arch)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000004U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  auto* released = _impl_.os_arch_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.os_arch_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_os_arch(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  }
+  _impl_.os_arch_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.os_arch_.IsDefault()) {
+    _impl_.os_arch_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.os_arch)
+}
+
+// string hostname = 4;
+inline void DeviceInventory::clear_hostname() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.hostname_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+}
+inline const ::std::string& DeviceInventory::hostname() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.hostname)
+  return _internal_hostname();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_hostname(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  _impl_.hostname_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.hostname)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_hostname()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  ::std::string* _s = _internal_mutable_hostname();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.hostname)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_hostname() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.hostname_.Get();
+}
+inline void DeviceInventory::_internal_set_hostname(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.hostname_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_hostname() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.hostname_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_hostname() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.hostname)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000008U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  auto* released = _impl_.hostname_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.hostname_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_hostname(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  }
+  _impl_.hostname_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.hostname_.IsDefault()) {
+    _impl_.hostname_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.hostname)
+}
+
+// string os_name = 5;
+inline void DeviceInventory::clear_os_name() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_name_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+}
+inline const ::std::string& DeviceInventory::os_name() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.os_name)
+  return _internal_os_name();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_os_name(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  _impl_.os_name_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.os_name)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_os_name()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  ::std::string* _s = _internal_mutable_os_name();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.os_name)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_os_name() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.os_name_.Get();
+}
+inline void DeviceInventory::_internal_set_os_name(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_name_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_os_name() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.os_name_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_os_name() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.os_name)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000010U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+  auto* released = _impl_.os_name_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.os_name_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_os_name(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000010U);
+  }
+  _impl_.os_name_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.os_name_.IsDefault()) {
+    _impl_.os_name_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.os_name)
+}
+
+// string os_version = 6;
+inline void DeviceInventory::clear_os_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_version_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+}
+inline const ::std::string& DeviceInventory::os_version() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.os_version)
+  return _internal_os_version();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_os_version(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  _impl_.os_version_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.os_version)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_os_version()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ::std::string* _s = _internal_mutable_os_version();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.os_version)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_os_version() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.os_version_.Get();
+}
+inline void DeviceInventory::_internal_set_os_version(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.os_version_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_os_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.os_version_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_os_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.os_version)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000020U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  auto* released = _impl_.os_version_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.os_version_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_os_version(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  }
+  _impl_.os_version_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.os_version_.IsDefault()) {
+    _impl_.os_version_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.os_version)
+}
+
+// string cpu_model = 7;
+inline void DeviceInventory::clear_cpu_model() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cpu_model_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+}
+inline const ::std::string& DeviceInventory::cpu_model() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.cpu_model)
+  return _internal_cpu_model();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void DeviceInventory::set_cpu_model(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  _impl_.cpu_model_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.cpu_model)
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::mutable_cpu_model()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ::std::string* _s = _internal_mutable_cpu_model();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.DeviceInventory.cpu_model)
+  return _s;
+}
+inline const ::std::string& DeviceInventory::_internal_cpu_model() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.cpu_model_.Get();
+}
+inline void DeviceInventory::_internal_set_cpu_model(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cpu_model_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL DeviceInventory::_internal_mutable_cpu_model() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.cpu_model_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE DeviceInventory::release_cpu_model() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.DeviceInventory.cpu_model)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000040U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  auto* released = _impl_.cpu_model_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.cpu_model_.Set("", GetArena());
+  }
+  return released;
+}
+inline void DeviceInventory::set_allocated_cpu_model(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  }
+  _impl_.cpu_model_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.cpu_model_.IsDefault()) {
+    _impl_.cpu_model_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.DeviceInventory.cpu_model)
+}
+
+// int32 cpu_logical_count = 8;
+inline void DeviceInventory::clear_cpu_logical_count() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cpu_logical_count_ = 0;
+  ClearHasBit(_impl_._has_bits_[0], 0x00000200U);
+}
+inline ::int32_t DeviceInventory::cpu_logical_count() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.cpu_logical_count)
+  return _internal_cpu_logical_count();
+}
+inline void DeviceInventory::set_cpu_logical_count(::int32_t value) {
+  _internal_set_cpu_logical_count(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000200U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.cpu_logical_count)
+}
+inline ::int32_t DeviceInventory::_internal_cpu_logical_count() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.cpu_logical_count_;
+}
+inline void DeviceInventory::_internal_set_cpu_logical_count(::int32_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cpu_logical_count_ = value;
+}
+
+// int64 memory_total_bytes = 9;
+inline void DeviceInventory::clear_memory_total_bytes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.memory_total_bytes_ = ::int64_t{0};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000080U);
+}
+inline ::int64_t DeviceInventory::memory_total_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.memory_total_bytes)
+  return _internal_memory_total_bytes();
+}
+inline void DeviceInventory::set_memory_total_bytes(::int64_t value) {
+  _internal_set_memory_total_bytes(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000080U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.memory_total_bytes)
+}
+inline ::int64_t DeviceInventory::_internal_memory_total_bytes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.memory_total_bytes_;
+}
+inline void DeviceInventory::_internal_set_memory_total_bytes(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.memory_total_bytes_ = value;
+}
+
+// int64 system_disk_total_bytes = 10;
+inline void DeviceInventory::clear_system_disk_total_bytes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.system_disk_total_bytes_ = ::int64_t{0};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000100U);
+}
+inline ::int64_t DeviceInventory::system_disk_total_bytes() const {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.DeviceInventory.system_disk_total_bytes)
+  return _internal_system_disk_total_bytes();
+}
+inline void DeviceInventory::set_system_disk_total_bytes(::int64_t value) {
+  _internal_set_system_disk_total_bytes(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000100U);
+  // @@protoc_insertion_point(field_set:terminal_agent.v1.DeviceInventory.system_disk_total_bytes)
+}
+inline ::int64_t DeviceInventory::_internal_system_disk_total_bytes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.system_disk_total_bytes_;
+}
+inline void DeviceInventory::_internal_set_system_disk_total_bytes(::int64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.system_disk_total_bytes_ = value;
+}
+
+// -------------------------------------------------------------------
+
 // DeviceConfig
 
 // int32 screen_brightness = 1;
@@ -6405,7 +7299,7 @@ inline void StatusReport::set_allocated_device_id(::std::string* PROTOBUF_NULLAB
 inline void StatusReport::clear_timestamp() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.timestamp_ = ::int64_t{0};
-  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000080U);
 }
 inline ::int64_t StatusReport::timestamp() const {
   // @@protoc_insertion_point(field_get:terminal_agent.v1.StatusReport.timestamp)
@@ -6413,7 +7307,7 @@ inline ::int64_t StatusReport::timestamp() const {
 }
 inline void StatusReport::set_timestamp(::int64_t value) {
   _internal_set_timestamp(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000080U);
   // @@protoc_insertion_point(field_set:terminal_agent.v1.StatusReport.timestamp)
 }
 inline ::int64_t StatusReport::_internal_timestamp() const {
@@ -6489,7 +7383,7 @@ inline void StatusReport::set_allocated_status(::std::string* PROTOBUF_NULLABLE 
   // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.StatusReport.status)
 }
 
-// string firmware_version = 4;
+// string firmware_version = 4 [deprecated = true];
 inline void StatusReport::clear_firmware_version() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.firmware_version_.ClearToEmpty();
@@ -6845,6 +7739,104 @@ inline void StatusReport::set_allocated_network_info(::terminal_agent::v1::Netwo
 
   _impl_.network_info_ = reinterpret_cast<::terminal_agent::v1::NetworkInfo*>(value);
   // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.StatusReport.network_info)
+}
+
+// .terminal_agent.v1.DeviceInventory inventory = 8;
+inline bool StatusReport::has_inventory() const {
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000040U);
+  PROTOBUF_ASSUME(!value || _impl_.inventory_ != nullptr);
+  return value;
+}
+inline void StatusReport::clear_inventory() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.inventory_ != nullptr) _impl_.inventory_->Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+}
+inline const ::terminal_agent::v1::DeviceInventory& StatusReport::_internal_inventory() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  const ::terminal_agent::v1::DeviceInventory* p = _impl_.inventory_;
+  return p != nullptr ? *p : *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<::terminal_agent::v1::DeviceInventory>(&::terminal_agent::v1::DeviceInventory_globals_);
+}
+inline const ::terminal_agent::v1::DeviceInventory& StatusReport::inventory() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:terminal_agent.v1.StatusReport.inventory)
+  return _internal_inventory();
+}
+inline void StatusReport::unsafe_arena_set_allocated_inventory(
+    ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.inventory_);
+  }
+  _impl_.inventory_ = reinterpret_cast<::terminal_agent::v1::DeviceInventory*>(value);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:terminal_agent.v1.StatusReport.inventory)
+}
+inline ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE StatusReport::release_inventory() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ::terminal_agent::v1::DeviceInventory* released = _impl_.inventory_;
+  _impl_.inventory_ = nullptr;
+  if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
+    auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    if (GetArena() == nullptr) {
+      delete old;
+    }
+  } else {
+    if (GetArena() != nullptr) {
+      released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    }
+  }
+  return released;
+}
+inline ::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE StatusReport::unsafe_arena_release_inventory() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:terminal_agent.v1.StatusReport.inventory)
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ::terminal_agent::v1::DeviceInventory* temp = _impl_.inventory_;
+  _impl_.inventory_ = nullptr;
+  return temp;
+}
+inline ::terminal_agent::v1::DeviceInventory* PROTOBUF_NONNULL StatusReport::_internal_mutable_inventory() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.inventory_ == nullptr) {
+    auto* p = ::google::protobuf::Message::DefaultConstruct<::terminal_agent::v1::DeviceInventory>(GetArena());
+    _impl_.inventory_ = reinterpret_cast<::terminal_agent::v1::DeviceInventory*>(p);
+  }
+  return _impl_.inventory_;
+}
+inline ::terminal_agent::v1::DeviceInventory* PROTOBUF_NONNULL StatusReport::mutable_inventory()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  ::terminal_agent::v1::DeviceInventory* _msg = _internal_mutable_inventory();
+  // @@protoc_insertion_point(field_mutable:terminal_agent.v1.StatusReport.inventory)
+  return _msg;
+}
+inline void StatusReport::set_allocated_inventory(::terminal_agent::v1::DeviceInventory* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.inventory_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = value->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
+  }
+
+  _impl_.inventory_ = reinterpret_cast<::terminal_agent::v1::DeviceInventory*>(value);
+  // @@protoc_insertion_point(field_set_allocated:terminal_agent.v1.StatusReport.inventory)
 }
 
 // -------------------------------------------------------------------

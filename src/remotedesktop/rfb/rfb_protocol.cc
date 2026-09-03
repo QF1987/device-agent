@@ -294,14 +294,10 @@ bool RfbProtocol::parseClientMessage(const std::vector<uint8_t>& bytes, ClientMe
 
 std::vector<uint8_t> RfbProtocol::framebufferUpdate(const ScreenFrame& frame, const std::vector<Rect>& requested_rects) const {
     std::vector<Rect> rects;
-    if (requested_rects.empty()) {
-        rects.push_back(Rect{0, 0, frame.width, frame.height});
-    } else {
-        for (const auto& rect : requested_rects) {
-            Rect clipped = clamp_rect(rect, frame.width, frame.height);
-            if (clipped.width > 0 && clipped.height > 0) {
-                rects.push_back(clipped);
-            }
+    for (const auto& rect : requested_rects) {
+        Rect clipped = clamp_rect(rect, frame.width, frame.height);
+        if (clipped.width > 0 && clipped.height > 0) {
+            rects.push_back(clipped);
         }
     }
     if (rects.size() > std::numeric_limits<uint16_t>::max()) {

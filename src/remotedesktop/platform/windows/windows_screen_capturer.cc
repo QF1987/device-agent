@@ -3,9 +3,13 @@
 #include "remotedesktop/platform/windows/windows_screen_capturer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <string>
+#include <thread>
 
 namespace device_agent::remotedesktop::windows {
 
@@ -30,21 +34,65 @@ std::string hrError(const char* op, HRESULT hr) {
     return buf;
 }
 
+std::string environmentValue(const char* name) {
+    const DWORD size = GetEnvironmentVariableA(name, nullptr, 0);
+    if (size == 0) {
+        return {};
+    }
+    std::string value(size, '\0');
+    const DWORD written = GetEnvironmentVariableA(name, value.data(), size);
+    if (written == 0 || written >= size) {
+        return {};
+    }
+    value.resize(written);
+    return value;
+}
+
+bool environmentFlag(const char* name) {
+    std::string value = environmentValue(name);
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+uint32_t environmentUnsigned(const char* name, uint32_t fallback, uint32_t min, uint32_t max) {
+    const std::string value = environmentValue(name);
+    if (value.empty()) {
+        return fallback;
+    }
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value.c_str(), &end, 10);
+    if (end == value.c_str() || *end != '\0' || parsed < min || parsed > max) {
+        return fallback;
+    }
+    return static_cast<uint32_t>(parsed);
+}
+
 }  // namespace
+
+WindowsScreenCapturer::WindowsScreenCapturer()
+    : force_gdi_(environmentFlag("DEVICE_AGENT_FORCE_GDI")),
+      gdi_max_fps_(environmentUnsigned("DEVICE_AGENT_GDI_MAX_FPS", 15, 1, 60)),
+      gdi_tile_size_(static_cast<uint16_t>(
+          environmentUnsigned("DEVICE_AGENT_GDI_TILE_SIZE", 32, 8, 128))) {}
 
 bool WindowsScreenCapturer::capture(ScreenFrame& frame, std::string& err) {
     std::string dxgi_err;
-    if (captureWithDxgi(frame, dxgi_err)) {
+    if (!force_gdi_ && captureWithDxgi(frame, dxgi_err)) {
+        last_capture_used_gdi_ = false;
         return true;
     }
     // Win7 and session-0/service contexts cannot rely on Desktop Duplication.
     // Keep GDI as the mandatory fallback path for compatibility and diagnostics.
     (void)dxgi_err;
     if (captureWithGdi(frame, err)) {
+        last_capture_used_gdi_ = true;
         return true;
     }
-    if (!last_frame_.bgra.empty()) {
-        frame = last_frame_;
+    const ScreenFrame& cached = last_capture_used_gdi_ ? last_gdi_frame_ : last_frame_;
+    if (!cached.bgra.empty()) {
+        frame = cached;
+        frame.dirty_rects.clear();
         err.clear();
         return true;
     }
@@ -262,6 +310,14 @@ bool WindowsScreenCapturer::captureWithDxgi(ScreenFrame& frame, std::string& err
 }
 
 bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto min_interval = std::chrono::milliseconds(1000 / gdi_max_fps_);
+    if (!last_gdi_frame_.bgra.empty() &&
+        last_gdi_capture_at_ != std::chrono::steady_clock::time_point{} &&
+        now - last_gdi_capture_at_ < min_interval) {
+        std::this_thread::sleep_for(min_interval - (now - last_gdi_capture_at_));
+    }
+
     flushDwmComposition();
 
     HDC screen = GetDC(nullptr);
@@ -320,8 +376,9 @@ bool WindowsScreenCapturer::captureWithGdi(ScreenFrame& frame, std::string& err)
     frame.height = static_cast<uint16_t>(height);
     frame.stride = static_cast<uint32_t>(width) * 4;
     frame.bgra.assign(static_cast<uint8_t*>(pixels), static_cast<uint8_t*>(pixels) + byte_count);
-    frame.dirty_rects = {Rect{0, 0, frame.width, frame.height}};
-    last_frame_ = frame;
+    frame.dirty_rects = computeTileDirtyRects(last_gdi_frame_, frame, gdi_tile_size_);
+    last_gdi_frame_ = frame;
+    last_gdi_capture_at_ = std::chrono::steady_clock::now();
 
     DeleteObject(bitmap);
     DeleteDC(memory);

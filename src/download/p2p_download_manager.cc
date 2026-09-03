@@ -1,4 +1,5 @@
 #include "download/p2p_download_manager.h"
+#include "download/p2p_seeding_owner.h"
 #include "download/p2p_upload_counters.h"
 
 #include "config/p2p_config_store.h"
@@ -69,7 +70,11 @@ struct PeerCounterSample {
 using PeerCounterLedger = std::unordered_map<std::string, PeerCounterSample>;
 
 std::string dirname_or_current(const std::string& path) {
+#ifdef _WIN32
+    const auto slash = path.find_last_of("/\\");
+#else
     const auto slash = path.find_last_of('/');
+#endif
     if (slash == std::string::npos) {
         return ".";
     }
@@ -284,7 +289,7 @@ bool run_web_seed_http_fallback(const std::string& url,
 #else
     (void)url;
     (void)output_path;
-    error = "web seed fallback is only available on Android";
+    error = "web seed http fallback is not available on this platform";
     return false;
 #endif
 }
@@ -344,12 +349,23 @@ std::string basename_from_url(const std::string& url) {
 
 std::string join_path(const std::string& dir, const std::string& name) {
     if (dir.empty() || dir == ".") {
+#ifdef _WIN32
+        return ".\\" + name;
+#else
         return "./" + name;
+#endif
     }
+#ifdef _WIN32
+    if (dir.back() == '/' || dir.back() == '\\') {
+        return dir + name;
+    }
+    return dir + "\\" + name;
+#else
     if (dir.back() == '/') {
         return dir + name;
     }
     return dir + "/" + name;
+#endif
 }
 
 std::string direct_http_output_path(const DownloadRequest& req) {
@@ -1037,6 +1053,14 @@ CompletionPathTelemetry completion_path_for_test(bool stall_fallback,
                                   total_payload_download,
                                   has_web_seed_hint);
 }
+
+std::string join_path_for_test(const std::string& dir, const std::string& name) {
+    return join_path(dir, name);
+}
+
+std::string dirname_or_current_for_test(const std::string& path) {
+    return dirname_or_current(path);
+}
 #endif
 
 P2PSeedingPolicy P2PSeedingPolicy::alpha_defaults() {
@@ -1093,35 +1117,62 @@ bool P2PSeedingStateMachine::should_stop(
 P2PDownloadManager::P2PDownloadManager(
         Callbacks callbacks,
         P2PSeedingPolicy seeding_policy,
-        std::shared_ptr<NetworkPolicy> network_policy)
+        std::shared_ptr<NetworkPolicy> network_policy,
+        HttpFallback http_fallback,
+        std::shared_ptr<P2PSeedingOwner> seeding_owner)
     : network_policy_(std::move(network_policy)),
       seeding_policy_(seeding_policy),
+      http_fallback_(std::move(http_fallback)),
       callbacks_(std::move(callbacks)),
-      state_machine_(seeding_policy) {
+      state_machine_(seeding_policy),
+      seeding_owner_(std::move(seeding_owner)) {
     if (network_policy_) {
         network_policy_->add_listener(this);
+    }
+    // ADR-20260901-01 B5-S2：owner 由注入方（Windows hybrid 生产构造 / 测试）
+    // 创建并 Start，生命周期独立于本 manager（D7）；未运行时 handoff 静默
+    // 降级为「不做种」（owner 侧 rejected 计数），绝不回退 inline seed（D9）。
+    if (seeding_owner_) {
+        LOG_INFO("P2PDownloadManager: seeding owner injected; inline seeding "
+                 "disabled for this manager");
     }
 }
 
 P2PDownloadManager::~P2PDownloadManager() {
+#ifdef DEVICE_AGENT_TESTING
+    // 先 join 测试 peer 接入的重试线程（它们持有指向本对象 session 的
+    // handle），必须先于 session 销毁退出。
+    for (auto& t : test_connect_threads_) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+#endif
     if (network_policy_) {
         network_policy_->remove_listener(this);
     }
     cancel();
-    lt::session_proxy proxy;
     {
         std::lock_guard<std::mutex> lock(mu_);
         active_handles_.clear();
-        if (session_) {
-            proxy = session_->abort();
-            session_.reset();
-        }
+        // RV-20260901-WIN-P2P-B5-01：~session() 同步收尾（通知 tracker
+        // stopped + join io 线程），不再使用跨 session 析构持有的
+        // session_proxy——libtorrent 2.0.x 该顺序确定性崩溃（B5-S0 probe）。
+        session_.reset();
     }
 }
 
 void P2PDownloadManager::download(const DownloadRequest& req,
                                   ProgressCallback on_progress,
                                   CompleteCallback on_complete) {
+#ifdef DEVICE_AGENT_TESTING
+    // admission-arrived seam：在任何 mu_ 获取之前锁外调用（hook_mu_ 同步
+    // 拷贝）——cleanup gate 持有 lifecycle mu_ 期间该信号仍可发出，证明
+    // 新 download 已发起并将面对 mu_ 边界（G4 断言）。
+    if (auto attempt_gate = copy_hook_for_test(admission_attempt_for_test_)) {
+        attempt_gate();
+    }
+#endif
     refresh_policy_from_config();
     P2PSeedingPolicy policy;
     NetworkType current_network = NetworkType::WIFI;
@@ -1165,34 +1216,133 @@ void P2PDownloadManager::download(const DownloadRequest& req,
         return;
     }
 
-    bool expected = false;
-    if (!downloading_.compare_exchange_strong(expected, true)) {
+    // ── B5-05 线性化协议：admission ──────────────────────────────
+    // fast reject（advisory，权威检查在下方 mu_ 临界区内）。
+    if (downloading_.load()) {
         if (on_complete) {
             on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
         }
         return;
     }
-
-    cancel_requested_.store(false);
+    // 上一个自然结束的 worker 在锁外 join（worker 运行期会取 mu_，禁止
+    // 持锁 join）。
     join_worker();
-    set_state_downloading();
 
     {
-        std::lock_guard<std::mutex> lock(mu_);
+        // 单一 lifecycle 临界区：ticket 分配 + downloading_ 置位 + worker
+        // 发布原子完成。「已准入但未发布」状态对外不可见——cancel 与本
+        // 临界区互斥（RV-20260901-WIN-P2P-B5-05 窗口①）。
+        std::unique_lock<std::mutex> lock(mu_);
+        // drain 期间同样拒绝准入：旧 victim 的收尾尚未完成，此时准入会被
+        // 旧收尾的 downloading_/state 清除所覆盖（B5-05 drain 协议）。
+        if (downloading_.load() || drain_in_progress_) {
+            lock.unlock();
+            if (on_complete) {
+                on_complete(false, "p2p download already active", DownloadCompletionTelemetry{});
+            }
+            return;
+        }
+        ++admission_counter_;
+        const std::uint64_t generation = admission_counter_;
+        downloading_.store(true);
+        set_state_downloading();
+#ifdef DEVICE_AGENT_TESTING
+        // gate A 确定性窗口：ticket 已分配、worker 未发布、mu_ 在手——
+        // 并发 cancel() 只能阻塞到本临界区结束（不得先返回再放行请求）。
+        if (auto admission_gate = copy_hook_for_test(admission_gate_for_test_)) {
+            admission_gate();
+        }
+#endif
         ensure_session_locked();
         worker_ = std::thread(&P2PDownloadManager::run_download, this, req,
-                              std::move(on_progress), std::move(on_complete));
+                              std::move(on_progress), std::move(on_complete),
+                              generation);
     }
 }
 
 void P2PDownloadManager::cancel() {
-    cancel_requested_.store(true);
+    // ── B5-05 线性化协议：invalidation + drain（与 join_worker 共用）──
+    // 失效水位与 admission ticket 同锁互斥；任一 joinable worker 一律进
+    // drain（drain 期间 admission 权威检查拒绝新准入）；并发 cancel 在
+    // lifecycle_cv_ 上等 drain 完成——任意 cancel 返回 ⇒ 目标线程已 join
+    // 终止。已进入 owner 的历史 seeds 不受影响（独立 seed epoch，D7）。
     set_state_stopping();
-    join_worker();
-    downloading_.store(false);
-    cancel_requested_.store(false);
-    set_state_idle();
+    std::thread victim;
+    bool has_victim = false;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        cancel_epoch_.store(admission_counter_, std::memory_order_seq_cst);
+#ifdef DEVICE_AGENT_TESTING
+        if (auto drain_started_gate = copy_hook_for_test(drain_started_for_test_)) {
+            drain_started_gate();
+        }
+#endif
+        has_victim = take_worker_for_drain_locked(victim);
+    }
+    if (has_victim) {
+        finish_worker_drain(victim);
+    } else {
+        std::unique_lock<std::mutex> lock(mu_);
+#ifdef DEVICE_AGENT_TESTING
+        if (auto wait_entered_gate = copy_hook_for_test(drain_wait_entered_for_test_)) {
+            wait_entered_gate();
+        }
+#endif
+        lifecycle_cv_.wait(lock, [&] { return !drain_in_progress_; });
+        // drain 完成后目标请求已终止；drainer 已按水位条件化清理，此处
+        // 无需重复（防御性清理由 drain 路径统一负责）。
+    }
 }
+
+bool P2PDownloadManager::take_worker_for_drain_locked(std::thread& victim_out) {
+    if (!worker_.joinable()) {
+        return false;
+    }
+    victim_out = std::move(worker_);
+    drain_in_progress_ = true;
+    return true;
+}
+
+void P2PDownloadManager::finish_worker_drain(std::thread& victim) {
+    // 锁外 join：worker 收尾路径（completion/idle）会取 mu_。
+    if (victim.joinable()) {
+        victim.join();
+    }
+    // 同一 mu_ 边界：drain 解除 + 水位条件化清理 + idle。ticket > 水位的
+    // 新代（drain 解除后准入）不被本收尾覆盖。
+    std::lock_guard<std::mutex> lock(mu_);
+    drain_in_progress_ = false;
+    lifecycle_cv_.notify_all();
+#ifdef DEVICE_AGENT_TESTING
+    if (auto cleanup_gate = copy_hook_for_test(cancel_cleanup_gate_for_test_)) {
+        // 确定性 cleanup gate（持 mu_）：阻塞期间新准入无法越过同锁边界；
+        // 放行后本收尾先于新准入完成（G4 断言）。
+        cleanup_gate();
+    }
+#endif
+    if (admission_counter_ <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+        downloading_.store(false);
+        set_state_idle();
+    }
+}
+
+#ifdef DEVICE_AGENT_TESTING
+std::function<void()> P2PDownloadManager::copy_hook_for_test(
+        const std::function<void()>& hook) const {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    return hook;
+}
+
+void P2PDownloadManager::set_drain_started_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    drain_started_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_admission_attempt_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    admission_attempt_for_test_ = std::move(gate);
+}
+#endif
 
 bool P2PDownloadManager::is_downloading() const {
     return downloading_.load();
@@ -1226,6 +1376,47 @@ std::vector<int> P2PDownloadManager::active_upload_limits_for_test() const {
         }
     }
     return values;
+}
+
+void P2PDownloadManager::set_http_fallback_for_test(HttpFallback fallback) {
+    http_fallback_ = std::move(fallback);
+}
+
+void P2PDownloadManager::set_handoff_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    handoff_gate_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_admission_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    admission_gate_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_test_peer_endpoints_for_test(
+        std::vector<lt::tcp::endpoint> endpoints) {
+    std::lock_guard<std::mutex> lock(mu_);
+    test_peer_endpoints_ = std::move(endpoints);
+}
+
+void P2PDownloadManager::set_drain_wait_entered_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    drain_wait_entered_for_test_ = std::move(gate);
+}
+
+void P2PDownloadManager::set_cancel_cleanup_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    cancel_cleanup_gate_for_test_ = std::move(gate);
+}
+
+int P2PDownloadManager::listen_port_for_test() const {
+    // session_handle 接口线程安全（内部 post 到 session 线程）。
+    std::lock_guard<std::mutex> lock(mu_);
+    return session_ ? static_cast<int>(session_->listen_port()) : 0;
+}
+
+void P2PDownloadManager::set_exit_gate_for_test(std::function<void()> gate) {
+    std::lock_guard<std::mutex> lock(hook_mu_);
+    exit_gate_for_test_ = std::move(gate);
 }
 #endif
 
@@ -1281,15 +1472,32 @@ void P2PDownloadManager::refresh_policy_from_config() {
 }
 
 void P2PDownloadManager::join_worker() {
-    std::thread worker;
+    // B5-05：download() 准入前的旧 worker 回收走与 cancel 相同的 drain
+    // 协议——任何从共享 worker_ 移出 joinable worker 的路径都先发布
+    // drain，锁外 join，再在同一 mu_ 边界解除并条件化清理；并发 cancel
+    // 因此不会因 worker_ 为空而提前返回。
+    std::thread victim;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        if (!worker_.joinable()) {
+        if (!take_worker_for_drain_locked(victim)) {
             return;
         }
-        worker = std::move(worker_);
+#ifdef DEVICE_AGENT_TESTING
+        if (auto drain_started_gate = copy_hook_for_test(drain_started_for_test_)) {
+            drain_started_gate();
+        }
+#endif
     }
-    worker.join();
+    finish_worker_drain(victim);
+}
+
+bool P2PDownloadManager::download_via_http_fallback(const std::string& url,
+                                                    const std::string& output_path,
+                                                    std::string& error) {
+    if (http_fallback_) {
+        return http_fallback_(url, output_path, error);
+    }
+    return run_web_seed_http_fallback(url, output_path, error);
 }
 
 void P2PDownloadManager::set_state_downloading() {
@@ -1334,9 +1542,76 @@ void P2PDownloadManager::remove_active_handle_locked(const lt::torrent_handle& h
         active_handles_.end());
 }
 
+// handoff 仅在 Windows 生产（DEVICE_AGENT_ENABLE_WINDOWS_P2P）或测试构建
+// 编译：Android/Linux/macOS 生产不含 owner 代码路径（ADR-20260901-01）。
+#if defined(DEVICE_AGENT_ENABLE_WINDOWS_P2P) || defined(DEVICE_AGENT_TESTING)
+bool P2PDownloadManager::try_handoff_to_owner(std::uint64_t generation,
+                                              const lt::torrent_handle& handle,
+                                              const std::string& save_path) {
+    if (!seeding_owner_) {
+        return false;
+    }
+    auto torrent = handle.torrent_file();
+    if (!torrent) {
+        LOG_WARN("P2PDownloadManager: missing torrent metadata; seed handoff dropped");
+        return false;
+    }
+    // candidate 昂贵构造在 commit 临界区外（B5-05 允许）。
+    P2PSeedCandidate candidate;
+    // handle.torrent_file() 返回 const；candidate/add_torrent_params 需要
+    // 非 const 元数据。仅复制 KB 级 torrent 元数据，数据文件零复制（D3）。
+    candidate.torrent = std::make_shared<lt::torrent_info>(*torrent);
+    candidate.save_path = save_path;
+    candidate.admitted_at = std::chrono::steady_clock::now();
+    {
+        // TTL/ratio 取 admission snapshot（D6：运行中配置变化不追溯生命周期）。
+        std::lock_guard<std::mutex> lock(mu_);
+        candidate.ttl = seeding_policy_.ttl;
+        candidate.ratio_limit = seeding_policy_.ratio_limit;
+    }
+#ifdef DEVICE_AGENT_TESTING
+    {
+        // hook 读取与 setter 同步于 hook_mu_（独立于 lifecycle mu_）；gate
+        // 本体锁外调用。B5-05 gate B 确定性窗口：candidate 已构造、最终
+        // commit（validity 校验 + Admit）未发生。窗口内 cancel() 的失效
+        // 递增与下方 commit 同锁互斥——cancel 赢则 commit 判 stale 丢弃；
+        // commit 赢则线性化明确早于 cancel，seed 保留。
+        if (auto handoff_gate = copy_hook_for_test(handoff_gate_for_test_)) {
+            handoff_gate();
+        }
+    }
+#endif
+    {
+        // ── B5-05 handoff commit 临界区 ──
+        // 最终 validity 校验 + Admit 与 cancel 的失效递增同锁互斥：commit
+        // 之后才发生的 cancel 不影响已提交 candidate（seed 保留）；commit
+        // 之前发生的 cancel 必然使本代 ≤ 水位而被丢弃。Admit 非阻塞
+        // （有界队列入队），持锁调用无死锁（owner 不取 manager 锁）。
+        std::lock_guard<std::mutex> lock(mu_);
+        if (generation <= cancel_epoch_.load(std::memory_order_seq_cst)) {
+            LOG_WARN("P2PDownloadManager: stale generation; seed handoff dropped");
+            return false;
+        }
+        // 非阻塞移交：接受/去重/淘汰/拒绝都只进 owner telemetry；移交不
+        // 反转已发出的 release success，也不触发第二次 completion（D2/D7/D9）。
+        seeding_owner_->Admit(std::move(candidate));
+    }
+    LOG_INFO("P2PDownloadManager: seed handoff submitted to owner");
+    return true;
+}
+#endif  // owner gate
+
 void P2PDownloadManager::run_download(DownloadRequest req,
                                       ProgressCallback on_progress,
-                                      CompleteCallback on_complete) {
+                                      CompleteCallback on_complete,
+                                      std::uint64_t generation) {
+    // ADR-20260901-01 D7：cancel()/新准入会递增 generation；stale worker
+    // 不得 handoff、不得再启动 HTTP fallback。
+    // B5-05：stale ⟺ 本代 ticket ≤ cancel 失效水位（cancel_epoch_ 原子镜像，
+    // 无锁轮询；水位只在 lifecycle mutex 内前移）。
+    const auto generation_stale = [this, generation]() {
+        return generation <= cancel_epoch_.load(std::memory_order_seq_cst);
+    };
     bool success = false;
     std::string error;
     bool complete_sent = false;
@@ -1357,7 +1632,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 callbacks_.on_started(req, downloaded_path);
             }
             std::string fallback_error;
-            if (run_web_seed_http_fallback(req.url, downloaded_path, fallback_error)) {
+            if (download_via_http_fallback(req.url, downloaded_path, fallback_error)) {
                 success = true;
                 completed_by_stall_fallback = true;
                 has_web_seed_hint = true;
@@ -1384,7 +1659,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 LOG_INFO("P2PDownloadManager: downloading torrent metadata " + source.value +
                          " -> " + metadata_path);
                 std::string metadata_error;
-                if (!run_web_seed_http_fallback(source.value, metadata_path, metadata_error)) {
+                if (!download_via_http_fallback(source.value, metadata_path, metadata_error)) {
                     error = "failed to download torrent metadata: " + metadata_error;
                 } else {
                     torrent_source = metadata_path;
@@ -1444,6 +1719,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
 
             lt::torrent_handle handle;
             lt::session* session = nullptr;
+            const std::string download_save_path = params.save_path;
             {
                 std::lock_guard<std::mutex> lock(mu_);
                 ensure_session_locked();
@@ -1456,20 +1732,66 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 if (ec) {
                     error = "failed to add torrent: " + ec.message();
                 } else {
+                    // 初始 throttle 与 on_network_changed 共用同一
+                    // seeding_allowed_on_network 判定（RV-20260831-WIN-P2P-A-04）：
+                    // 同一把锁内取 network type + seeding policy 快照，锁外调
+                    // libtorrent；不再单独读 should_seed 或做 cellular 放宽。
                     NetworkType network_type = NetworkType::WIFI;
+                    P2PSeedingPolicy policy;
                     {
                         std::lock_guard<std::mutex> lock(mu_);
                         active_handles_.push_back(handle);
+                        policy = seeding_policy_;
                         network_type = network_policy_ ? network_type_ : NetworkType::WIFI;
                     }
                     if (network_policy_) {
-                        bool should_seed = network_policy_->should_seed();
-                        if (!should_seed && network_type == NetworkType::CELLULAR &&
-                                seeding_policy_.cellular_seeding_enabled) {
-                            should_seed = true;
-                        }
-                        set_upload_throttle(handle, !should_seed, seeding_policy_);
+                        set_upload_throttle(
+                            handle,
+                            !seeding_allowed_on_network(network_type, policy),
+                            policy);
                     }
+#ifdef DEVICE_AGENT_TESTING
+                    // 确定性 peer 接入（测试基建）：handle 注册后由分离线程
+                    // 外连注入的 endpoint（download 角色 incoming=off，peer
+                    // 必须由 manager 外连；seeder 端 incoming=on 已就绪）。
+                    // 重试覆盖对端 accept 就绪窗口；worker 不被阻塞，alert
+                    // 处理与 completion 时序不受影响。未注入 endpoint 的
+                    // 测试零开销。
+                    std::vector<lt::tcp::endpoint> test_endpoints;
+                    {
+                        std::lock_guard<std::mutex> lock(mu_);
+                        test_endpoints = test_peer_endpoints_;
+                    }
+                    if (!test_endpoints.empty()) {
+                        auto connect_handle = handle;
+                        auto endpoints_copy = std::move(test_endpoints);
+                        // 停止标志由 worker 生命周期持有：worker 退出下载
+                        // 循环（cancel/完成/失败）即置位，重试线程随之退出。
+                        auto stop_flag = std::make_shared<std::atomic<bool>>(false);
+                        test_connect_stop_ = stop_flag;
+                        test_connect_threads_.emplace_back(
+                            [connect_handle, endpoints_copy, stop_flag] {
+                            try {
+                                for (int attempt = 0; attempt < 25; ++attempt) {
+                                    if (!connect_handle.is_valid() ||
+                                            stop_flag->load()) {
+                                        return;
+                                    }
+                                    for (const auto& endpoint : endpoints_copy) {
+                                        connect_handle.connect_peer(endpoint);
+                                    }
+                                    if (connect_handle.status().num_peers > 0) {
+                                        return;
+                                    }
+                                    std::this_thread::sleep_for(
+                                        std::chrono::milliseconds(400));
+                                }
+                            } catch (...) {
+                                // 测试基建线程：异常吞掉，不许 terminate。
+                            }
+                        });
+                    }
+#endif
                 }
             }
             if (error.empty() && env_int_or_default("P2P_PEER_WAIT_SECONDS", 0) > 0) {
@@ -1494,7 +1816,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                 auto last_progress_at = std::chrono::steady_clock::now();
                 int64_t last_reported_done = -1;
 
-                while (!cancel_requested_.load()) {
+                while (!generation_stale()) {
                     const auto now = std::chrono::steady_clock::now();
                     if (now - last_peer_info_post >= peer_info_interval) {
                         handle.post_peer_info();
@@ -1570,7 +1892,8 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         req.file_size > 0 ? std::min<int64_t>(5 * 1024 * 1024, req.file_size / 10) : 5 * 1024 * 1024;
                     if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
                             progress.downloaded_bytes < slow_start_threshold &&
-                            std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout) {
+                            std::chrono::steady_clock::now() - download_started_at >= slow_start_timeout &&
+                            !generation_stale()) {
                         LOG_WARN("P2PDownloadManager: peer/web seed slow start; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
@@ -1578,7 +1901,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
+                        if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                             completed_by_stall_fallback = true;
                         } else {
@@ -1590,7 +1913,8 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         last_reported_done = progress.downloaded_bytes;
                         last_progress_at = std::chrono::steady_clock::now();
                     } else if (!fallback_web_seed_url.empty() && !downloaded_path.empty() &&
-                               std::chrono::steady_clock::now() - last_progress_at >= stall_timeout) {
+                               std::chrono::steady_clock::now() - last_progress_at >= stall_timeout &&
+                               !generation_stale()) {
                         LOG_WARN("P2PDownloadManager: peer/web seed stalled after recovery window; falling back to direct HTTP download");
                         session->remove_torrent(handle);
                         {
@@ -1598,7 +1922,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                             remove_active_handle_locked(handle);
                         }
                         std::string fallback_error;
-                        if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
+                        if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error)) {
                             success = true;
                             completed_by_stall_fallback = true;
                         } else {
@@ -1618,7 +1942,7 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
                 }
 
-                if (cancel_requested_.load()) {
+                if (generation_stale()) {
                     error = "download cancelled";
                 }
 
@@ -1652,10 +1976,10 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                         if (!verify_sha256_with_retry(downloaded_path,
                                                       req.expected_sha256,
                                                       verify_error)) {
-                            if (!fallback_web_seed_url.empty()) {
+                            if (!fallback_web_seed_url.empty() && !generation_stale()) {
                                 LOG_WARN("P2PDownloadManager: sha256 verify failed; falling back to direct HTTP download");
                                 std::string fallback_error;
-                                if (run_web_seed_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
+                                if (download_via_http_fallback(fallback_web_seed_url, downloaded_path, fallback_error) &&
                                         verify_sha256_with_retry(downloaded_path,
                                                                  req.expected_sha256,
                                                                  verify_error)) {
@@ -1710,7 +2034,21 @@ void P2PDownloadManager::run_download(DownloadRequest req,
                     }
                     complete_sent = true;
 
-                    while (!cancel_requested_.load()) {
+                    // ADR-20260901-01 B5-S2：注入 owner 时成功终态即移交
+                    // candidate（cache flush/SHA/generation 已全部通过），
+                    // worker 立即退出释放 admission——任务 A 成功后任务 B
+                    // 不再被 `already active` 阻塞。stale 代不做种；owner
+                    // 注入后绝不回退 inline seeding（D9）。未注入 owner 的
+                    // 平台（Android/Linux/macOS）保留 inline seeding loop
+                    // （循环条件首项，注入时整体跳过）。handoff 代码仅在
+                    // Windows 生产 / 测试构建编译（见函数尾部 gate）。
+#if defined(DEVICE_AGENT_ENABLE_WINDOWS_P2P) || defined(DEVICE_AGENT_TESTING)
+                    if (seeding_owner_) {
+                        try_handoff_to_owner(generation, handle,
+                                             download_save_path);
+                    }
+#endif
+                    while (!seeding_owner_ && !generation_stale()) {
                         const auto now = std::chrono::steady_clock::now();
                         if (now - last_peer_info_post >= peer_info_interval) {
                             handle.post_peer_info();
@@ -1769,6 +2107,18 @@ void P2PDownloadManager::run_download(DownloadRequest req,
     }
 
     downloading_.store(false);
+#ifdef DEVICE_AGENT_TESTING
+    {
+        // hook 读取与 setter 同步于 hook_mu_（独立于 lifecycle mu_）；gate
+        // 本体锁外调用——B5-05 drain gate：worker 已写 downloading_=false、
+        // 但 completion/idle/线程退出尚未完成的 joinable 收尾区间——新准入
+        // 由 drain 拒绝、并发 cancel 在 drain 上等待（G3/G5 断言该区间被
+        // 屏障覆盖）。
+        if (auto exit_gate = copy_hook_for_test(exit_gate_for_test_)) {
+            exit_gate();
+        }
+    }
+#endif
     const auto final_counters = peer_counter_totals(peer_counter_ledger);
     const int64_t final_web_seed_bytes =
         std::max(final_counters.from_web_seed, fallback_reported_web_seed_bytes);

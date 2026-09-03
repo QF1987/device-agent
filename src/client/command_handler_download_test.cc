@@ -1,4 +1,5 @@
 #include "client/command_handler.h"
+#include "config/p2p_config_store.h"
 #include "download/idownload_manager.h"
 #include "executor/executor.h"
 
@@ -345,6 +346,51 @@ int main() {
             ok &= expect(reports[1].error_message() == "network down",
                          "failure path should forward error message");
         }
+    }
+
+    // RV-20260901-WIN-P2P-B2-01：update_config kind=p2p_seeding 成功，且
+    // hybrid 所读 P2PConfigStore::global_snapshot() 与 handler apply 是同一
+    // 实例事实（Windows P2P wiring 的共享 store 契约，对齐 Android wiring）。
+    {
+        auto store = std::make_shared<device_agent::P2PConfigStore>();
+        device_agent::P2PConfigStore::set_global(store);
+        device_agent::CommandHandler handler(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        handler.set_p2p_config_store(store);
+
+        terminal_agent::v1::Command cmd;
+        cmd.set_command_id("cfg-1");
+        cmd.set_command_type("update_config");
+        cmd.set_payload_json(
+            R"({"kind":"p2p_seeding","seeding_ttl_seconds":120,"max_share_ratio":1.25})");
+        const auto result = handler.execute_sync(cmd, 0);
+        ok &= expect(result.status() == "success",
+                     "update_config p2p_seeding should succeed");
+        ok &= expect(result.message() == "config updated",
+                     "update_config p2p_seeding message should be config updated");
+
+        const auto snapshot = device_agent::P2PConfigStore::global_snapshot();
+        ok &= expect(snapshot.seeding_ttl_seconds == 120,
+                     "hybrid-read global snapshot should reflect applied ttl");
+        ok &= expect(snapshot.max_share_ratio == 1.25,
+                     "hybrid-read global snapshot should reflect applied ratio");
+
+        // 未注入 store 的 handler：明确失败（防「已声明但必拒绝」契约错误）。
+        device_agent::CommandHandler unconfigured(
+            [](const terminal_agent::v1::CommandResult&) { return true; });
+        terminal_agent::v1::Command cmd2;
+        cmd2.set_command_id("cfg-2");
+        cmd2.set_command_type("update_config");
+        cmd2.set_payload_json(R"({"kind":"p2p_seeding","seeding_ttl_seconds":300})");
+        const auto r2 = unconfigured.execute_sync(cmd2, 0);
+        ok &= expect(r2.status() == "failed",
+                     "unconfigured handler should fail p2p_seeding");
+        ok &= expect(r2.message().find("not configured") != std::string::npos,
+                     "unconfigured handler error should mention not configured");
+        ok &= expect(device_agent::P2PConfigStore::global_snapshot().seeding_ttl_seconds == 120,
+                     "unconfigured handler must not touch global snapshot");
+
+        device_agent::P2PConfigStore::set_global(nullptr);
     }
 
     return ok ? 0 : 1;

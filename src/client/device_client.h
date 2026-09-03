@@ -48,6 +48,11 @@
 #include "terminal_agent/v1/device.pb.h"
 
 #include "config/config.h"
+#include "capability/capability_manifest.h"
+#include "download/network_policy.h"
+#ifdef _WIN32
+#include "observability/observability.h"
+#endif
 
 namespace device_agent {
 
@@ -55,6 +60,11 @@ namespace device_agent {
 // 当收到服务端下发的指令时，DeviceClient 调用此回调
 // 设备端在此回调中处理指令，然后调用 report_command_result 回报结果
 using CommandCallback = std::function<void(const terminal_agent::v1::Command&)>;
+using RuntimeCapabilityProvider = std::function<capability::RuntimeCapabilities()>;
+// ADR-20260831-01 D4：网络类型观察回调。DeviceClient 复用 observability
+// sampler 的快照，在 Windows 有有效网络事实时通知（WIFI/ETHERNET→WIFI、
+// CELLULAR→CELLULAR；未知/缺失不通知，NetworkPolicy 保持 NONE fail closed）。
+using NetworkTypeObserver = std::function<void(NetworkType)>;
 
 // gRPC 设备客户端
 class DeviceClient {
@@ -72,6 +82,13 @@ public:
     // 设置指令回调
     // 回调在 command_stream_thread 中执行，不要做耗时操作
     void set_command_callback(CommandCallback cb);
+
+    // 必须在 start() 前设置；每次 heartbeat 调用，反映动态 runtime readiness。
+    void set_runtime_capability_provider(RuntimeCapabilityProvider provider);
+
+    // 必须在 start() 前设置；仅 Windows 生效——heartbeat/status 循环读到
+    // 有效 observability 网络快照时通知（复用 sampler，无第二轮询线程）。
+    void set_network_type_observer(NetworkTypeObserver observer);
 
     // 手动上报状态（除定期上报外，也可以主动调用）
     bool report_status(const terminal_agent::v1::StatusReport& status);
@@ -95,6 +112,9 @@ private:
     void status_report_loop();       // 状态上报循环
     void command_stream_loop();     // 指令流循环（长连接）
     void reconnect_command_stream(); // 重连逻辑
+#ifdef _WIN32
+    void notify_network_type(const observability::ObservabilitySnapshot& snapshot);
+#endif
 
     // 给每个 gRPC 请求附加认证元数据（device_id + token）
     // gRPC 的 metadata 机制：在 HTTP 头中携带认证信息
@@ -112,12 +132,19 @@ private:
     std::thread status_report_thread_;
     std::thread command_stream_thread_;
 
+#ifdef _WIN32
+    // Windows 采集在独立线程中执行；heartbeat/status 只读同一缓存快照。
+    std::unique_ptr<observability::ObservabilitySampler> observability_sampler_;
+#endif
+
     // 运行标志（atomic 保证多线程安全读写）
     std::atomic<bool> running_{false};                // start/stop 控制
     std::atomic<bool> connected_{false};               // 连接状态
     std::atomic<bool> command_stream_running_{false}; // 指令流状态
 
     CommandCallback command_callback_;  // 指令回调
+    RuntimeCapabilityProvider runtime_capability_provider_;
+    NetworkTypeObserver network_type_observer_;
 
     // stub_mu_：保护 stub 重连时的并发访问
     // 只有在重连时需要锁，正常运行时只有对应线程访问

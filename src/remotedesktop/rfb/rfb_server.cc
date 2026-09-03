@@ -173,7 +173,7 @@ bool RfbServer::handleFramebufferRequest(IRfbTransport& transport, const Framebu
     }
 
     std::vector<Rect> rects;
-    if (request.incremental && !frame.dirty_rects.empty()) {
+    if (request.incremental) {
         rects = frame.dirty_rects;
     } else {
         rects = {request.rect};

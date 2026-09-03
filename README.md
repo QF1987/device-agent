@@ -9,7 +9,7 @@ Part of the [DeviceOps](https://github.com/QF1987/terminal-agent) ecosystem — 
 - **Heartbeat**: Periodic liveness signals to the management server
 - **Status Reporting**: Full device state snapshots on a configurable interval
 - **Event Reporting**: Real-time fault/transaction/event notifications
-- **Command Stream**: Long-lived connection receiving commands from the server (reboot, config push, OTA, etc.)
+- **Command Stream**: Long-lived connection receiving commands from the server; individual command paths enforce their own eligibility checks
 - **Command Result Reporting**: Execution results sent back to the server
 
 ## Architecture
@@ -105,12 +105,25 @@ See the full protocol in `proto/terminal_agent/v1/`.
 
 ## Platform Support
 
-- ✅ macOS (Apple Silicon & Intel)
-- ✅ Linux (x86_64, ARM64, ARMv7)
-- ✅ Android (NDK, arm64-v8a & armeabi-v7a)
-- 🚧 Windows — planned; bridge/download layers reserve a TCP-localhost fallback, but no build toolchain or executor exists yet
-- 🚧 iOS — planned; no executor or build target yet
-- 🚧 Embedded Linux (Buildroot, Yocto) — not yet validated as a distinct target
+Support is capability-specific; a platform build does not imply that every
+command is available.
+
+- ✅ Windows x64 — native build/executor, bootstrap service install, HTTP
+  release download and real inventory/telemetry/network reporting. Firmware OTA
+  is intentionally unsupported and Windows P2P download is not implemented.
+- ✅ Android — NDK builds for arm64-v8a and armeabi-v7a, APK install and P2P
+  release download. Inventory/telemetry parity with Windows is still pending.
+- 🟡 Linux — desktop agent and P2P release core build on validated Linux targets;
+  package installation, turnkey service deployment and full observability remain
+  incomplete.
+- 🟡 macOS — desktop agent and P2P code paths build, with only basic application
+  handoff; full observability and managed installation/rollback remain incomplete.
+- 🚧 iOS — no executor or build target.
+- 🚧 Embedded Linux (Buildroot, Yocto) — not validated as a distinct target.
+
+Firmware commands currently fail closed on every platform because no production
+firmware adapter or target catalog is registered. Device gRPC transport also
+remains plaintext; bootstrap HTTPS does not provide gRPC TLS/mTLS.
 
 ## License
 
